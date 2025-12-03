@@ -1,0 +1,124 @@
+load("@bazel_skylib//:bzl_library.bzl", "bzl_library")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files([
+    "defs.bzl",
+    "extensions.bzl",
+    "opentofu_binary.bzl",
+    "opentofu_fmt_aspect.bzl",
+    "opentofu_fmt_test.bzl",
+    "opentofu_lock_diff_test.bzl",
+    "opentofu_module.bzl",
+    "opentofu_provider.bzl",
+    "opentofu_provider_group.bzl",
+    "opentofu_providers_lock.bzl",
+    "opentofu_providers_lock_test.bzl",
+    "opentofu_test.bzl",
+    "opentofu_validate_aspect.bzl",
+    "opentofu_validate_test.bzl",
+])
+
+# Distinct from //terraform:toolchain_type so users can register OpenTofu
+# side-by-side with Terraform and pick per-target which engine runs.
+toolchain_type(
+    name = "toolchain_type",
+)
+
+bzl_library(
+    name = "defs_bzl",
+    srcs = ["defs.bzl"],
+    deps = [
+        ":extensions_bzl",
+        ":opentofu_binary_bzl",
+        ":opentofu_fmt_aspect_bzl",
+        ":opentofu_fmt_test_bzl",
+        ":opentofu_lock_diff_test_bzl",
+        ":opentofu_module_bzl",
+        ":opentofu_provider_bzl",
+        ":opentofu_provider_group_bzl",
+        ":opentofu_providers_lock_bzl",
+        ":opentofu_providers_lock_test_bzl",
+        ":opentofu_test_bzl",
+        ":opentofu_validate_aspect_bzl",
+        ":opentofu_validate_test_bzl",
+    ],
+)
+
+bzl_library(
+    name = "extensions_bzl",
+    srcs = ["extensions.bzl"],
+    deps = ["//opentofu/private:bzl_lib"],
+)
+
+bzl_library(
+    name = "opentofu_binary_bzl",
+    srcs = ["opentofu_binary.bzl"],
+    deps = ["//opentofu/private:bzl_lib"],
+)
+
+bzl_library(
+    name = "opentofu_fmt_aspect_bzl",
+    srcs = ["opentofu_fmt_aspect.bzl"],
+    deps = ["//opentofu/private:bzl_lib"],
+)
+
+bzl_library(
+    name = "opentofu_fmt_test_bzl",
+    srcs = ["opentofu_fmt_test.bzl"],
+    deps = ["//opentofu/private:bzl_lib"],
+)
+
+bzl_library(
+    name = "opentofu_lock_diff_test_bzl",
+    srcs = ["opentofu_lock_diff_test.bzl"],
+    deps = ["//opentofu/private:bzl_lib"],
+)
+
+bzl_library(
+    name = "opentofu_module_bzl",
+    srcs = ["opentofu_module.bzl"],
+    deps = ["//opentofu/private:bzl_lib"],
+)
+
+bzl_library(
+    name = "opentofu_provider_bzl",
+    srcs = ["opentofu_provider.bzl"],
+    deps = ["//opentofu/private:bzl_lib"],
+)
+
+bzl_library(
+    name = "opentofu_provider_group_bzl",
+    srcs = ["opentofu_provider_group.bzl"],
+    deps = ["//opentofu/private:bzl_lib"],
+)
+
+bzl_library(
+    name = "opentofu_providers_lock_bzl",
+    srcs = ["opentofu_providers_lock.bzl"],
+    deps = ["//opentofu/private:bzl_lib"],
+)
+
+bzl_library(
+    name = "opentofu_providers_lock_test_bzl",
+    srcs = ["opentofu_providers_lock_test.bzl"],
+    deps = ["//opentofu/private:bzl_lib"],
+)
+
+bzl_library(
+    name = "opentofu_test_bzl",
+    srcs = ["opentofu_test.bzl"],
+    deps = ["//opentofu/private:bzl_lib"],
+)
+
+bzl_library(
+    name = "opentofu_validate_aspect_bzl",
+    srcs = ["opentofu_validate_aspect.bzl"],
+    deps = ["//opentofu/private:bzl_lib"],
+)
+
+bzl_library(
+    name = "opentofu_validate_test_bzl",
+    srcs = ["opentofu_validate_test.bzl"],
+    deps = ["//opentofu/private:bzl_lib"],
+)

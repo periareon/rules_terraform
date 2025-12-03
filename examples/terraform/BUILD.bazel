@@ -1,0 +1,73 @@
+"""Example: textbook Terraform module wrapped in Bazel.
+
+The workflow rules mirror what a Terraform user runs at the CLI:
+
+    bazel run   //:terraform -- plan       ≈ terraform plan
+    bazel run   //:terraform -- apply      ≈ terraform apply
+    bazel test  //:validate                ≈ terraform validate
+    bazel test  //:fmt                     ≈ terraform fmt -check -recursive
+    bazel test  //:tftest                  ≈ terraform test
+    bazel test  //:providers_lock          ≈ CI check that the lock file covers every provider
+"""
+
+load("@rules_terraform//terraform:terraform_binary.bzl", "terraform_binary")
+load("@rules_terraform//terraform:terraform_fmt_test.bzl", "terraform_fmt_test")
+load("@rules_terraform//terraform:terraform_module.bzl", "terraform_module")
+load("@rules_terraform//terraform:terraform_modules_lock.bzl", "terraform_providers_lock_test")
+load("@rules_terraform//terraform:terraform_test.bzl", "terraform_test")
+load("@rules_terraform//terraform:terraform_validate_test.bzl", "terraform_validate_test")
+
+# The root module. `deps` wires in the provider group fetched by the
+# `terraform` extension. `module_sources` maps each `module "…" { source = "…" }`
+# block to its Bazel target so `terraform_init_aspect` can materialize the
+# sub-module inside `.terraform/modules/` at build time — the same way real
+# `terraform init` would after resolving the source path.
+terraform_module(
+    name = "example",
+    srcs = glob(["*.tf"]),
+    data = glob(["*.tftest.hcl"]),
+    lock = ".terraform.lock.hcl",
+    module_sources = {
+        "./modules/greeter": "//modules/greeter",
+    },
+    deps = [
+        "//modules/greeter",
+        "@example_providers//hashicorp_null",
+    ],
+)
+
+# `bazel run //:terraform -- <subcommand>` executes the real terraform
+# binary inside a hermetic working directory pre-seeded with providers,
+# modules, and the rewritten lock file.
+terraform_binary(
+    name = "terraform",
+    root = ":example",
+)
+
+# Runs `terraform validate` sandboxed. The `terraform_init_aspect` builds
+# the `.terraform` directory as an action output so validation is offline.
+terraform_validate_test(
+    name = "validate",
+    target = ":example",
+)
+
+# Runs `terraform fmt -check` on the root module's .tf files.
+terraform_fmt_test(
+    name = "fmt",
+    target = ":example",
+)
+
+# Executes every `run` block in `*.tftest.hcl` via `terraform test`.
+terraform_test(
+    name = "tftest",
+    root = ":example",
+)
+
+# Fails if any provider declared in a `required_providers { … }` block
+# transitively reachable from `:example` isn't covered by the lock file
+# (and vice-versa). Pure text comparison — no network.
+terraform_providers_lock_test(
+    name = "providers_lock",
+    lock = ".terraform.lock.hcl",
+    target = ":example",
+)

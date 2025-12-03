@@ -1,0 +1,7 @@
+load("//terraform:terraform_module.bzl", "terraform_module")
+
+terraform_module(
+    name = "network",
+    srcs = glob(["*.tf"]),
+    visibility = ["//tests/with_modules:__pkg__"],
+)

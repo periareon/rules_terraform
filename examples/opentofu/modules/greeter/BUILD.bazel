@@ -1,0 +1,9 @@
+"""Sub-module referenced by the root module via `source = "./modules/greeter"`."""
+
+load("@rules_terraform//opentofu:opentofu_module.bzl", "opentofu_module")
+
+opentofu_module(
+    name = "greeter",
+    srcs = glob(["*.tf"]),
+    visibility = ["//visibility:public"],
+)

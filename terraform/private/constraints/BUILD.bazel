@@ -1,0 +1,10 @@
+load("//terraform/private:toolchain_repo.bzl", "PLATFORM_TO_CONSTRAINTS")
+
+[
+    config_setting(
+        name = name,
+        constraint_values = constraint_values,
+        visibility = ["//visibility:public"],
+    )
+    for name, constraint_values in PLATFORM_TO_CONSTRAINTS.items()
+]

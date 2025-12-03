@@ -1,0 +1,47 @@
+load("//opentofu:opentofu_binary.bzl", "opentofu_binary")
+load("//opentofu:opentofu_fmt_test.bzl", "opentofu_fmt_test")
+load("//opentofu:opentofu_validate_test.bzl", "opentofu_validate_test")
+load("//terraform:terraform_binary.bzl", "terraform_binary")
+load("//terraform:terraform_fmt_test.bzl", "terraform_fmt_test")
+load("//terraform:terraform_module.bzl", "terraform_module")
+load("//terraform:terraform_validate_test.bzl", "terraform_validate_test")
+
+terraform_module(
+    name = "with_modules_ext",
+    srcs = glob(["*.tf"]),
+    lock = ".terraform.lock.hcl",
+    deps = [
+        "@test_providers_with_modules_ext//hashicorp_aws",
+        "@test_providers_with_modules_ext//hashicorp_null",
+    ],
+)
+
+terraform_binary(
+    name = "terraform",
+    root = ":with_modules_ext",
+)
+
+terraform_validate_test(
+    name = "with_modules_ext_test",
+    target = ":with_modules_ext",
+)
+
+terraform_fmt_test(
+    name = "with_modules_ext_fmt_test",
+    target = ":with_modules_ext",
+)
+
+opentofu_binary(
+    name = "tofu",
+    root = ":with_modules_ext",
+)
+
+opentofu_validate_test(
+    name = "with_modules_ext_tofu_test",
+    target = ":with_modules_ext",
+)
+
+opentofu_fmt_test(
+    name = "with_modules_ext_tofu_fmt_test",
+    target = ":with_modules_ext",
+)

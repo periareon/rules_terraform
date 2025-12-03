@@ -1,0 +1,13 @@
+load("@rules_go//go:def.bzl", "go_binary")
+
+go_binary(
+    name = "init",
+    srcs = ["init.go"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//terraform/private/internal/argsjson",
+        "//terraform/private/internal/fsutil",
+        "//terraform/private/internal/lockparse",
+        "//terraform/private/internal/tfparse",
+    ],
+)

@@ -1,0 +1,34 @@
+"""Public settings for `//terraform`.
+
+The `:version` string flag picks which Terraform version the auto-registered
+toolchains resolve to. Flip it globally (via `.bazelrc`), per-invocation
+(`--@rules_terraform//terraform/settings:version=1.10.5`), or per-target
+(via a `transition_rule` that mutates it).
+
+The list of accepted values is derived from `//terraform/private:versions.bzl`
+so it stays in sync with what the ruleset can actually download.
+"""
+
+load("@bazel_skylib//rules:common_settings.bzl", "string_flag")
+load(":settings.bzl", "TERRAFORM_DEFAULT_VERSION_VALUE", "TERRAFORM_VERSION_LIST")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files(["settings.bzl"])
+
+string_flag(
+    name = "version",
+    build_setting_default = TERRAFORM_DEFAULT_VERSION_VALUE,
+    # No `values` restriction: newer Terraform releases will show up in the
+    # generated versions table before old bazelrc settings need bumping.
+)
+
+# A `config_setting` per known version. Toolchains carry these on
+# `target_settings` so Bazel's toolchain resolution picks the right one.
+[
+    config_setting(
+        name = "version_" + v.replace(".", "_"),
+        flag_values = {":version": v},
+    )
+    for v in TERRAFORM_VERSION_LIST
+]

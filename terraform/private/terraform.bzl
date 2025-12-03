@@ -1,0 +1,460 @@
+"""Bazel terraform rules.
+
+The `RUNNER_ATTRS` / `build_runner` helpers here are consumed by `//opentofu`
+so the same rule bodies power both engines.
+"""
+
+load(":init.bzl", "terraform_init_aspect")
+load(
+    ":providers.bzl",
+    "TerraformExternalModuleInfo",
+    "TerraformInfo",
+    "TerraformModuleGroupInfo",
+    "TerraformProviderGroupInfo",
+    "TerraformProviderInfo",
+)
+load(":util.bzl", "rlocationpath", "terraform_init_dir")
+
+# Extension-generated hub BUILD files under external repos load
+# `terraform_provider` / `terraform_module_group` / `terraform_external_module`
+# from here, so the file must be publicly loadable.
+visibility("public")
+
+def _compute_main(label, srcs, main = None):
+    if main:
+        return main
+
+    for src in srcs:
+        if src.basename == "main.tf":
+            return src
+
+    # `main.tf` is a convention, not a Terraform requirement; fall back to
+    # the first source to give downstream tools a representative file for
+    # the module directory.
+    if srcs:
+        return srcs[0]
+
+    fail("No source files found for `{}`".format(label))
+
+def _terraform_module_impl(ctx):
+    main = _compute_main(ctx.label, ctx.files.srcs, ctx.file.main)
+
+    module_deps = []
+    providers_dict = {}
+    provider_files_depsets = []
+    provider_group = None
+    provider_group_lock = None
+    standalone_providers = []
+    external_modules = []
+
+    for dep in ctx.attr.deps:
+        if TerraformProviderGroupInfo in dep:
+            if provider_group != None:
+                fail("terraform_module '{}' has more than one terraform_provider_group in deps. Only one provider group is allowed.".format(ctx.label))
+            provider_group = dep[TerraformProviderGroupInfo]
+            provider_group_lock = provider_group.lock
+            for provider_info in provider_group.providers:
+                providers_dict[provider_info.source] = provider_info.repository_label
+                provider_files_depsets.append(provider_info.files)
+        elif TerraformProviderInfo in dep:
+            standalone_providers.append(dep[TerraformProviderInfo])
+        elif TerraformModuleGroupInfo in dep:
+            for mod_info in dep[TerraformModuleGroupInfo].modules:
+                external_modules.append(mod_info)
+        elif TerraformExternalModuleInfo in dep:
+            external_modules.append(dep[TerraformExternalModuleInfo])
+        elif TerraformInfo in dep:
+            module_deps.append(dep[TerraformInfo])
+
+    if provider_group != None and standalone_providers:
+        group_provider_sources = [p.source for p in provider_group.providers]
+        for standalone_provider in standalone_providers:
+            provider_info = standalone_provider[TerraformProviderInfo]
+            if provider_info.source not in group_provider_sources:
+                fail("terraform_module '{}' has terraform_provider '{}' in deps that is not in the terraform_provider_group. All providers must be in the group when a group is present.".format(
+                    ctx.label,
+                    provider_info.source,
+                ))
+            if provider_info.source not in providers_dict:
+                providers_dict[provider_info.source] = provider_info.repository_label
+                provider_files_depsets.append(provider_info.files)
+    elif standalone_providers:
+        for provider_info in standalone_providers:
+            providers_dict[provider_info.source] = provider_info.repository_label
+            provider_files_depsets.append(provider_info.files)
+
+    lock_file = provider_group_lock if provider_group_lock else ctx.file.lock
+
+    all_module_files = [depset(ctx.files.srcs), depset(ctx.files.data)]
+    if provider_files_depsets:
+        all_module_files.extend(provider_files_depsets)
+    for ext_mod in external_modules:
+        all_module_files.append(ext_mod.files)
+
+    module_sources = dict(ctx.attr.module_sources) if ctx.attr.module_sources else {}
+
+    return [
+        DefaultInfo(
+            files = depset(ctx.files.srcs),
+            runfiles = ctx.runfiles(
+                files = ctx.files.srcs + ctx.files.data,
+                transitive_files = depset(transitive = all_module_files),
+            ),
+        ),
+        TerraformInfo(
+            srcs = depset(ctx.files.srcs),
+            data = depset(ctx.files.data),
+            main = main,
+            deps = depset(module_deps),
+            providers = providers_dict,
+            lock = lock_file,
+            external_modules = depset(external_modules),
+            module_sources = module_sources,
+        ),
+    ]
+
+def _terraform_provider_impl(ctx):
+    files_depsets = []
+    for file_label in ctx.attr.files:
+        if DefaultInfo in file_label:
+            files_depsets.append(file_label[DefaultInfo].files)
+    files_depset = depset(transitive = files_depsets) if files_depsets else depset()
+
+    # `terraform_provider` is instantiated inside the provider repository
+    # generated by `terraform_provider_repository`, so `ctx.label` already
+    # names that repo.
+    repository_label = ctx.label
+
+    return [
+        DefaultInfo(
+            files = files_depset,
+            runfiles = ctx.runfiles(files = files_depset.to_list()),
+        ),
+        TerraformProviderInfo(
+            source = ctx.attr.source,
+            version = ctx.attr.version,
+            platform = ctx.attr.platform,
+            files = files_depset,
+            repository_label = repository_label,
+        ),
+    ]
+
+terraform_provider = rule(
+    doc = "Defines a Terraform provider that can be used as a dependency in terraform_module targets.",
+    implementation = _terraform_provider_impl,
+    attrs = {
+        "files": attr.label_list(
+            doc = "The provider binary files.",
+            allow_files = True,
+            mandatory = True,
+        ),
+        "platform": attr.string(
+            doc = "Platform string (e.g., 'linux_amd64', 'darwin_arm64'). If omitted, auto-detected at build time.",
+        ),
+        "source": attr.string(
+            doc = "Provider source (e.g., 'hashicorp/null').",
+            mandatory = True,
+        ),
+        "version": attr.string(
+            doc = "Provider version (e.g., '3.2.4').",
+            mandatory = True,
+        ),
+    },
+    provides = [TerraformProviderInfo],
+)
+
+def _terraform_provider_group_impl(ctx):
+    providers_list = []
+    provider_files_depsets = []
+
+    for dep in ctx.attr.deps:
+        if TerraformProviderInfo in dep:
+            provider_info = dep[TerraformProviderInfo]
+            providers_list.append(provider_info)
+            provider_files_depsets.append(provider_info.files)
+        else:
+            fail("terraform_provider_group '{}' has a dep '{}' that is not a terraform_provider".format(
+                ctx.label,
+                dep.label,
+            ))
+
+    all_files = depset(transitive = provider_files_depsets) if provider_files_depsets else depset()
+
+    return [
+        DefaultInfo(
+            files = all_files,
+            runfiles = ctx.runfiles(
+                files = [ctx.file.lock] if ctx.file.lock else [],
+                transitive_files = all_files,
+            ),
+        ),
+        TerraformProviderGroupInfo(
+            providers = providers_list,
+            lock = ctx.file.lock,
+        ),
+    ]
+
+terraform_provider_group = rule(
+    doc = "Defines a group of Terraform providers with their lock file. This ensures all providers are from the same lock file.",
+    implementation = _terraform_provider_group_impl,
+    attrs = {
+        "deps": attr.label_list(
+            doc = "List of terraform_provider targets that belong to this group.",
+            providers = [TerraformProviderInfo],
+            mandatory = True,
+        ),
+        "lock": attr.label(
+            doc = "The .terraform.lock.hcl file for this provider group.",
+            allow_single_file = [".terraform.lock.hcl"],
+            mandatory = True,
+        ),
+    },
+    provides = [TerraformProviderGroupInfo],
+)
+
+terraform_module = rule(
+    doc = "Defines a Terraform module that can be used as a dependency in other Terraform targets.",
+    implementation = _terraform_module_impl,
+    attrs = {
+        "data": attr.label_list(
+            doc = "Additional files or targets that should be available at runtime.",
+            allow_files = True,
+        ),
+        "deps": attr.label_list(
+            doc = """Other terraform_module, terraform_provider, terraform_provider_group,
+            terraform_external_module, or terraform_module_group targets that this module depends on.""",
+            providers = [
+                [TerraformInfo],
+                [TerraformProviderInfo],
+                [TerraformProviderGroupInfo],
+                [TerraformExternalModuleInfo],
+                [TerraformModuleGroupInfo],
+            ],
+        ),
+        "lock": attr.label(
+            doc = "An optional `.terraform.lock.hcl` file.",
+            allow_single_file = [".terraform.lock.hcl"],
+        ),
+        "main": attr.label(
+            doc = "An explicit file to use for the entrypoint of the module. If unspecified, `main.tf` or the first .tf file will be used.",
+            allow_single_file = [".tf"],
+        ),
+        "module_sources": attr.string_dict(
+            doc = """Mapping of Terraform module source paths to Bazel target labels.
+            Use this to map local `module "foo" { source = "./modules/vpc" }` references
+            to Bazel targets from other packages or external bzlmod dependencies.
+            Keys are the Terraform source paths, values are Bazel labels providing TerraformInfo.
+            The init tool will symlink these at the expected paths.""",
+        ),
+        "srcs": attr.label_list(
+            doc = "Terraform source files (.tf) that make up this module.",
+            allow_files = [".tf"],
+        ),
+    },
+    provides = [TerraformInfo],
+)
+
+def build_runner(ctx, toolchain_type, *, test_mode):
+    """Shared implementation for `*_binary` and `*_test` runner rules.
+
+    Args:
+        ctx: (ctx) The rule context.
+        toolchain_type: (str) Fully-qualified label string of the
+            toolchain type the rule should resolve.
+        test_mode: (bool) True for the `_test` variant (returns
+            `testing.TestEnvironment` and hard-codes the `test`
+            subcommand via `RULES_TERRAFORM_MODE=test`), False for
+            `_binary`.
+
+    Returns:
+        (list[Provider]) `DefaultInfo` (executable + runfiles) and
+        either `RunEnvironmentInfo` or `testing.TestEnvironment`.
+    """
+    toolchain = ctx.toolchains[toolchain_type]
+    root_info = ctx.attr.root[TerraformInfo]
+
+    all_srcs = [root_info.srcs, root_info.data]
+    for dep in root_info.deps.to_list():
+        all_srcs.extend([dep.srcs, dep.data])
+
+    terraform_dir = terraform_init_dir(ctx.attr.root)
+
+    all_runfiles_list = []
+    for src_depset in all_srcs:
+        all_runfiles_list.append(src_depset)
+    all_runfiles_list.append(toolchain.all_files)
+    if terraform_dir:
+        all_runfiles_list.append(depset([terraform_dir]))
+    all_runfiles = depset(transitive = all_runfiles_list)
+
+    lock_file = root_info.lock or ctx.file.lock
+
+    runfiles_map = {}
+    for file in all_runfiles.to_list():
+        rloc = rlocationpath(file, ctx.workspace_name)
+        if file.short_path.startswith("../"):
+            workspace_rel_path = file.short_path[len("../"):]
+        else:
+            workspace_rel_path = file.short_path
+        runfiles_map[rloc] = workspace_rel_path
+
+    args_data = {
+        "runfiles": runfiles_map,
+        "terraform_rlocationpath": rlocationpath(toolchain.terraform, ctx.workspace_name),
+    }
+
+    if lock_file:
+        args_data["lock_rlocationpath"] = rlocationpath(lock_file, ctx.workspace_name)
+
+    if terraform_dir:
+        args_data["terraform_dir_rlocationpath"] = rlocationpath(terraform_dir, ctx.workspace_name)
+
+    args_file = ctx.actions.declare_file("{}.terraform_args.json".format(ctx.label.name))
+    ctx.actions.write(
+        output = args_file,
+        content = json.encode_indent(args_data),
+    )
+
+    is_windows = ctx.executable._runner.basename.endswith(".exe")
+    executable = ctx.actions.declare_file("{}{}".format(ctx.label.name, ".exe" if is_windows else ""))
+    ctx.actions.symlink(
+        output = executable,
+        target_file = ctx.executable._runner,
+        is_executable = True,
+    )
+
+    runfiles_files = [args_file]
+    if lock_file:
+        runfiles_files.append(lock_file)
+
+    runfiles = ctx.runfiles(
+        files = runfiles_files,
+        transitive_files = all_runfiles,
+    )
+
+    env = {
+        "RULES_TERRAFORM_ARGS_FILE": rlocationpath(args_file, ctx.workspace_name),
+    }
+    if test_mode:
+        env["RULES_TERRAFORM_MODE"] = "test"
+
+    providers = [
+        DefaultInfo(
+            runfiles = runfiles,
+            executable = executable,
+        ),
+    ]
+    if test_mode:
+        providers.append(testing.TestEnvironment(env))
+    else:
+        providers.append(RunEnvironmentInfo(environment = env))
+    return providers
+
+RUNNER_ATTRS = {
+    "lock": attr.label(
+        doc = "An optional `.terraform.lock.hcl` file.",
+        allow_single_file = [".terraform.lock.hcl"],
+    ),
+    "root": attr.label(
+        doc = "The terraform_module target that serves as the root module.",
+        providers = [TerraformInfo],
+        aspects = [terraform_init_aspect],
+        mandatory = True,
+    ),
+    "_runner": attr.label(
+        cfg = "exec",
+        executable = True,
+        default = Label("//terraform/private/runner"),
+    ),
+}
+
+# The engine-bound `terraform_binary` / `terraform_test` rules are produced
+# by `//terraform/private:engine_factory.bzl` and re-exported through
+# `//terraform:terraform_binary.bzl` / `//terraform:terraform_test.bzl`.
+
+# External module rules (loaded by BUILD files that `module_repo.bzl` writes
+# into generated repositories).
+
+def _terraform_external_module_impl(ctx):
+    all_files = depset(ctx.files.srcs)
+
+    return [
+        DefaultInfo(
+            files = all_files,
+            runfiles = ctx.runfiles(files = ctx.files.srcs),
+        ),
+        TerraformExternalModuleInfo(
+            key = ctx.attr.key,
+            source = ctx.attr.source,
+            version = ctx.attr.version,
+            subdir = ctx.attr.subdir,
+            files = all_files,
+        ),
+    ]
+
+terraform_external_module = rule(
+    doc = "An external Terraform module downloaded from a registry. Created by terraform_module_repository.",
+    implementation = _terraform_external_module_impl,
+    attrs = {
+        "key": attr.string(
+            doc = "Module key matching the key in terraform_modules.lock.json.",
+            mandatory = True,
+        ),
+        "source": attr.string(
+            doc = "Registry source (e.g., 'terraform-aws-modules/vpc/aws').",
+            mandatory = True,
+        ),
+        "srcs": attr.label_list(
+            doc = "Module source files.",
+            allow_files = True,
+        ),
+        "subdir": attr.string(
+            doc = "Subdirectory within the archive.",
+            default = "",
+        ),
+        "version": attr.string(
+            doc = "Module version.",
+            mandatory = True,
+        ),
+    },
+    provides = [TerraformExternalModuleInfo],
+)
+
+def _terraform_module_group_impl(ctx):
+    modules = []
+    all_files_depsets = []
+
+    for dep in ctx.attr.deps:
+        if TerraformExternalModuleInfo in dep:
+            modules.append(dep[TerraformExternalModuleInfo])
+            all_files_depsets.append(dep[TerraformExternalModuleInfo].files)
+        else:
+            fail("terraform_module_group '{}' dep '{}' does not provide TerraformExternalModuleInfo".format(
+                ctx.label,
+                dep.label,
+            ))
+
+    all_files = depset(transitive = all_files_depsets) if all_files_depsets else depset()
+
+    return [
+        DefaultInfo(
+            files = all_files,
+            runfiles = ctx.runfiles(transitive_files = all_files),
+        ),
+        TerraformModuleGroupInfo(
+            modules = modules,
+        ),
+    ]
+
+terraform_module_group = rule(
+    doc = "Aggregates external Terraform modules into a single group.",
+    implementation = _terraform_module_group_impl,
+    attrs = {
+        "deps": attr.label_list(
+            doc = "List of terraform_external_module targets.",
+            providers = [TerraformExternalModuleInfo],
+            mandatory = True,
+        ),
+    },
+    provides = [TerraformModuleGroupInfo],
+)

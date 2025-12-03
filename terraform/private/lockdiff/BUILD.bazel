@@ -1,0 +1,12 @@
+load("@rules_go//go:def.bzl", "go_binary")
+
+go_binary(
+    name = "lockdiff",
+    srcs = ["lockdiff.go"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//terraform/private/internal/argsfile",
+        "//terraform/private/internal/lockparse",
+        "@rules_go//go/runfiles",
+    ],
+)

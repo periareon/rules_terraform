@@ -1,0 +1,75 @@
+"""Example: textbook OpenTofu module wrapped in Bazel.
+
+The workflow rules mirror what an OpenTofu user runs at the CLI:
+
+    bazel run   //:tofu -- plan            ≈ tofu plan
+    bazel run   //:tofu -- apply           ≈ tofu apply
+    bazel test  //:validate                ≈ tofu validate
+    bazel test  //:fmt                     ≈ tofu fmt -check -recursive
+    bazel test  //:tftest                  ≈ tofu test
+    bazel test  //:providers_lock          ≈ CI check that the lock file covers every provider
+
+`opentofu_module`, `opentofu_provider`, and `opentofu_provider_group` are
+literal aliases for their `terraform_*` counterparts — the file layout
+Terraform and OpenTofu consume is identical. Only the workflow rules
+(`opentofu_binary`, `opentofu_test`, `opentofu_validate_test`,
+`opentofu_fmt_test`) differ: they bind to `//opentofu:toolchain_type`
+so Bazel resolves the `tofu` binary instead of `terraform`.
+"""
+
+load("@rules_terraform//opentofu:opentofu_binary.bzl", "opentofu_binary")
+load("@rules_terraform//opentofu:opentofu_fmt_test.bzl", "opentofu_fmt_test")
+load("@rules_terraform//opentofu:opentofu_module.bzl", "opentofu_module")
+load("@rules_terraform//opentofu:opentofu_providers_lock_test.bzl", "opentofu_providers_lock_test")
+load("@rules_terraform//opentofu:opentofu_test.bzl", "opentofu_test")
+load("@rules_terraform//opentofu:opentofu_validate_test.bzl", "opentofu_validate_test")
+
+# Root module. `deps` wires in the provider group fetched by the
+# `terraform` extension. `module_sources` maps each `module "…" { source = "…" }`
+# block to its Bazel target so the init aspect can materialize the
+# sub-module inside `.terraform/modules/` at build time.
+opentofu_module(
+    name = "example",
+    srcs = glob(["*.tf"]),
+    data = glob(["*.tftest.hcl"]),
+    lock = ".terraform.lock.hcl",
+    module_sources = {
+        "./modules/greeter": "//modules/greeter",
+    },
+    deps = [
+        "//modules/greeter",
+        "@example_providers//hashicorp_null",
+    ],
+)
+
+# `bazel run //:tofu -- <subcommand>` executes the real tofu binary inside
+# a hermetic tmpdir with `.terraform/` pre-populated by the init aspect.
+opentofu_binary(
+    name = "tofu",
+    root = ":example",
+)
+
+opentofu_validate_test(
+    name = "validate",
+    target = ":example",
+)
+
+opentofu_fmt_test(
+    name = "fmt",
+    target = ":example",
+)
+
+# Runs every `run` block in `*.tftest.hcl` via `tofu test`.
+opentofu_test(
+    name = "tftest",
+    root = ":example",
+)
+
+# Alias for `terraform_providers_lock_test`: same rule, same HCL text
+# comparison, no engine binary involved. Kept under an `opentofu_*` name
+# so OpenTofu-only projects don't have to import a `terraform_*` symbol.
+opentofu_providers_lock_test(
+    name = "providers_lock",
+    lock = ".terraform.lock.hcl",
+    target = ":example",
+)

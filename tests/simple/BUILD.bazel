@@ -1,0 +1,42 @@
+load("//opentofu:opentofu_binary.bzl", "opentofu_binary")
+load("//opentofu:opentofu_fmt_test.bzl", "opentofu_fmt_test")
+load("//opentofu:opentofu_validate_test.bzl", "opentofu_validate_test")
+load("//terraform:terraform_binary.bzl", "terraform_binary")
+load("//terraform:terraform_fmt_test.bzl", "terraform_fmt_test")
+load("//terraform:terraform_module.bzl", "terraform_module")
+load("//terraform:terraform_validate_test.bzl", "terraform_validate_test")
+
+terraform_module(
+    name = "simple",
+    srcs = glob(["**/*.tf"]),
+)
+
+terraform_binary(
+    name = "terraform",
+    root = ":simple",
+)
+
+terraform_validate_test(
+    name = "simple_test",
+    target = ":simple",
+)
+
+terraform_fmt_test(
+    name = "simple_fmt_test",
+    target = ":simple",
+)
+
+opentofu_binary(
+    name = "tofu",
+    root = ":simple",
+)
+
+opentofu_validate_test(
+    name = "simple_tofu_test",
+    target = ":simple",
+)
+
+opentofu_fmt_test(
+    name = "simple_tofu_fmt_test",
+    target = ":simple",
+)

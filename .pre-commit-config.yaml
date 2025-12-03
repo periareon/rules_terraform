@@ -1,0 +1,38 @@
+# Formatting/lint hooks that run in CI and locally.
+#
+# Install: `pip install pre-commit && pre-commit install`
+# Run over everything: `pre-commit run --all-files`
+#
+# CI runs `pre-commit/action@v3.0.1` on every push/PR (see
+# .github/workflows/ci.yaml — `lint` job).
+
+repos:
+  # Buildifier auto-downloads the platform-specific binary — no local install
+  # needed. `buildifier` reformats; `buildifier-lint` applies auto-fixable
+  # `-lint=warn` rules. Pre-commit fails if either modifies a file.
+  - repo: https://github.com/keith/pre-commit-buildifier
+    rev: 7.3.1
+    hooks:
+      - id: buildifier
+        args: [--warnings=all]
+      - id: buildifier-lint
+        args: [--warnings=all]
+
+  # `gofmt` is bundled with any Go install; the hook shells out to
+  # `gofmt -l -d -w` and pre-commit fails if files were rewritten.
+  - repo: https://github.com/dnephin/pre-commit-golang
+    rev: v0.5.1
+    hooks:
+      - id: go-fmt
+
+  # Cross-cutting hygiene from the standard pre-commit-hooks repo.
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        # Terraform lock files are Terraform-owned; don't rewrite them.
+        exclude: \.terraform\.lock\.hcl$
+      - id: end-of-file-fixer
+        exclude: \.terraform\.lock\.hcl$
+      - id: check-yaml
+      - id: check-added-large-files

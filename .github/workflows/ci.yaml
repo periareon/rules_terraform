@@ -1,0 +1,100 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    types:
+      - opened
+      - synchronize
+
+env:
+  # `.github/github.bazelrc` layers CI-only defaults over `.bazelrc`
+  # (announce_rc, keep_going, verbose_failures, non-color output).
+  BAZEL_STARTUP_FLAGS: --bazelrc=${{ github.workspace }}/.github/github.bazelrc
+
+jobs:
+  # Root-repo tests run on latest Bazel only. The modules extension
+  # relies on `module_ctx.facts` (Bazel 8+) and this repo's internal
+  # dev-only tag-class invocations depend on the current lockfile
+  # behavior — pinning to a single Bazel keeps the eval semantics
+  # stable. The examples job below is where we exercise the LTS
+  # matrix, since those are the compatibility surface a downstream
+  # user actually sees.
+  test:
+    name: test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: bazel-contrib/setup-bazel@0.14.0
+        with:
+          bazelisk-cache: true
+          disk-cache: ${{ github.workflow }}-${{ matrix.os }}
+          repository-cache: true
+      # Windows: shorten Bazel's output_user_root to dodge MAX_PATH.
+      - name: Windows workspace bazelrc
+        if: runner.os == 'Windows'
+        run: echo "startup --output_user_root=C:/bzl" > ./user.bazelrc
+      - name: Test (Unix)
+        if: runner.os != 'Windows'
+        run: bazel ${BAZEL_STARTUP_FLAGS[@]} test //...
+      - name: Test (Windows)
+        if: runner.os == 'Windows'
+        run: bazel $env:BAZEL_STARTUP_FLAGS test //...
+
+  # Examples are the downstream-compatibility surface — no facts,
+  # no lockfile, just what a real consumer's build looks like. Run
+  # them across every supported LTS Bazel version.
+  examples:
+    name: example ${{ matrix.example }} (${{ matrix.os }} · bazel ${{ matrix.bazel }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        bazel: ["7.x", "8.x", "9.x"]
+        example: [terraform, opentofu]
+    defaults:
+      run:
+        working-directory: examples/${{ matrix.example }}
+    env:
+      USE_BAZEL_VERSION: ${{ matrix.bazel }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: bazel-contrib/setup-bazel@0.14.0
+        with:
+          bazelisk-cache: true
+          disk-cache: ${{ github.workflow }}-example-${{ matrix.example }}-${{ matrix.os }}-${{ matrix.bazel }}
+          repository-cache: true
+      - name: Windows workspace bazelrc
+        if: runner.os == 'Windows'
+        run: echo "startup --output_user_root=C:/bzl" > ./user.bazelrc
+      - name: Test (Unix)
+        if: runner.os != 'Windows'
+        run: bazel ${BAZEL_STARTUP_FLAGS[@]} test //...
+      - name: Test (Windows)
+        if: runner.os == 'Windows'
+        run: bazel $env:BAZEL_STARTUP_FLAGS test //...
+
+  # Formatting + lint via pre-commit (buildifier, gofmt, whitespace hygiene).
+  # See `.pre-commit-config.yaml` for the hook list — one source of truth
+  # for CI and `pre-commit install` locally.
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-go@v5
+        with:
+          # Match the SDK pinned by MODULE.bazel's `go_sdk.download`.
+          go-version-file: go.mod
+      - uses: pre-commit/action@v3.0.1
+        with:
+          extra_args: --all-files --show-diff-on-failure

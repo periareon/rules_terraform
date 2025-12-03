@@ -1,0 +1,15 @@
+load("@rules_go//go:def.bzl", "go_binary")
+
+go_binary(
+    name = "format_checker",
+    srcs = ["format_checker.go"],
+    visibility = ["//visibility:public"],
+    deps = ["@rules_go//go/runfiles"],
+)
+
+go_binary(
+    name = "formatter",
+    srcs = ["formatter.go"],
+    visibility = ["//visibility:public"],
+    deps = ["@rules_go//go/runfiles"],
+)

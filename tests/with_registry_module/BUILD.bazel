@@ -1,0 +1,47 @@
+load("//opentofu:opentofu_binary.bzl", "opentofu_binary")
+load("//opentofu:opentofu_fmt_test.bzl", "opentofu_fmt_test")
+load("//opentofu:opentofu_validate_test.bzl", "opentofu_validate_test")
+load("//terraform:terraform_binary.bzl", "terraform_binary")
+load("//terraform:terraform_fmt_test.bzl", "terraform_fmt_test")
+load("//terraform:terraform_module.bzl", "terraform_module")
+load("//terraform:terraform_validate_test.bzl", "terraform_validate_test")
+
+exports_files(["main.tf"])
+
+terraform_module(
+    name = "with_registry_module",
+    srcs = glob(["*.tf"]),
+    deps = [
+        "@test_registry_modules",
+    ],
+)
+
+terraform_binary(
+    name = "terraform",
+    root = ":with_registry_module",
+)
+
+terraform_validate_test(
+    name = "with_registry_module_test",
+    target = ":with_registry_module",
+)
+
+terraform_fmt_test(
+    name = "with_registry_module_fmt_test",
+    target = ":with_registry_module",
+)
+
+opentofu_binary(
+    name = "tofu",
+    root = ":with_registry_module",
+)
+
+opentofu_validate_test(
+    name = "with_registry_module_tofu_test",
+    target = ":with_registry_module",
+)
+
+opentofu_fmt_test(
+    name = "with_registry_module_tofu_fmt_test",
+    target = ":with_registry_module",
+)

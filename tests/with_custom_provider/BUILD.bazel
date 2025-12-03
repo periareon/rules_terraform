@@ -1,0 +1,37 @@
+load("//terraform:terraform_module.bzl", "terraform_module")
+
+# buildifier: disable=bzl-visibility
+load("//terraform/private:terraform.bzl", "terraform_provider")
+load("//tests/private:init_test.bzl", "terraform_init_test")
+
+terraform_provider(
+    name = "custom_provider",
+    files = ["//tests/with_custom_provider/provider:terraform-provider-custom"],
+    source = "example/custom",
+    version = "1.0.0",
+)
+
+terraform_module(
+    name = "with_custom_provider",
+    srcs = glob(["*.tf"]),
+    lock = ".terraform.lock.hcl",
+    tags = [
+        # The custom provider's `source = "example/custom"` resolves to a
+        # different registry under each engine (`registry.terraform.io/...`
+        # vs `registry.opentofu.org/...`), so validate would fail. This
+        # fixture only exercises the terraform init path via
+        # `terraform_init_test` below, not validate.
+        "no-opentofu-validate",
+        "no-terraform-validate",
+    ],
+    deps = [":custom_provider"],
+)
+
+terraform_init_test(
+    name = "custom_provider_init_test",
+    expected_files = [
+        "providers/registry.terraform.io/example/custom/1.0.0/linux_amd64/terraform-provider-custom",
+        ".terraform.lock.hcl",
+    ],
+    target = ":with_custom_provider",
+)

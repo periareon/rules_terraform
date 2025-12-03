@@ -1,0 +1,11 @@
+load("@rules_go//go:def.bzl", "go_binary")
+
+go_binary(
+    name = "initcheck",
+    srcs = ["initcheck.go"],
+    visibility = ["//tests:__subpackages__"],
+    deps = [
+        "//terraform/private/internal/argsfile",
+        "@rules_go//go/runfiles",
+    ],
+)

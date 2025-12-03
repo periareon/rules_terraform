@@ -1,0 +1,19 @@
+load("//terraform:terraform_module.bzl", "terraform_module")
+
+# Regression coverage for the `_IGNORE_TAGS` short-circuit in both
+# `terraform_validate_aspect` and `terraform_fmt_aspect`. The .tf source
+# is deliberately mis-formatted AND references a non-existent identifier,
+# so a `bazel build --config=terraform_checks //...` (or the opentofu
+# variant) would fail without the tags below.
+terraform_module(
+    name = "with_ignored_checks",
+    srcs = ["main.tf"],
+    tags = [
+        # Engine-specific opt-outs — collectively cover all four
+        # (terraform/opentofu × fmt/validate) engine-scoped ignore branches.
+        "no_opentofu_format",
+        "no_opentofu_validate",
+        "no_terraform_format",
+        "no_terraform_validate",
+    ],
+)

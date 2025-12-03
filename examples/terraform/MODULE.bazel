@@ -1,0 +1,34 @@
+"""rules_terraform Terraform example.
+
+Textbook Terraform module wrapped in Bazel. rules_terraform is resolved
+via `local_path_override`; a real consumer would drop the override and
+pin a version from the Bazel Central Registry:
+
+    bazel_dep(name = "rules_terraform", version = "x.y.z")
+"""
+
+module(
+    name = "rules_terraform_example_terraform",
+    version = "0.0.0",
+)
+
+bazel_dep(name = "rules_terraform", version = "0.0.0")
+local_path_override(
+    module_name = "rules_terraform",
+    path = "../..",
+)
+
+# Toolchains for both terraform and tofu are auto-registered by
+# rules_terraform's own MODULE.bazel. Pick a Terraform release with:
+#
+#   --@rules_terraform//terraform/settings:version=1.14.1
+#
+# The `terraform` extension fetches every provider named in the checked-in
+# `.terraform.lock.hcl`. Providers land in an external repo — you reference
+# them from `terraform_module.deps` as `@example_providers//<namespace>_<name>`.
+terraform = use_extension("@rules_terraform//terraform:extensions.bzl", "terraform")
+terraform.providers(
+    name = "example_providers",
+    lock = "//:.terraform.lock.hcl",
+)
+use_repo(terraform, "example_providers")

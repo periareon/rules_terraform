@@ -1,0 +1,8 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "argsjson",
+    srcs = ["argsjson.go"],
+    importpath = "rules_terraform/terraform/private/internal/argsjson",
+    visibility = ["//terraform/private:__subpackages__"],
+)

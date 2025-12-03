@@ -1,0 +1,41 @@
+"""rules_terraform OpenTofu example.
+
+Textbook OpenTofu module wrapped in Bazel. rules_terraform is resolved via
+`local_path_override`; a real consumer would drop the override and pin a
+version from the Bazel Central Registry:
+
+    bazel_dep(name = "rules_terraform", version = "x.y.z")
+"""
+
+module(
+    name = "rules_terraform_example_opentofu",
+    version = "0.0.0",
+)
+
+bazel_dep(name = "rules_terraform", version = "0.0.0")
+local_path_override(
+    module_name = "rules_terraform",
+    path = "../..",
+)
+
+# Toolchains for both terraform and tofu are auto-registered by
+# rules_terraform's own MODULE.bazel. Pick an OpenTofu release with:
+#
+#   --@rules_terraform//opentofu/settings:version=1.10.6
+#
+# Providers/modules are fetched by the engine-neutral `terraform` extension
+# (opentofu has no separate extension — the fetching logic is identical,
+# only the toolchain differs). `.terraform.lock.hcl` and
+# `terraform_modules.lock.json` are read the same way for both engines.
+terraform = use_extension("@rules_terraform//terraform:extensions.bzl", "terraform")
+terraform.providers(
+    name = "example_providers",
+    lock = "//:.terraform.lock.hcl",
+    # OpenTofu 1.10+ auto-rewrites `registry.terraform.io/hashicorp/*` entries
+    # to `registry.opentofu.org/hashicorp/*` at init time; fetching from
+    # opentofu.org up front keeps the on-disk provider layout aligned with
+    # what tofu ends up looking for (matters most under sandboxes that
+    # deny network fallback, e.g. macOS).
+    registry = "registry.opentofu.org",
+)
+use_repo(terraform, "example_providers")

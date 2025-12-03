@@ -1,0 +1,8 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "lockparse",
+    srcs = ["lockparse.go"],
+    importpath = "rules_terraform/terraform/private/internal/lockparse",
+    visibility = ["//terraform/private:__subpackages__"],
+)

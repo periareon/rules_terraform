@@ -1,0 +1,27 @@
+"""Public settings for `//opentofu`.
+
+The `:version` string flag picks which OpenTofu version the auto-registered
+toolchains resolve to. Flip it globally (via `.bazelrc`), per-invocation
+(`--@rules_terraform//opentofu/settings:version=1.10.6`), or per-target
+(via a `transition_rule` that mutates it).
+"""
+
+load("@bazel_skylib//rules:common_settings.bzl", "string_flag")
+load(":settings.bzl", "TOFU_DEFAULT_VERSION_VALUE", "TOFU_VERSION_LIST")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files(["settings.bzl"])
+
+string_flag(
+    name = "version",
+    build_setting_default = TOFU_DEFAULT_VERSION_VALUE,
+)
+
+[
+    config_setting(
+        name = "version_" + v.replace(".", "_"),
+        flag_values = {":version": v},
+    )
+    for v in TOFU_VERSION_LIST
+]

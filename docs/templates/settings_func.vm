@@ -1,0 +1,5 @@
+<a id="${funcInfo.functionName}"></a>
+
+#[[##]]# ${funcInfo.functionName}
+
+${funcInfo.docString}
