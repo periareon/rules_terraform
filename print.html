@@ -180,7 +180,7 @@ register_toolchains(
 <ul>
 <li><a href="rules.html#terraform_binary">terraform_binary</a></li>
 <li><a href="rules.html#terraform_fmt_test">terraform_fmt_test</a></li>
-<li><a href="rules.html#terraform_library">terraform_library</a></li>
+<li><a href="rules.html#terraform_module">terraform_module</a></li>
 <li><a href="rules.html#terraform_validate_test">terraform_validate_test</a></li>
 </ul>
 <h2 id="aspects"><a class="header" href="#aspects">Aspects</a></h2>
@@ -193,13 +193,14 @@ register_toolchains(
 <pre>
 load("@rules_terraform//terraform:defs.bzl", "terraform_binary")
 
-terraform_binary(<a href="rules.html#terraform_binary-name">name</a>, <a href="rules.html#terraform_binary-root">root</a>)
+terraform_binary(<a href="rules.html#terraform_binary-name">name</a>, <a href="rules.html#terraform_binary-lock">lock</a>, <a href="rules.html#terraform_binary-root">root</a>)
 </pre>
-<p>TODO</p>
+<p>Creates an executable wrapper for running Terraform commands on a specific module. This rule generates a binary that can be executed to run Terraform operations like plan, apply, and destroy on the specified root module.</p>
 <p><strong>ATTRIBUTES</strong></p>
 <div class="table-wrapper"><table><thead><tr><th style="text-align: left">Name</th><th style="text-align: left">Description</th><th style="text-align: left">Type</th><th style="text-align: left">Mandatory</th><th style="text-align: left">Default</th></tr></thead><tbody>
 <tr><td style="text-align: left"><a id="terraform_binary-name"></a>name</td><td style="text-align: left">A unique name for this target.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels#target-names">Name</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
-<tr><td style="text-align: left"><a id="terraform_binary-root"></a>root</td><td style="text-align: left">TODO</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">Label</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
+<tr><td style="text-align: left"><a id="terraform_binary-lock"></a>lock</td><td style="text-align: left">An optional <code>.terraform.lock.hcl</code> file.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">Label</a></td><td style="text-align: left">optional</td><td style="text-align: left"><code>None</code></td></tr>
+<tr><td style="text-align: left"><a id="terraform_binary-root"></a>root</td><td style="text-align: left">The terraform_module target that serves as the root module for this Terraform binary. All Terraform commands will be executed against this module and its dependencies.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">Label</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
 </tbody></table>
 </div>
 <p><a id="terraform_fmt_test"></a></p>
@@ -216,21 +217,21 @@ terraform_fmt_test(<a href="rules.html#terraform_fmt_test-name">name</a>, <a hre
 <tr><td style="text-align: left"><a id="terraform_fmt_test-target"></a>target</td><td style="text-align: left">The target to run <code>terraform fmt</code> on.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">Label</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
 </tbody></table>
 </div>
-<p><a id="terraform_library"></a></p>
-<h2 id="terraform_library"><a class="header" href="#terraform_library">terraform_library</a></h2>
+<p><a id="terraform_module"></a></p>
+<h2 id="terraform_module"><a class="header" href="#terraform_module">terraform_module</a></h2>
 <pre>
-load("@rules_terraform//terraform:defs.bzl", "terraform_library")
+load("@rules_terraform//terraform:defs.bzl", "terraform_module")
 
-terraform_library(<a href="rules.html#terraform_library-name">name</a>, <a href="rules.html#terraform_library-deps">deps</a>, <a href="rules.html#terraform_library-srcs">srcs</a>, <a href="rules.html#terraform_library-data">data</a>, <a href="rules.html#terraform_library-source">source</a>)
+terraform_module(<a href="rules.html#terraform_module-name">name</a>, <a href="rules.html#terraform_module-deps">deps</a>, <a href="rules.html#terraform_module-srcs">srcs</a>, <a href="rules.html#terraform_module-data">data</a>, <a href="rules.html#terraform_module-main">main</a>)
 </pre>
-<p>TODO</p>
+<p>Defines a Terraform module that can be used as a dependency in other Terraform targets. This rule collects Terraform source files and their dependencies, making them available for execution by terraform_binary.</p>
 <p><strong>ATTRIBUTES</strong></p>
 <div class="table-wrapper"><table><thead><tr><th style="text-align: left">Name</th><th style="text-align: left">Description</th><th style="text-align: left">Type</th><th style="text-align: left">Mandatory</th><th style="text-align: left">Default</th></tr></thead><tbody>
-<tr><td style="text-align: left"><a id="terraform_library-name"></a>name</td><td style="text-align: left">A unique name for this target.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels#target-names">Name</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
-<tr><td style="text-align: left"><a id="terraform_library-deps"></a>deps</td><td style="text-align: left">TODO</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">List of labels</a></td><td style="text-align: left">optional</td><td style="text-align: left"><code>[]</code></td></tr>
-<tr><td style="text-align: left"><a id="terraform_library-srcs"></a>srcs</td><td style="text-align: left">TODO</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">List of labels</a></td><td style="text-align: left">optional</td><td style="text-align: left"><code>[]</code></td></tr>
-<tr><td style="text-align: left"><a id="terraform_library-data"></a>data</td><td style="text-align: left">TODO</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">List of labels</a></td><td style="text-align: left">optional</td><td style="text-align: left"><code>[]</code></td></tr>
-<tr><td style="text-align: left"><a id="terraform_library-source"></a>source</td><td style="text-align: left">TODO</td><td style="text-align: left">String</td><td style="text-align: left">optional</td><td style="text-align: left"><code>""</code></td></tr>
+<tr><td style="text-align: left"><a id="terraform_module-name"></a>name</td><td style="text-align: left">A unique name for this target.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels#target-names">Name</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
+<tr><td style="text-align: left"><a id="terraform_module-deps"></a>deps</td><td style="text-align: left">Other terraform_module targets that this module depends on. These dependencies are made available through the TerraformInfo provider and can be referenced as module sources in Terraform configurations.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">List of labels</a></td><td style="text-align: left">optional</td><td style="text-align: left"><code>[]</code></td></tr>
+<tr><td style="text-align: left"><a id="terraform_module-srcs"></a>srcs</td><td style="text-align: left">Terraform source files (.tf) that make up this module.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">List of labels</a></td><td style="text-align: left">optional</td><td style="text-align: left"><code>[]</code></td></tr>
+<tr><td style="text-align: left"><a id="terraform_module-data"></a>data</td><td style="text-align: left">Additional files or targets that should be available at runtime. These files are added to the runfiles tree but are not processed as Terraform sources.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">List of labels</a></td><td style="text-align: left">optional</td><td style="text-align: left"><code>[]</code></td></tr>
+<tr><td style="text-align: left"><a id="terraform_module-main"></a>main</td><td style="text-align: left">An explicit file to use for the entrypoint of the module. If unspecified, <code>main.tf</code> will be assumed.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">Label</a></td><td style="text-align: left">optional</td><td style="text-align: left"><code>None</code></td></tr>
 </tbody></table>
 </div>
 <p><a id="terraform_validate_test"></a></p>
