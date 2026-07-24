@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Rules - rules_terraform</title>
+        <title>terraform_module - rules_terraform</title>
 
 
         <!-- Custom HTML head -->
@@ -12,32 +12,32 @@
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="theme-color" content="#ffffff">
 
-        <link rel="icon" href="favicon.svg">
-        <link rel="shortcut icon" href="favicon.png">
-        <link rel="stylesheet" href="css/variables.css">
-        <link rel="stylesheet" href="css/general.css">
-        <link rel="stylesheet" href="css/chrome.css">
-        <link rel="stylesheet" href="css/print.css" media="print">
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
 
         <!-- Fonts -->
-        <link rel="stylesheet" href="FontAwesome/css/font-awesome.css">
-        <link rel="stylesheet" href="fonts/fonts.css">
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
 
         <!-- Highlight.js Stylesheets -->
-        <link rel="stylesheet" href="highlight.css">
-        <link rel="stylesheet" href="tomorrow-night.css">
-        <link rel="stylesheet" href="ayu-highlight.css">
+        <link rel="stylesheet" href="../highlight.css">
+        <link rel="stylesheet" href="../tomorrow-night.css">
+        <link rel="stylesheet" href="../ayu-highlight.css">
 
         <!-- Custom theme stylesheets -->
 
 
         <!-- Provide site root to javascript -->
         <script>
-            var path_to_root = "";
+            var path_to_root = "../";
             var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "light";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc.js"></script>
+        <script src="../toc.js"></script>
     </head>
     <body>
     <div id="body-container">
@@ -89,7 +89,7 @@
             <!-- populated by js -->
             <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
             <noscript>
-                <iframe class="sidebar-iframe-outer" src="toc.html"></iframe>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
             </noscript>
             <div id="sidebar-resize-handle" class="sidebar-resize-handle">
                 <div class="sidebar-resize-indicator"></div>
@@ -123,7 +123,7 @@
                     <h1 class="menu-title">rules_terraform</h1>
 
                     <div class="right-buttons">
-                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
                             <i id="print-button" class="fa fa-print"></i>
                         </a>
                         <a href="https://github.com/periareon/rules_terraform" title="Git repository" aria-label="Git repository">
@@ -156,61 +156,15 @@
                 <div id="content" class="content">
                     <main>
                         <!-- Generated with Stardoc: http://skydoc.bazel.build -->
-<p>Terraform rules</p>
+<p>terraform_module</p>
 <h2 id="rules"><a class="header" href="#rules">Rules</a></h2>
 <ul>
-<li><a href="#terraform_binary">terraform_binary</a></li>
-<li><a href="#terraform_fmt_test">terraform_fmt_test</a></li>
 <li><a href="#terraform_module">terraform_module</a></li>
-<li><a href="#terraform_validate_test">terraform_validate_test</a></li>
 </ul>
-<h2 id="aspects"><a class="header" href="#aspects">Aspects</a></h2>
-<ul>
-<li><a href="#terraform_fmt_aspect">terraform_fmt_aspect</a></li>
-<li><a href="#terraform_validate_aspect">terraform_validate_aspect</a></li>
-</ul>
-<p><a id="terraform_binary"></a></p>
-<h2 id="terraform_binary"><a class="header" href="#terraform_binary">terraform_binary</a></h2>
-<pre>
-load("@rules_terraform//terraform:defs.bzl", "terraform_binary")
-
-terraform_binary(<a href="#terraform_binary-name">name</a>, <a href="#terraform_binary-lock">lock</a>, <a href="#terraform_binary-root">root</a>)
-</pre>
-<p>Creates an executable wrapper for running Terraform commands on a specific module.</p>
-<p>The <code>.terraform</code> directory is assembled hermetically by the <code>terraform_init_aspect</code>
-applied to the root module. Providers and modules are resolved from Bazel-managed
-dependencies rather than from the network.</p>
-<p><strong>Important:</strong> Once a <code>terraform_module</code> has Bazel-managed dependencies (providers
-via <code>terraform.providers()</code>, modules via Bazel targets or <code>module_sources</code>), direct
-<code>terraform</code> CLI usage outside of Bazel is not expected to work. Use
-<code>bazel run //:my_terraform -- apply</code> instead of invoking <code>terraform</code> directly.
-The <code>.terraform</code> directory, lock file hashes, and <code>modules.json</code> are all constructed
-by Bazel's init tooling and may differ from what <code>terraform init</code> would produce.</p>
-<p><strong>ATTRIBUTES</strong></p>
-<div class="table-wrapper"><table><thead><tr><th style="text-align: left">Name</th><th style="text-align: left">Description</th><th style="text-align: left">Type</th><th style="text-align: left">Mandatory</th><th style="text-align: left">Default</th></tr></thead><tbody>
-<tr><td style="text-align: left"><a id="terraform_binary-name"></a>name</td><td style="text-align: left">A unique name for this target.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels#target-names">Name</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
-<tr><td style="text-align: left"><a id="terraform_binary-lock"></a>lock</td><td style="text-align: left">An optional <code>.terraform.lock.hcl</code> file.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">Label</a></td><td style="text-align: left">optional</td><td style="text-align: left"><code>None</code></td></tr>
-<tr><td style="text-align: left"><a id="terraform_binary-root"></a>root</td><td style="text-align: left">The terraform_module target that serves as the root module.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">Label</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
-</tbody></table>
-</div>
-<p><a id="terraform_fmt_test"></a></p>
-<h2 id="terraform_fmt_test"><a class="header" href="#terraform_fmt_test">terraform_fmt_test</a></h2>
-<pre>
-load("@rules_terraform//terraform:defs.bzl", "terraform_fmt_test")
-
-terraform_fmt_test(<a href="#terraform_fmt_test-name">name</a>, <a href="#terraform_fmt_test-target">target</a>)
-</pre>
-<p>A rule for running <code>terraform fmt</code> on a Terraform target.</p>
-<p><strong>ATTRIBUTES</strong></p>
-<div class="table-wrapper"><table><thead><tr><th style="text-align: left">Name</th><th style="text-align: left">Description</th><th style="text-align: left">Type</th><th style="text-align: left">Mandatory</th><th style="text-align: left">Default</th></tr></thead><tbody>
-<tr><td style="text-align: left"><a id="terraform_fmt_test-name"></a>name</td><td style="text-align: left">A unique name for this target.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels#target-names">Name</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
-<tr><td style="text-align: left"><a id="terraform_fmt_test-target"></a>target</td><td style="text-align: left">The target to run <code>terraform fmt</code> on.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">Label</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
-</tbody></table>
-</div>
 <p><a id="terraform_module"></a></p>
 <h2 id="terraform_module"><a class="header" href="#terraform_module">terraform_module</a></h2>
 <pre>
-load("@rules_terraform//terraform:defs.bzl", "terraform_module")
+load("@rules_terraform//terraform:terraform_module.bzl", "terraform_module")
 
 terraform_module(<a href="#terraform_module-name">name</a>, <a href="#terraform_module-deps">deps</a>, <a href="#terraform_module-srcs">srcs</a>, <a href="#terraform_module-data">data</a>, <a href="#terraform_module-lock">lock</a>, <a href="#terraform_module-main">main</a>, <a href="#terraform_module-module_sources">module_sources</a>)
 </pre>
@@ -226,50 +180,15 @@ terraform_module(<a href="#terraform_module-name">name</a>, <a href="#terraform_
 <tr><td style="text-align: left"><a id="terraform_module-module_sources"></a>module_sources</td><td style="text-align: left">Mapping of Terraform module source paths to Bazel target labels. Use this to map local <code>module "foo" { source = "./modules/vpc" }</code> references to Bazel targets from other packages or external bzlmod dependencies. Keys are the Terraform source paths, values are Bazel labels providing TerraformInfo. The init tool will symlink these at the expected paths.</td><td style="text-align: left"><a href="https://bazel.build/rules/lib/dict">Dictionary: String -&gt; String</a></td><td style="text-align: left">optional</td><td style="text-align: left"><code>{}</code></td></tr>
 </tbody></table>
 </div>
-<p><a id="terraform_validate_test"></a></p>
-<h2 id="terraform_validate_test"><a class="header" href="#terraform_validate_test">terraform_validate_test</a></h2>
-<pre>
-load("@rules_terraform//terraform:defs.bzl", "terraform_validate_test")
-
-terraform_validate_test(<a href="#terraform_validate_test-name">name</a>, <a href="#terraform_validate_test-target">target</a>)
-</pre>
-<p>A rule for running <code>terraform validate</code> on a Terraform target.</p>
-<p><strong>ATTRIBUTES</strong></p>
-<div class="table-wrapper"><table><thead><tr><th style="text-align: left">Name</th><th style="text-align: left">Description</th><th style="text-align: left">Type</th><th style="text-align: left">Mandatory</th><th style="text-align: left">Default</th></tr></thead><tbody>
-<tr><td style="text-align: left"><a id="terraform_validate_test-name"></a>name</td><td style="text-align: left">A unique name for this target.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels#target-names">Name</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
-<tr><td style="text-align: left"><a id="terraform_validate_test-target"></a>target</td><td style="text-align: left">The target to run <code>terraform validate</code> on.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">Label</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
-</tbody></table>
-</div>
-<p><a id="terraform_fmt_aspect"></a></p>
-<h2 id="terraform_fmt_aspect"><a class="header" href="#terraform_fmt_aspect">terraform_fmt_aspect</a></h2>
-<pre>
-load("@rules_terraform//terraform:defs.bzl", "terraform_fmt_aspect")
-
-terraform_fmt_aspect()
-</pre>
-<p>An aspect for running <code>terraform fmt</code> on targets with Terraform sources.</p>
-<p><strong>ASPECT ATTRIBUTES</strong></p>
-<p><strong>ATTRIBUTES</strong></p>
-<p><a id="terraform_validate_aspect"></a></p>
-<h2 id="terraform_validate_aspect"><a class="header" href="#terraform_validate_aspect">terraform_validate_aspect</a></h2>
-<pre>
-load("@rules_terraform//terraform:defs.bzl", "terraform_validate_aspect")
-
-terraform_validate_aspect()
-</pre>
-<p>An aspect for running <code>terraform validate</code> on targets with Terraform sources.</p>
-<p><strong>ASPECT ATTRIBUTES</strong></p>
-<p><strong>ATTRIBUTES</strong></p>
-
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="index.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../terraform/terraform_fmt_test.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
-                            <a rel="next prefetch" href="settings.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../terraform/terraform_modules_lock.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <i class="fa fa-angle-right"></i>
                             </a>
 
@@ -279,11 +198,11 @@ terraform_validate_aspect()
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="index.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../terraform/terraform_fmt_test.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <i class="fa fa-angle-left"></i>
                     </a>
 
-                    <a rel="next prefetch" href="settings.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../terraform/terraform_modules_lock.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <i class="fa fa-angle-right"></i>
                     </a>
             </nav>
@@ -298,13 +217,13 @@ terraform_validate_aspect()
         </script>
 
 
-        <script src="elasticlunr.min.js"></script>
-        <script src="mark.min.js"></script>
-        <script src="searcher.js"></script>
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
 
-        <script src="clipboard.min.js"></script>
-        <script src="highlight.js"></script>
-        <script src="book.js"></script>
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
 
         <!-- Custom JS scripts -->
 

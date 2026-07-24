@@ -157,60 +157,103 @@
                     <main>
                         <h1 id="rules_terraform"><a class="header" href="#rules_terraform">rules_terraform</a></h1>
 <h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
-<p>This repository implements Bazel rules for <a href="https://developer.hashicorp.com/terraform">Terraform</a>.</p>
+<p>This repository implements Bazel rules for
+<a href="https://developer.hashicorp.com/terraform">Terraform</a> and
+<a href="https://opentofu.org/">OpenTofu</a>.</p>
 <h2 id="setup"><a class="header" href="#setup">Setup</a></h2>
-<p>To begin using the rules, add the following to your <code>MODULE.bazel</code> file.</p>
+<p>Add rules_terraform to your <code>MODULE.bazel</code>:</p>
 <pre><code class="language-python">bazel_dep(name = "rules_terraform", version = "{version}")
-
-terraform = use_extension("@rules_terraform//terraform:extensions.bzl", "terraform")
-terraform.toolchain(
-    name = "terraform_toolchains",
-)
-use_repo(terraform, "terraform_toolchains")
-
-register_toolchains(
-    "@terraform_toolchains//:all",
-)
 </code></pre>
-<h2 id="bazel-managed-terraform"><a class="header" href="#bazel-managed-terraform">Bazel-Managed Terraform</a></h2>
-<p>When Terraform modules are managed through Bazel, the <code>.terraform</code> directory is assembled
-hermetically by an init aspect rather than by <code>terraform init</code>. This has several important
-implications:</p>
+<p>Toolchains for both engines are auto-registered — no <code>use_extension</code> or
+<code>register_toolchains</code> call is required. Pick a specific version by flipping
+the corresponding string flag:</p>
+<pre><code>--@rules_terraform//terraform/settings:version=1.14.1
+--@rules_terraform//opentofu/settings:version=1.10.6
+</code></pre>
+<p>Both default to the latest release shipped in
+<a href="../../terraform/private/versions.bzl"><code>//terraform/private:versions.bzl</code></a> /
+<a href="../../opentofu/private/versions.bzl"><code>//opentofu/private:versions.bzl</code></a>.</p>
+<p>To fetch external providers or registry modules, opt into the <code>terraform</code>
+extension explicitly:</p>
+<pre><code class="language-python">terraform = use_extension("@rules_terraform//terraform:extensions.bzl", "terraform")
+terraform.providers(
+    name = "my_providers",
+    lock = "//path/to:.terraform.lock.hcl",
+)
+use_repo(terraform, "my_providers")
+</code></pre>
+<h2 id="running-the-engine-cli-directly-terraform--opentofu"><a class="header" href="#running-the-engine-cli-directly-terraform--opentofu">Running the engine CLI directly (<code>@terraform</code> / <code>@opentofu</code>)</a></h2>
+<p>rules_terraform ships two hub repositories — <code>@terraform</code> and <code>@opentofu</code>
+— that let a user invoke the toolchain-resolved engine binary from any
+subdirectory of their workspace:</p>
+<pre><code class="language-bash">cd path/to/my/tf/module
+bazel run @terraform -- plan             # ≈ terraform plan
+bazel run @terraform -- init             # ≈ terraform init
+bazel run @opentofu -- state list        # ≈ tofu state list
+</code></pre>
+<p>The wrapper <code>chdir</code>s to <code>$BUILD_WORKING_DIRECTORY</code> (the shell cwd where
+<code>bazel run</code> was invoked) before exec-ing the engine, so relative paths
+and any <code>terraform.tfstate</code> land in the directory you're standing in —
+just like the native CLI. Version resolution follows the same
+<code>//terraform/settings:version</code> / <code>//opentofu/settings:version</code> flags as
+the rest of the ruleset, so you get one hermetic Terraform release
+across all invocations.</p>
+<p><strong>This is NOT the Bazel-managed workflow.</strong> <code>@terraform</code> does no init
+aspect, no lock-file rewriting, no <code>.terraform</code> construction —
+<code>terraform init</code> still runs against your source tree, hits the network,
+and writes state. Reach for it when you want a one-off CLI invocation
+(state manipulation, ad-hoc plan against an unrelated module) without
+wiring up a <code>terraform_binary</code> target for the module.</p>
+<p>To use <code>@terraform</code> / <code>@opentofu</code> from downstream, add them to your
+<code>MODULE.bazel</code>:</p>
+<pre><code class="language-python">terraform_toolchains = use_extension("@rules_terraform//terraform:extensions.bzl", "terraform_toolchains")
+use_repo(terraform_toolchains, "terraform")
+
+opentofu_toolchains = use_extension("@rules_terraform//opentofu:extensions.bzl", "opentofu_toolchains")
+use_repo(opentofu_toolchains, "opentofu")
+</code></pre>
+<p>The extensions themselves are already invoked by rules_terraform's own
+<code>MODULE.bazel</code> (they register toolchains); the <code>use_repo</code> line only
+binds the repo name in your namespace so <code>@terraform</code> / <code>@opentofu</code>
+resolve.</p>
+<h2 id="bazel-managed-terraform"><a class="header" href="#bazel-managed-terraform">Bazel-managed Terraform</a></h2>
+<p>When a <code>terraform_module</code> is built through Bazel, the <code>.terraform</code>
+directory is assembled hermetically by an init aspect rather than by
+<code>terraform init</code>. Every network fetch happens at repository-rule /
+bzlmod-extension time; build actions are offline. As a consequence:</p>
 <ul>
-<li>
-<p><strong>Provider binaries</strong> are fetched at repository-rule time (during <code>bazel fetch</code> / analysis)
-and copied into the <code>.terraform/providers/</code> directory structure during the build action.
-The lock file's <code>h1:</code> hashes are rewritten to match the actual installed binaries.</p>
-</li>
-<li>
-<p><strong>External modules</strong> (from the Terraform Registry) are resolved via a lock file
-(<code>terraform_modules.lock.json</code>) and downloaded at repository-rule time. Their files are
-placed into <code>.terraform/modules/</code> with a generated <code>modules.json</code> manifest.</p>
-</li>
-<li>
-<p><strong>Cross-package modules</strong> (other <code>terraform_module</code> targets in the monorepo) are wired
-via the <code>module_sources</code> attribute, which maps Terraform <code>source</code> paths to Bazel target
-labels. Their files are copied into <code>.terraform/modules/</code> at build time.</p>
-</li>
+<li><strong>Provider binaries</strong> are fetched at repository-rule time and copied
+into <code>.terraform/providers/…</code> during the aspect's action. The lock
+file's <code>h1:</code> hashes are rewritten to match the actually-installed
+binary layout.</li>
+<li><strong>External modules</strong> (from a Terraform registry) are resolved via a
+Bazel-owned lock file, downloaded at repository-rule time, and copied
+into <code>.terraform/modules/…</code> with a generated <code>modules.json</code> manifest.</li>
+<li><strong>Cross-package modules</strong> (other <code>terraform_module</code> targets in the
+monorepo) are wired via the <code>module_sources</code> attribute on the parent
+and materialized into <code>.terraform/modules/…</code> alongside the registry
+modules.</li>
 </ul>
-<h3 id="direct-terraform-cli-incompatibility"><a class="header" href="#direct-terraform-cli-incompatibility">Direct <code>terraform</code> CLI Incompatibility</a></h3>
-<p>Once a <code>terraform_module</code> has Bazel-managed dependencies, running <code>terraform</code> commands
-directly (outside of Bazel) is <strong>not expected to work</strong>. This is because:</p>
-<ol>
-<li>The <code>.terraform</code> directory is assembled by Bazel's init tooling, not <code>terraform init</code></li>
-<li>Lock file <code>h1:</code> hashes are rewritten to match the platform-specific binary that Bazel installed</li>
-<li><code>modules.json</code> is generated by the init tool to reflect Bazel's dependency graph</li>
-<li>Provider binaries are copied from Bazel's external repository cache, not downloaded by Terraform</li>
-</ol>
-<p>Instead, use <code>bazel run</code> to invoke Terraform:</p>
+<p>The full mechanics — how the extensions resolve each dependency type,
+what each lock file looks like, and how to keep them fresh — are in
+<a href="#external-dependencies-and-lock-files">External dependencies and lock files</a>
+below.</p>
+<h3 id="direct-terraform-cli-incompatibility"><a class="header" href="#direct-terraform-cli-incompatibility">Direct <code>terraform</code> CLI incompatibility</a></h3>
+<p>Once a <code>terraform_module</code> has Bazel-managed dependencies, running
+<code>terraform</code> (or <code>tofu</code>) directly outside Bazel is <strong>not expected to work</strong>:
+the <code>.terraform</code> directory is Bazel's construction, <code>h1:</code> hashes are
+rewritten for the installed platform binary, and <code>modules.json</code> reflects
+the Bazel target graph — not the source tree.</p>
+<p>Use <code>bazel run</code> to invoke the engine:</p>
 <pre><code class="language-bash"># Instead of: terraform plan
 bazel run //path/to:terraform -- plan
 
 # Instead of: terraform apply
 bazel run //path/to:terraform -- apply
 </code></pre>
-<p>The <code>terraform_binary</code> rule creates an executable that sets up a hermetic working directory
-with all dependencies wired into place before delegating to the real <code>terraform</code> binary.</p>
+<p>The <code>terraform_binary</code> rule creates an executable that sets up a
+hermetic working directory with all dependencies wired into place
+before delegating to the real <code>terraform</code> binary.</p>
 <p>For validation and formatting, use the corresponding test rules:</p>
 <pre><code class="language-python">terraform_validate_test(
     name = "validate_test",
@@ -222,13 +265,281 @@ terraform_fmt_test(
     target = ":my_module",
 )
 </code></pre>
+<h2 id="external-dependencies-and-lock-files"><a class="header" href="#external-dependencies-and-lock-files">External dependencies and lock files</a></h2>
+<p>rules_terraform partitions external Terraform state into three buckets,
+each with its own resolution path and (where applicable) lock file. Every
+network fetch happens at repository-rule / bzlmod-extension time — build
+actions never touch the network. What the aspect and Terraform actually
+see at run time is a fully-populated <code>.terraform/</code> tree.</p>
+<h3 id="at-a-glance"><a class="header" href="#at-a-glance">At a glance</a></h3>
+<div class="table-wrapper"><table><thead><tr><th>Dependency type</th><th>Fetched from</th><th>Lock file</th><th>Refresh via</th></tr></thead><tbody>
+<tr><td>Providers</td><td>Terraform Registry v1 API</td><td><code>.terraform.lock.hcl</code></td><td><code>bazel run //path:providers_lock</code> (a <a href="./terraform/terraform_modules_lock.html"><code>terraform_providers_lock</code></a> target) — see below</td></tr>
+<tr><td>Registry modules</td><td>Terraform Registry v1 API</td><td>none — live-resolved by the <code>terraform.modules(...)</code> / <code>opentofu.modules(...)</code> extension</td><td>Automatic on <code>bazel fetch</code>. See "External registry modules" below for the tradeoff.</td></tr>
+<tr><td>Local / in-repo modules</td><td>Bazel target graph</td><td>none</td><td>Edit <code>deps</code> / <code>module_sources</code> on the parent <code>terraform_module</code></td></tr>
+</tbody></table>
+</div>
+<h3 id="providers"><a class="header" href="#providers">Providers</a></h3>
+<pre><code class="language-python">terraform = use_extension("@rules_terraform//terraform:extensions.bzl", "terraform")
+terraform.providers(
+    name = "my_providers",
+    lock = "//path/to:.terraform.lock.hcl",
+    # Optional; default is `registry.terraform.io`. Use
+    # `registry.opentofu.org` if you're fetching from the OpenTofu registry.
+    # registry = "registry.opentofu.org",
+)
+use_repo(terraform, "my_providers")
+</code></pre>
+<p>The lock file is Terraform's native <code>.terraform.lock.hcl</code> — rules_terraform
+consumes it, it doesn't author it.</p>
+<p><strong>At repo-rule time</strong> the extension:</p>
+<ol>
+<li>Reads the lock file via <code>module_ctx.read</code>.</li>
+<li>For every <code>(provider, platform)</code> pair, calls
+<code>https://&lt;registry&gt;/v1/providers/&lt;namespace&gt;/&lt;name&gt;/&lt;version&gt;/download/&lt;os&gt;/&lt;arch&gt;</code>
+via <code>module_ctx.download(...)</code> and reads the returned JSON to obtain
+the archive <code>download_url</code> + <code>shasum</code>.</li>
+<li>Declares an <code>http_archive</code> per pair. These are lazy — Bazel only
+fetches the archive for the platform your build actually resolves.</li>
+<li>Emits a hub repo <code>@my_providers</code> whose per-provider aliases pick the
+right platform archive via <code>select()</code>. Depend on
+<code>@my_providers//&lt;namespace&gt;_&lt;name&gt;</code> (e.g. <code>@my_providers//hashicorp_null</code>)
+from your <code>terraform_module.deps</code>.</li>
+</ol>
+<p><strong>At build time</strong> <a href="./terraform/terraform_module.html"><code>terraform_init_aspect</code></a>
+extracts each provider's files into
+<code>.terraform/providers/&lt;registry&gt;/&lt;namespace&gt;/&lt;name&gt;/&lt;version&gt;/&lt;platform&gt;/</code>
+and recomputes the <code>h1:</code> hash in a copy of the lock file it writes inside
+<code>.terraform/</code>. That rewrite is what lets <code>terraform init -get=false</code>
+accept the Bazel-installed binaries.</p>
+<p><strong>Regenerating.</strong> Wire up a
+<a href="./terraform/terraform_modules_lock.html"><code>terraform_providers_lock</code></a> target
+(or <a href="./opentofu/opentofu_providers_lock.html"><code>opentofu_providers_lock</code></a> for
+the OpenTofu variant):</p>
+<pre><code class="language-python">load(
+    "@rules_terraform//terraform:terraform_modules_lock.bzl",
+    "terraform_providers_lock",
+)
+
+terraform_providers_lock(
+    name = "providers_lock",
+    output = ".terraform.lock.hcl",
+    target = ":my_module",
+    # Optional; defaults to a 5-platform set (linux/darwin ×
+    # amd64/arm64 + windows_amd64).
+    # platforms = ["linux_amd64", "darwin_arm64"],
+)
+</code></pre>
+<p><code>bazel run //:providers_lock</code> seeds a temp directory with your <code>.tf</code>
+sources, runs real <code>terraform providers lock -platform=&lt;all&gt;</code> under the
+toolchain-fetched engine binary, and writes the multi-platform result
+back into <code>$BUILD_WORKSPACE_DIRECTORY</code>. This is the only path that
+produces hashes for platforms Bazel didn't resolve for the current
+build — plain <code>terraform init</code> on your laptop locks the current
+platform only.</p>
+<p><strong>Drift check.</strong> <a href="./terraform/terraform_modules_lock.html"><code>terraform_providers_lock_test</code></a>
+fails if any provider declared in a <code>required_providers { … }</code> block
+isn't in the lock file (or vice-versa). Pure text comparison — no
+network. <a href="./terraform/terraform_modules_lock.html"><code>terraform_lock_diff_test</code></a>
+goes further: it structurally compares the init-aspect-generated
+<code>.terraform.lock.hcl</code> against a checked-in golden produced by real
+<code>terraform init</code>, catching cases where the aspect's rewrite doesn't
+match what the engine would produce.</p>
+<h3 id="external-registry-modules"><a class="header" href="#external-registry-modules">External registry modules</a></h3>
+<p>There is <strong>no lock file</strong> for registry modules — the extension resolves
+them live against the Registry API on every fresh evaluation. Terraform
+users load the extension from the terraform side:</p>
+<pre><code class="language-python">terraform = use_extension("@rules_terraform//terraform:extensions.bzl", "terraform")
+terraform.modules(
+    name = "my_modules",
+    root = "//path/to:main.tf",   # any .tf file in the root module directory
+)
+use_repo(terraform, "my_modules")
+</code></pre>
+<p>OpenTofu users load the parallel extension — same tag class shape, but
+the registry defaults to <code>registry.opentofu.org</code>:</p>
+<pre><code class="language-python">opentofu = use_extension("@rules_terraform//opentofu:extensions.bzl", "opentofu")
+opentofu.modules(
+    name = "my_modules",
+    root = "//path/to:main.tf",
+)
+use_repo(opentofu, "my_modules")
+</code></pre>
+<p><strong>At extension eval time</strong> the impl reads every <code>*.tf</code> file in the same
+directory as <code>root</code> (matching Terraform's own "root module is a
+directory" model), parses <code>module { source = "…" }</code> blocks, and for
+every registry-shaped source:</p>
+<ol>
+<li>Hits <code>/v1/modules/&lt;ns&gt;/&lt;name&gt;/&lt;provider&gt;/versions</code> and picks the
+highest version satisfying the block's <code>version</code> constraint via a
+Starlark port of Terraform's semver logic.</li>
+<li>Hits <code>/v1/modules/&lt;ns&gt;/&lt;name&gt;/&lt;provider&gt;/&lt;version&gt;</code> for metadata —
+reads <code>source</code> (git URL) and <code>tag</code>, constructs a direct GitHub
+tarball URL (<code>&lt;source&gt;/archive/refs/tags/&lt;tag&gt;.tar.gz</code>) with the
+matching <code>strip_prefix</code>.</li>
+<li>Downloads the archive to compute the <code>sha256</code>.</li>
+<li>Registers an <code>http_archive</code> per module.</li>
+</ol>
+<p>Every downstream fetch goes direct to GitHub — no registry hop at build
+time. Only GitHub-backed modules are supported; non-GitHub git hosts
+fail with a clear error at eval time.</p>
+<p><strong>At build time</strong> the init aspect copies each module's files into
+<code>.terraform/modules/&lt;key&gt;/</code> and adds a corresponding entry to
+Terraform's <code>modules.json</code> manifest.</p>
+<p><strong>Reproducibility and caching.</strong> The extension is
+<code>reproducible = False</code> and every <code>.tf</code> edit in the root module
+directory invalidates it (bzlmod tracks each <code>module_ctx.read()</code>).
+Re-eval cost is cached across runs via <code>module_ctx.facts</code> — but that
+cache only persists when <code>MODULE.bazel.lock</code> is enabled. See
+<a href="#reproducibility">Reproducibility</a> for the full recipe and the
+<code>Implementation detail: network calls per eval</code> note below.</p>
+<p><strong>Non-default registries.</strong> Pass <code>registry = "…"</code> on the tag class if
+you're pointing at a private mirror or an alternate registry (e.g. a
+Terraform user consuming the OpenTofu registry, or vice-versa).</p>
+<details>
+<summary><strong>Implementation detail: network calls per eval</strong></summary>
+<p>For each <code>module { }</code> block, the extension issues up to three Registry
+API requests, cached across evals via <code>module_ctx.facts</code>:</p>
+<div class="table-wrapper"><table><thead><tr><th>Call</th><th>Purpose</th><th>Cost</th><th>Skipped when</th></tr></thead><tbody>
+<tr><td><code>GET /v1/modules/&lt;source&gt;/versions</code></td><td>Resolve <code>version</code> constraint to a concrete SemVer</td><td>Small JSON</td><td><code>version</code> is already an exact-pinned SemVer</td></tr>
+<tr><td><code>GET /v1/modules/&lt;source&gt;/&lt;version&gt;</code></td><td>Read <code>source</code> (git URL) + <code>tag</code> to build the archive URL</td><td>Small JSON</td><td>Facts cache has an entry for <code>&lt;source&gt;@&lt;version&gt;</code></td></tr>
+<tr><td><code>GET &lt;archive URL&gt;</code></td><td>Stream the archive body to compute an sha256 integrity</td><td><strong>MB per module</strong></td><td>Facts cache has an entry for <code>&lt;source&gt;@&lt;version&gt;</code></td></tr>
+</tbody></table>
+</div>
+<p>Facts is keyed by <code>&lt;source&gt;@&lt;concrete_version&gt;</code> and stores
+<code>{url, strip_prefix, integrity}</code> — historical facts that don't change
+once a module version is published. Only entries for currently-declared
+modules carry across evals; entries for removed modules prune naturally.</p>
+</details>
+<h3 id="local--in-repo-modules"><a class="header" href="#local--in-repo-modules">Local / in-repo modules</a></h3>
+<p>Modules living inside your monorepo don't need a lock file — Bazel's
+own target graph is the source of truth.</p>
+<pre><code class="language-python">terraform_module(
+    name = "root",
+    srcs = glob(["*.tf"]),
+    deps = ["//modules/greeter"],
+    module_sources = {
+        # Terraform source path (as written in `module "…" { source = "…" }`)
+        # → Bazel target the init aspect should materialize into
+        # `.terraform/modules/&lt;key&gt;/`.
+        "./modules/greeter": "//modules/greeter",
+    },
+)
+</code></pre>
+<p>The <code>module_sources</code> map translates each <code>module "greeter" { source = "./modules/greeter" }</code>
+block into a Bazel-managed file copy. The sub-module can live in an
+entirely different package — no filesystem-sibling relationship is
+required, because the aspect copies files into <code>.terraform/modules/…</code>
+based on the label, not on the original layout.</p>
+<p>For modules that genuinely sit alongside the parent's <code>.tf</code> files (i.e.
+<code>source = "./foo"</code> where <code>./foo</code> really is a subdirectory of the
+parent's own srcs), no <code>module_sources</code> entry is needed — the aspect
+discovers the block and includes those files automatically.</p>
+<h3 id="update-workflow--one-page-summary"><a class="header" href="#update-workflow--one-page-summary">Update workflow — one-page summary</a></h3>
+<div class="table-wrapper"><table><thead><tr><th>Change</th><th>What to do</th></tr></thead><tbody>
+<tr><td>Bump / add a provider</td><td>Update <code>required_providers { }</code>; regenerate <code>.terraform.lock.hcl</code> (real <code>terraform providers lock</code> or <code>bazel run //:providers_lock</code>)</td></tr>
+<tr><td>Bump / add a registry module</td><td>Edit the <code>module { source = "…" version = "…" }</code> block. Live-resolved on the next <code>bazel fetch</code>; regenerate <code>MODULE.bazel.lock</code> if you have it enabled.</td></tr>
+<tr><td>Add / rename a local module</td><td>Update <code>deps</code> and <code>module_sources</code> on the parent; no lock file involved</td></tr>
+<tr><td>Verify everything</td><td><code>bazel test //...</code> — runs validate, fmt, tftest, and every lock drift check in one shot</td></tr>
+</tbody></table>
+</div>
+<h2 id="reproducibility"><a class="header" href="#reproducibility">Reproducibility</a></h2>
+<p>The state of each bzlmod extension in rules_terraform:</p>
+<div class="table-wrapper"><table><thead><tr><th>Extension</th><th style="text-align: center">Reproducible?</th><th>Why</th></tr></thead><tbody>
+<tr><td><code>terraform_toolchains</code> / <code>opentofu_toolchains</code></td><td style="text-align: center">✓</td><td>Every URL + integrity is vendored in <code>//&lt;engine&gt;/private:versions.bzl</code>. No network at eval time; identical inputs → identical repo declarations.</td></tr>
+<tr><td><code>terraform.providers(...)</code></td><td style="text-align: center">✓</td><td>Reads a checked-in <code>.terraform.lock.hcl</code>; never resolves version constraints. Registry API is called to look up download URLs, but the version and hash come from the lock.</td></tr>
+<tr><td><code>terraform.modules(...)</code> / <code>opentofu.modules(...)</code></td><td style="text-align: center">✗</td><td>Live version-constraint resolution against the Registry API. <code>MODULE.bazel.lock</code> is the capture layer that closes the gap — see below.</td></tr>
+</tbody></table>
+</div>
+<h3 id="the-role-of-modulebazellock"><a class="header" href="#the-role-of-modulebazellock">The role of <code>MODULE.bazel.lock</code></a></h3>
+<p>The modules extension is the only piece of rules_terraform that
+depends on <code>MODULE.bazel.lock</code> for both reproducibility AND performance.
+<code>terraform_toolchains</code>, <code>opentofu_toolchains</code>, and
+<code>terraform.providers(...)</code> all read fully vendored state and produce
+deterministic output without any lockfile involvement. The modules
+extension is different in two related ways:</p>
+<ol>
+<li>
+<p><strong>Reproducibility.</strong> Without the lockfile, <code>~&gt; 5.0</code> can resolve to
+<code>5.7.1</code> today and <code>5.7.2</code> tomorrow. With the lockfile enabled,
+bzlmod captures the extension's resolved output and reuses it on
+every subsequent eval — the extension is <code>reproducible = False</code>
+under Bazel's contract, but the lockfile makes builds
+byte-identical across time in practice.</p>
+</li>
+<li>
+<p><strong>Performance.</strong> Every <code>.tf</code> edit invalidates the extension (bzlmod
+tracks each <code>module_ctx.read()</code>). Without any cache, every re-eval
+hits the Registry API three times per module block, including
+downloading each archive to compute an sha256 — MB per module. The
+extension caches per-<code>(source, version)</code> archive URL + integrity in
+<code>module_ctx.facts</code>; those facts persist through
+<code>MODULE.bazel.lock</code>. Without the lockfile, facts is always empty,
+and every re-eval pays the full cost.</p>
+</li>
+</ol>
+<p><strong>Recommended downstream setup</strong> — in your consuming repo's <code>.bazelrc</code>:</p>
+<pre><code>common --lockfile_mode=update
+# or, once you're confident in the state:
+common --lockfile_mode=strict
+</code></pre>
+<p>Commit <code>MODULE.bazel.lock</code>. This gives you:</p>
+<ul>
+<li>Deterministic builds regardless of version constraints in <code>.tf</code>.</li>
+<li>Cheap re-evals — cached facts short-circuit metadata calls and
+archive downloads on every re-run.</li>
+<li>A PR-visible diff (<code>MODULE.bazel.lock</code>) whenever a module version
+or archive hash actually changes.</li>
+</ul>
+<p><strong>Bonus: pin exact versions in <code>module { }</code> blocks.</strong> Combined with
+<code>MODULE.bazel.lock</code>, exact pins let the extension skip even the
+<code>/versions</code> API call — bringing warm-cache re-evals to zero network
+calls per module:</p>
+<pre><code class="language-hcl">module "vpc" {
+  source  = "terraform-aws-modules/vpc/aws"
+  version = "5.7.1"   # not "~&gt; 5.0"
+}
+</code></pre>
+<h3 id="rules_terraforms-own-bazelrc-does-not-enable-the-lockfile"><a class="header" href="#rules_terraforms-own-bazelrc-does-not-enable-the-lockfile">Rules_terraform's own <code>.bazelrc</code> does NOT enable the lockfile</a></h3>
+<p>The ruleset ships with <code>common --lockfile_mode=off</code>. This is
+deliberate for a rules repo: bumping any dev-only <code>bazel_dep</code> version
+would produce lockfile churn in unrelated PRs. Downstream users are
+recommended to enable it in their own repos.</p>
+<h3 id="update-workflow"><a class="header" href="#update-workflow">Update workflow</a></h3>
+<p>To bump a module version with the lockfile enabled:</p>
+<ol>
+<li>Edit the exact version (or constraint) in the <code>module { }</code> block.</li>
+<li>Run <code>bazel mod deps --lockfile_mode=update</code> (or just
+<code>bazel fetch //...</code>) to regenerate <code>MODULE.bazel.lock</code>.</li>
+<li>Commit both the <code>.tf</code> change AND the lockfile diff — reviewers see
+exactly which archive changed.</li>
+</ol>
+<h3 id="why-not-just-mark-the-extension-reproducible--true"><a class="header" href="#why-not-just-mark-the-extension-reproducible--true">Why not just mark the extension <code>reproducible = True</code>?</a></h3>
+<p>The extension makes live Registry API calls at eval time. Network
+responses CAN vary across invocations (transient 5xx, mirror rotation,
+registry outages, schema changes over years). Claiming
+<code>reproducible = True</code> would be dishonest — same inputs, potentially
+different outputs. <code>MODULE.bazel.lock</code> is Bazel's designed capture
+layer for exactly this shape of extension, and setting
+<code>reproducible = True</code> would tell bzlmod NOT to record the extension
+in the lockfile — the opposite of what we want.</p>
+<h3 id="when-could-reproducible--true-come-back"><a class="header" href="#when-could-reproducible--true-come-back">When could <code>reproducible = True</code> come back?</a></h3>
+<ul>
+<li>If HashiCorp publishes a Terraform-level module lockfile schema that
+captures resolved versions + hashes ahead of extension eval.</li>
+<li>If rules_terraform introduces a mode where the extension consumes a
+user-supplied pinned-version list without hitting the network at all
+(essentially reintroducing a lockfile — the one we deliberately
+removed in favor of live resolution + facts caching).</li>
+</ul>
+<p>Neither is planned. Until then, <code>MODULE.bazel.lock</code> + exact pins covers
+the same ground with Bazel's native machinery.</p>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
 
-                            <a rel="next prefetch" href="rules.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="terraform_rules.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <i class="fa fa-angle-right"></i>
                             </a>
 
@@ -239,7 +550,7 @@ terraform_fmt_test(
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
 
-                    <a rel="next prefetch" href="rules.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="terraform_rules.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <i class="fa fa-angle-right"></i>
                     </a>
             </nav>

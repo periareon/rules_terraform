@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Settings - rules_terraform</title>
+        <title>OpenTofu Rules - rules_terraform</title>
 
 
         <!-- Custom HTML head -->
@@ -155,17 +155,38 @@
 
                 <div id="content" class="content">
                     <main>
-                        <h1 id="settings"><a class="header" href="#settings">Settings</a></h1>
+                        <h1 id="opentofu-rules"><a class="header" href="#opentofu-rules">OpenTofu Rules</a></h1>
+<p>Everything under <code>//opentofu</code> mirrors <code>//terraform</code> but binds to
+<code>//opentofu:toolchain_type</code>. Rule bodies are identical — only the
+resolved toolchain differs — so behavior stays in lockstep between the
+two engines. Data-only rules (<code>opentofu_module</code>, <code>opentofu_provider</code>,
+<code>opentofu_provider_group</code>) are literal aliases for their <code>terraform_*</code>
+counterparts, provided so an OpenTofu-only project never has to import
+a <code>terraform_*</code> symbol.</p>
+<h2 id="public-rules"><a class="header" href="#public-rules">Public rules</a></h2>
+<ul>
+<li><a href="./opentofu/opentofu_binary.html">opentofu_binary</a> — <code>bazel run</code> wrapper for any <code>tofu</code> subcommand.</li>
+<li><a href="./opentofu/opentofu_module.html">opentofu_module</a> — alias for <code>terraform_module</code>.</li>
+<li><a href="./opentofu/opentofu_provider.html">opentofu_provider</a> — alias for <code>terraform_provider</code>.</li>
+<li><a href="./opentofu/opentofu_provider_group.html">opentofu_provider_group</a> — alias for <code>terraform_provider_group</code>.</li>
+<li><a href="./opentofu/opentofu_test.html">opentofu_test</a> — runs OpenTofu's HCL native test framework.</li>
+<li><a href="./opentofu/opentofu_validate_test.html">opentofu_validate_test</a> — <code>tofu validate</code> as a Bazel test.</li>
+<li><a href="./opentofu/opentofu_fmt_test.html">opentofu_fmt_test</a> — <code>tofu fmt -check</code> as a Bazel test.</li>
+</ul>
+<h2 id="module-extensions"><a class="header" href="#module-extensions">Module extensions</a></h2>
+<ul>
+<li><a href="./opentofu/extensions.html">extensions</a> — <code>opentofu_toolchains</code>.</li>
+</ul>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="rules.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="terraform/settings.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
-                            <a rel="next prefetch" href="pkg.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="opentofu/opentofu_binary.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <i class="fa fa-angle-right"></i>
                             </a>
 
@@ -175,11 +196,11 @@
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="rules.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="terraform/settings.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <i class="fa fa-angle-left"></i>
                     </a>
 
-                    <a rel="next prefetch" href="pkg.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="opentofu/opentofu_binary.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <i class="fa fa-angle-right"></i>
                     </a>
             </nav>
