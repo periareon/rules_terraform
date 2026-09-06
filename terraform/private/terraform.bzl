@@ -13,31 +13,84 @@ load(
     "TerraformProviderGroupInfo",
     "TerraformProviderInfo",
 )
-load(":util.bzl", "rlocationpath", "terraform_init_dir")
+load(":util.bzl", "module_dir", "rlocationpath", "staged_dir", "staged_path")
 
 # Extension-generated hub BUILD files under external repos load
 # `terraform_provider` / `terraform_module_group` / `terraform_external_module`
 # from here, so the file must be publicly loadable.
 visibility("public")
 
-def _compute_main(label, srcs, main = None):
-    if main:
-        return main
+def _module_root_dir(label, srcs, data):
+    """Validate the module's file layout and return its directory.
 
+    A Terraform module *is* a directory — the engine loads every `.tf` file
+    in it and nothing else. Bazel models a target as a file list, so the two
+    only line up if every source lives directly in the target's own package.
+    Enforcing that here, once, is what lets every downstream tool stop
+    guessing which directory to run the engine in. Nested `.tf` files are
+    child modules and belong in their own `terraform_module` target,
+    referenced through a `module` block.
+
+    Args:
+        label: (Label) The `terraform_module` target, for error messages.
+        srcs: (list[File]) The module's `.tf` sources.
+        data: (list[File]) The module's data files, which may sit in
+            subdirectories but not outside the module.
+
+    Returns:
+        (str) The module's staged directory (see `util.bzl`'s `staged_path`).
+    """
+    if not srcs:
+        fail("terraform_module '{}' has no srcs — a Terraform module is a directory of .tf files.".format(label))
+
+    root_dir = staged_dir(srcs[0])
     for src in srcs:
-        if src.basename == "main.tf":
-            return src
+        if staged_dir(src) != root_dir:
+            fail(
+                ("terraform_module '{}' has srcs in more than one directory:\n" +
+                 "  {}\n  {}\n" +
+                 "A Terraform module is a single directory. Nested .tf files are " +
+                 "child modules — give them their own terraform_module target and " +
+                 "reference it with a `module` block.").format(
+                    label,
+                    staged_path(srcs[0]),
+                    staged_path(src),
+                ),
+            )
 
-    # `main.tf` is a convention, not a Terraform requirement; fall back to
-    # the first source to give downstream tools a representative file for
-    # the module directory.
-    if srcs:
-        return srcs[0]
+        # The directory also has to be the target's own package, otherwise the
+        # `module` block source paths a user writes (relative to the directory
+        # holding the .tf files) wouldn't line up with the Bazel target graph
+        # that supplies them. `File.owner` names the producing target exactly,
+        # so no path-prefix guesswork is involved.
+        owner = src.owner
+        if owner.package != label.package or owner.workspace_name != label.workspace_name:
+            fail(
+                ("terraform_module '{}' has src '{}', which belongs to package '{}'.\n" +
+                 "Declare the module in a BUILD file in that package instead.").format(
+                    label,
+                    staged_path(src),
+                    owner.package,
+                ),
+            )
 
-    fail("No source files found for `{}`".format(label))
+    # Anything outside the module directory can't be named by a relative path
+    # from it, so it would silently never reach the built module — and a
+    # missing `.tftest.hcl` fixture makes `terraform test` pass having read
+    # nothing. Reject it here rather than let it vanish.
+    root_prefix = root_dir + "/" if root_dir else ""
+    for f in data:
+        if not staged_path(f).startswith(root_prefix):
+            fail(
+                ("terraform_module '{}' has data file '{}' outside its module " +
+                 "directory '{}'. Move it into the module, or expose it through a " +
+                 "child `terraform_module`.").format(label, staged_path(f), root_dir),
+            )
+
+    return root_dir
 
 def _terraform_module_impl(ctx):
-    main = _compute_main(ctx.label, ctx.files.srcs, ctx.file.main)
+    root_dir = _module_root_dir(ctx.label, ctx.files.srcs, ctx.files.data)
 
     module_deps = []
     providers_dict = {}
@@ -91,8 +144,6 @@ def _terraform_module_impl(ctx):
     for ext_mod in external_modules:
         all_module_files.append(ext_mod.files)
 
-    module_sources = dict(ctx.attr.module_sources) if ctx.attr.module_sources else {}
-
     return [
         DefaultInfo(
             files = depset(ctx.files.srcs),
@@ -104,12 +155,25 @@ def _terraform_module_impl(ctx):
         TerraformInfo(
             srcs = depset(ctx.files.srcs),
             data = depset(ctx.files.data),
-            main = main,
-            deps = depset(module_deps),
+            root_dir = root_dir,
+            # Transitive: a shared module library whose members reference each
+            # other only reaches the init action if the whole closure comes
+            # along. The root module names `compute`; `compute`'s own `module`
+            # block names `network`, and nothing in the root's BUILD file
+            # mentions it.
+            deps = depset(module_deps, transitive = [d.deps for d in module_deps]),
             providers = providers_dict,
             lock = lock_file,
-            external_modules = depset(external_modules),
-            module_sources = module_sources,
+            # Transitive for the same reason `deps` is, and the case is the
+            # same one: the `module` block naming a registry module lives in
+            # the shared library, so the library's BUILD file is where the
+            # dep belongs. Flat, it would silently do nothing there and the
+            # user would be pushed into declaring it on the root instead —
+            # a site with no `module` block to justify it.
+            external_modules = depset(
+                external_modules,
+                transitive = [d.external_modules for d in module_deps],
+            ),
         ),
     ]
 
@@ -222,7 +286,14 @@ terraform_module = rule(
         ),
         "deps": attr.label_list(
             doc = """Other terraform_module, terraform_provider, terraform_provider_group,
-            terraform_external_module, or terraform_module_group targets that this module depends on.""",
+            terraform_external_module, or terraform_module_group targets that this module depends on.
+
+            A `terraform_module` dep is the Bazel half of a `module` block, the
+            way a `py_library` dep is the Bazel half of an `import`: the `.tf`
+            file names the path, `deps` says which target supplies it. A dep
+            whose package already nests under this module's directory lands at
+            that relative path; anything else is matched to a `module` block
+            whose `source` ends with the dep's package name.""",
             providers = [
                 [TerraformInfo],
                 [TerraformProviderInfo],
@@ -235,19 +306,12 @@ terraform_module = rule(
             doc = "An optional `.terraform.lock.hcl` file.",
             allow_single_file = [".terraform.lock.hcl"],
         ),
-        "main": attr.label(
-            doc = "An explicit file to use for the entrypoint of the module. If unspecified, `main.tf` or the first .tf file will be used.",
-            allow_single_file = [".tf"],
-        ),
-        "module_sources": attr.string_dict(
-            doc = """Mapping of Terraform module source paths to Bazel target labels.
-            Use this to map local `module "foo" { source = "./modules/vpc" }` references
-            to Bazel targets from other packages or external bzlmod dependencies.
-            Keys are the Terraform source paths, values are Bazel labels providing TerraformInfo.
-            The init tool will symlink these at the expected paths.""",
-        ),
         "srcs": attr.label_list(
-            doc = "Terraform source files (.tf) that make up this module.",
+            doc = """Terraform source files (.tf) that make up this module.
+
+            All of them must live directly in this target's package — a Terraform
+            module is a single directory. Put nested .tf files in their own
+            `terraform_module` and reference it with a `module` block.""",
             allow_files = [".tf"],
         ),
     },
@@ -271,43 +335,19 @@ def build_runner(ctx, toolchain_type, *, test_mode):
         either `RunEnvironmentInfo` or `testing.TestEnvironment`.
     """
     toolchain = ctx.toolchains[toolchain_type]
-    root_info = ctx.attr.root[TerraformInfo]
 
-    all_srcs = [root_info.srcs, root_info.data]
-    for dep in root_info.deps.to_list():
-        all_srcs.extend([dep.srcs, dep.data])
-
-    terraform_dir = terraform_init_dir(ctx.attr.root)
-
-    all_runfiles_list = []
-    for src_depset in all_srcs:
-        all_runfiles_list.append(src_depset)
-    all_runfiles_list.append(toolchain.all_files)
-    if terraform_dir:
-        all_runfiles_list.append(depset([terraform_dir]))
-    all_runfiles = depset(transitive = all_runfiles_list)
-
-    lock_file = root_info.lock or ctx.file.lock
-
-    runfiles_map = {}
-    for file in all_runfiles.to_list():
-        rloc = rlocationpath(file, ctx.workspace_name)
-        if file.short_path.startswith("../"):
-            workspace_rel_path = file.short_path[len("../"):]
-        else:
-            workspace_rel_path = file.short_path
-        runfiles_map[rloc] = workspace_rel_path
+    # `terraform_init_aspect` already assembled the directory the engine runs
+    # in — sources, local child modules, lock file and `.terraform/`. The
+    # runner copies that one tree and works inside it, so nothing here has to
+    # describe the module's layout a second time.
+    module_directory = module_dir(ctx.attr.root)
+    if not module_directory:
+        fail("{}: terraform_init_aspect produced no module directory for '{}'".format(ctx.label, ctx.attr.root.label))
 
     args_data = {
-        "runfiles": runfiles_map,
+        "module_dir_rlocationpath": rlocationpath(module_directory, ctx.workspace_name),
         "terraform_rlocationpath": rlocationpath(toolchain.terraform, ctx.workspace_name),
     }
-
-    if lock_file:
-        args_data["lock_rlocationpath"] = rlocationpath(lock_file, ctx.workspace_name)
-
-    if terraform_dir:
-        args_data["terraform_dir_rlocationpath"] = rlocationpath(terraform_dir, ctx.workspace_name)
 
     args_file = ctx.actions.declare_file("{}.terraform_args.json".format(ctx.label.name))
     ctx.actions.write(
@@ -323,13 +363,9 @@ def build_runner(ctx, toolchain_type, *, test_mode):
         is_executable = True,
     )
 
-    runfiles_files = [args_file]
-    if lock_file:
-        runfiles_files.append(lock_file)
-
     runfiles = ctx.runfiles(
-        files = runfiles_files,
-        transitive_files = all_runfiles,
+        files = [args_file, module_directory],
+        transitive_files = toolchain.all_files,
     )
 
     env = {
@@ -351,10 +387,6 @@ def build_runner(ctx, toolchain_type, *, test_mode):
     return providers
 
 RUNNER_ATTRS = {
-    "lock": attr.label(
-        doc = "An optional `.terraform.lock.hcl` file.",
-        allow_single_file = [".terraform.lock.hcl"],
-    ),
     "root": attr.label(
         doc = "The terraform_module target that serves as the root module.",
         providers = [TerraformInfo],

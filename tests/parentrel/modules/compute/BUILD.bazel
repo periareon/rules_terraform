@@ -1,0 +1,8 @@
+load("//terraform:terraform_module.bzl", "terraform_module")
+
+terraform_module(
+    name = "compute",
+    srcs = glob(["*.tf"]),
+    visibility = ["//tests:__subpackages__"],
+    deps = ["//tests/parentrel/modules/network"],
+)

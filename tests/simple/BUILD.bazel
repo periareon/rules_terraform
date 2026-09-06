@@ -8,7 +8,7 @@ load("//terraform:terraform_validate_test.bzl", "terraform_validate_test")
 
 terraform_module(
     name = "simple",
-    srcs = glob(["**/*.tf"]),
+    srcs = glob(["*.tf"]),
 )
 
 terraform_binary(

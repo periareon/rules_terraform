@@ -9,12 +9,7 @@ load("//terraform:terraform_validate_test.bzl", "terraform_validate_test")
 terraform_module(
     name = "with_cross_pkg_module",
     srcs = glob(["*.tf"]),
-    module_sources = {
-        "./mymod": "//tests/modules_lib/mymod",
-    },
-    deps = [
-        "//tests/modules_lib/mymod",
-    ],
+    deps = ["//tests/modules_lib/mymod"],
 )
 
 terraform_binary(

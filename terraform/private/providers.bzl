@@ -14,9 +14,12 @@ TerraformInfo = provider(
         "deps": "depset[TerraformInfo]: All direct dependencies of the module.",
         "external_modules": "depset[TerraformExternalModuleInfo]: External module dependencies.",
         "lock": "File: Optional .terraform.lock.hcl file.",
-        "main": "File: The path to the module entrypoint.",
-        "module_sources": "dict: Mapping of Terraform source paths to Bazel target rlocationpaths.",
         "providers": "dict: Optional mapping of provider source to provider repository label.",
+        "root_dir": """str: The module's directory, in module-staging terms (see
+            `//terraform/private:util.bzl`'s `staged_path`). `terraform_module`
+            validates that every src lives directly in it and that it is the
+            target's own package, so consumers can run an engine there without
+            inspecting the file list.""",
         "srcs": "depset[File]: All direct sources to the module.",
     },
 )

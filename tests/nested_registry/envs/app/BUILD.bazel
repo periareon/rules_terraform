@@ -1,0 +1,46 @@
+load("//opentofu:opentofu_validate_test.bzl", "opentofu_validate_test")
+load("//terraform:terraform_fmt_test.bzl", "terraform_fmt_test")
+load("//terraform:terraform_module.bzl", "terraform_module")
+load("//terraform:terraform_validate_test.bzl", "terraform_validate_test")
+load("//tests/private:init_test.bzl", "terraform_init_test")
+
+# `deps` names only the local library. The registry module `wrapper` uses
+# arrives transitively, and the init tool keys it `wrapper.label` from where
+# the walk finds the block.
+terraform_module(
+    name = "app",
+    srcs = glob(["*.tf"]),
+    deps = ["//tests/nested_registry/modules/wrapper"],
+)
+
+# The bug this fixture exists for, asserted directly: the registry module has
+# to land under the dotted path of `module` block names reaching it. Keyed
+# `label` instead, the files sit somewhere the engine never looks. The validate
+# tests below catch that too, but only by way of whatever the engine reports.
+terraform_init_test(
+    name = "app_init_test",
+    # Relative to the tree root, which sits at `tests/nested_registry` — the
+    # deepest package shared by the root module and the library it reaches up
+    # into. `envs/app` is the workdir the engine runs in.
+    expected_files = [
+        "envs/app/main.tf",
+        "modules/wrapper/main.tf",
+        "envs/app/.terraform/modules/wrapper.label/main.tf",
+    ],
+    target = ":app",
+)
+
+terraform_validate_test(
+    name = "app_test",
+    target = ":app",
+)
+
+terraform_fmt_test(
+    name = "app_fmt_test",
+    target = ":app",
+)
+
+opentofu_validate_test(
+    name = "app_tofu_test",
+    target = ":app",
+)

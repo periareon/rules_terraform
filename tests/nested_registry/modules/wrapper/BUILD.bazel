@@ -1,0 +1,13 @@
+load("//terraform:terraform_module.bzl", "terraform_module")
+
+exports_files(["main.tf"])
+
+# The external module dep sits here, next to the `module` block that names it,
+# rather than on the root module that has no idea it exists. That only reaches
+# the init action because `external_modules` is transitive.
+terraform_module(
+    name = "wrapper",
+    srcs = glob(["*.tf"]),
+    visibility = ["//visibility:public"],
+    deps = ["@test_nested_registry_modules"],
+)
