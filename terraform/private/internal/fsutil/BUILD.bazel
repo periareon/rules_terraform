@@ -1,8 +1,14 @@
-load("@rules_go//go:def.bzl", "go_library")
+load("@rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "fsutil",
     srcs = ["fsutil.go"],
     importpath = "rules_terraform/terraform/private/internal/fsutil",
     visibility = ["//terraform/private:__subpackages__"],
+)
+
+go_test(
+    name = "fsutil_test",
+    srcs = ["fsutil_test.go"],
+    embed = [":fsutil"],
 )

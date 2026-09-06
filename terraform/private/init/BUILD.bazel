@@ -1,13 +1,28 @@
-load("@rules_go//go:def.bzl", "go_binary")
+load("@rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
 
-go_binary(
-    name = "init",
+go_library(
+    name = "init_lib",
     srcs = ["init.go"],
-    visibility = ["//visibility:public"],
+    importpath = "rules_terraform/terraform/private/init",
+    visibility = ["//visibility:private"],
     deps = [
         "//terraform/private/internal/argsjson",
         "//terraform/private/internal/fsutil",
         "//terraform/private/internal/lockparse",
+        "//terraform/private/internal/moduledir",
         "//terraform/private/internal/tfparse",
     ],
+)
+
+go_binary(
+    name = "init",
+    embed = [":init_lib"],
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "init_test",
+    srcs = ["init_test.go"],
+    embed = [":init_lib"],
+    deps = ["//terraform/private/internal/tfparse"],
 )

@@ -1,0 +1,9 @@
+"""Leaf of the shared library: no deps, referenced by `compute` via `../network`."""
+
+load("@rules_terraform//terraform:terraform_module.bzl", "terraform_module")
+
+terraform_module(
+    name = "network",
+    srcs = glob(["*.tf"]),
+    visibility = ["//visibility:public"],
+)

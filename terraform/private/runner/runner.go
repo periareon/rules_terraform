@@ -2,27 +2,28 @@ package main
 
 import (
 	"encoding/json"
-	"flag"
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"syscall"
 
 	"github.com/bazelbuild/rules_go/go/runfiles"
-	"rules_terraform/terraform/private/internal/fsutil"
+	"rules_terraform/terraform/private/internal/moduledir"
 )
 
+// ArgsFile mirrors the JSON `build_runner` writes in //terraform/private:terraform.bzl.
 type ArgsFile struct {
-	TerraformRlocationPath    string            `json:"terraform_rlocationpath"`
-	Runfiles                  map[string]string `json:"runfiles"`
-	LockRlocationPath         string            `json:"lock_rlocationpath,omitempty"`
-	TerraformDirRlocationPath string            `json:"terraform_dir_rlocationpath,omitempty"`
+	TerraformRlocationPath string `json:"terraform_rlocationpath"`
+	// ModuleDirRlocationPath locates the tree artifact `terraform_init_aspect`
+	// builds: the module directory, complete with its `.tf` files, local child
+	// modules at their `source` paths, `.terraform.lock.hcl`, and a populated
+	// `.terraform/`. The runner copies it and runs the engine inside — the
+	// layout is settled at analysis time, not reconstructed here.
+	ModuleDirRlocationPath string `json:"module_dir_rlocationpath"`
 }
 
 type args struct {
 	argsFilePath string
-	lockPath     string
 	userArgs     []string
 }
 
@@ -40,11 +41,9 @@ func parseArgs() args {
 		os.Exit(1)
 	}
 
-	var lockPath string
-	flag.StringVar(&lockPath, "lock", "", "Path to the .terraform.lock.hcl file (rlocationpath)")
-	flag.Parse()
-
-	userArgs := flag.Args()
+	// The runner takes no flags of its own — everything reaches the engine
+	// untouched, so `bazel run //x -- fmt -check` behaves like plain terraform.
+	userArgs := os.Args[1:]
 	// `terraform_test` sets this so the runner ignores user args and runs the
 	// HCL native test framework. This keeps Bazel's --test_arg surface from
 	// silently mutating what `terraform test` does.
@@ -57,7 +56,6 @@ func parseArgs() args {
 
 	return args{
 		argsFilePath: argsFilePath,
-		lockPath:     lockPath,
 		userArgs:     userArgs,
 	}
 }
@@ -87,56 +85,12 @@ func run() error {
 		return fmt.Errorf("failed to locate terraform binary: %w", err)
 	}
 
-	// `-lock` command-line flag takes precedence over the args-file default.
-	lockRlocationPath := a.lockPath
-	if lockRlocationPath == "" {
-		lockRlocationPath = argsFile.LockRlocationPath
-	}
-
-	workDir, cleanup, err := setupWorkingDirectory(r, argsFile.Runfiles, lockRlocationPath)
+	workDir, cleanup, err := setupWorkingDirectory(r, argsFile.ModuleDirRlocationPath)
 	if err != nil {
 		return fmt.Errorf("failed to setup working directory: %w", err)
 	}
 
-	hasTerraformDir := false
-	if argsFile.TerraformDirRlocationPath != "" {
-		terraformDirSrc, err := r.Rlocation(argsFile.TerraformDirRlocationPath)
-		if err != nil {
-			cleanup()
-			return fmt.Errorf("failed to locate pre-constructed .terraform directory: %w", err)
-		}
-
-		terraformDirDst := filepath.Join(workDir, ".terraform")
-		if err := fsutil.CopyDirectory(terraformDirSrc, terraformDirDst); err != nil {
-			cleanup()
-			return fmt.Errorf("failed to copy pre-constructed .terraform directory: %w", err)
-		}
-		hasTerraformDir = true
-
-		// The init tool rewrites h1: hashes in the lock file inside .terraform/
-		// to match the platform-specific provider binaries Bazel installed.
-		// Prefer that copy over the source lock file so `terraform init` and
-		// downstream commands accept the installed providers.
-		initLock := filepath.Join(terraformDirDst, ".terraform.lock.hcl")
-		if _, err := os.Stat(initLock); err == nil {
-			lockDst := filepath.Join(workDir, ".terraform.lock.hcl")
-			// If setupWorkingDirectory dropped a symlink at this path (pointing
-			// back at the source lock), unlink it first — otherwise CopyFile
-			// would follow the symlink and mutate the workspace source.
-			if _, err := os.Lstat(lockDst); err == nil {
-				if err := os.Remove(lockDst); err != nil {
-					cleanup()
-					return fmt.Errorf("failed to replace source lock symlink: %w", err)
-				}
-			}
-			if err := fsutil.CopyFile(initLock, lockDst); err != nil {
-				cleanup()
-				return fmt.Errorf("failed to install rewritten lock file: %w", err)
-			}
-		}
-	}
-
-	return executeTerraform(terraformPath, workDir, a.userArgs, hasTerraformDir, cleanup)
+	return executeTerraform(terraformPath, workDir, a.userArgs, cleanup)
 }
 
 func readArgsFile(path string) (*ArgsFile, error) {
@@ -153,66 +107,28 @@ func readArgsFile(path string) (*ArgsFile, error) {
 	return &argsFile, nil
 }
 
-func setupWorkingDirectory(r *runfiles.Runfiles, runfilesManifest map[string]string, lockRlocationPath string) (string, func(), error) {
-	// Use a private temp dir rather than RUNFILES_DIR — terraform mutates
-	// this tree (writes state, .terraform/, plan output).
-	tempDir, err := os.MkdirTemp("", "terraform-runner-*")
+// setupWorkingDirectory resolves the module directory out of runfiles and
+// stages a writable copy of it.
+func setupWorkingDirectory(r *runfiles.Runfiles, moduleDirRlocationPath string) (string, func(), error) {
+	if moduleDirRlocationPath == "" {
+		return "", nil, fmt.Errorf("args file does not name the module directory")
+	}
+
+	moduleDirSrc, err := r.Rlocation(moduleDirRlocationPath)
 	if err != nil {
-		return "", nil, fmt.Errorf("failed to create temp directory: %w", err)
+		return "", nil, fmt.Errorf("failed to locate module directory %s: %w", moduleDirRlocationPath, err)
 	}
 
-	cleanup := func() {
-		os.RemoveAll(tempDir)
-	}
-
-	for rlocationPath, workspaceRelPath := range runfilesManifest {
-		srcPath, err := r.Rlocation(rlocationPath)
-		if err != nil {
-			cleanup()
-			return "", nil, fmt.Errorf("failed to locate file %s: %w", rlocationPath, err)
-		}
-
-		dstPath := filepath.Join(tempDir, workspaceRelPath)
-
-		if err := os.MkdirAll(filepath.Dir(dstPath), 0755); err != nil {
-			cleanup()
-			return "", nil, fmt.Errorf("failed to create directory for %s: %w", dstPath, err)
-		}
-
-		if err := fsutil.SymlinkFile(srcPath, dstPath); err != nil {
-			cleanup()
-			return "", nil, fmt.Errorf("failed to symlink %s to %s: %w", srcPath, dstPath, err)
-		}
-	}
-
-	if lockRlocationPath != "" {
-		lockSrcPath, err := r.Rlocation(lockRlocationPath)
-		if err != nil {
-			cleanup()
-			return "", nil, fmt.Errorf("failed to locate lock file %s: %w", lockRlocationPath, err)
-		}
-
-		lockDstPath := filepath.Join(tempDir, ".terraform.lock.hcl")
-		if err := fsutil.SymlinkFile(lockSrcPath, lockDstPath); err != nil {
-			cleanup()
-			return "", nil, fmt.Errorf("failed to symlink lock file %s to %s: %w", lockSrcPath, lockDstPath, err)
-		}
-	}
-
-	return tempDir, cleanup, nil
+	return moduledir.Stage(moduleDirSrc, "terraform-runner-*")
 }
 
-func executeTerraform(terraformPath, workDir string, args []string, hasTerraformDir bool, cleanup func()) error {
-	// Skip module/provider downloads when the aspect pre-populated .terraform.
-	initArgs := []string{"init"}
-	if hasTerraformDir {
-		initArgs = append(initArgs,
-			"-get=false",
-			"-plugin-dir="+filepath.Join(workDir, ".terraform", "providers"),
-		)
-	}
-
-	initCmd := exec.Command(terraformPath, initArgs...)
+func executeTerraform(terraformPath, workDir string, args []string, cleanup func()) error {
+	// Everything is already installed under `.terraform/`; the engine must not
+	// reach the network to re-resolve any of it.
+	initCmd := exec.Command(terraformPath, "init",
+		"-get=false",
+		"-plugin-dir="+moduledir.ProvidersDir(workDir),
+	)
 	initCmd.Dir = workDir
 	initCmd.Stdin = os.Stdin
 	initCmd.Stdout = os.Stdout

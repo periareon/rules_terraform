@@ -6,19 +6,17 @@ load("//terraform:terraform_fmt_test.bzl", "terraform_fmt_test")
 load("//terraform:terraform_module.bzl", "terraform_module")
 load("//terraform:terraform_validate_test.bzl", "terraform_validate_test")
 
-# Diff-test coverage skipped for this fixture: it uses a `module_sources`-
-# mapped Bazel module (`./mymod` → `//tests/modules_lib/mymod`), which real
-# `terraform init` can't resolve in a bare temp dir. The provider-lock logic
-# under test is already covered by `//tests/with_provider`,
-# `//tests/with_third_party_provider`, and `//tests/with_tf_tests`.
+# Diff-test coverage skipped for this fixture: it depends on a cross-package
+# Bazel module (`//tests/modules_lib/mymod`, mounted at the `./mymod` its
+# module block names), which real `terraform init` can't resolve in a bare
+# temp dir. The provider-lock logic under test is already covered by
+# `//tests/with_provider`, `//tests/with_third_party_provider`, and
+# `//tests/with_tf_tests`.
 
 terraform_module(
     name = "with_mixed_deps",
     srcs = glob(["*.tf"]),
     lock = ".terraform.lock.hcl",
-    module_sources = {
-        "./mymod": "//tests/modules_lib/mymod",
-    },
     deps = [
         "//tests/modules_lib/mymod",
         "@test_providers_with_provider//hashicorp_null",

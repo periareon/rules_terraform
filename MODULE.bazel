@@ -44,8 +44,17 @@ terraform.modules(
     name = "test_registry_modules",
     root = "//tests/with_registry_module:main.tf",
 )
+
+# Pointed at the shared library, not at the root module that consumes it —
+# the root has no `module` block naming a registry module, so scanning it
+# would find nothing. See //tests/nested_registry.
+terraform.modules(
+    name = "test_nested_registry_modules",
+    root = "//tests/nested_registry/modules/wrapper:main.tf",
+)
 use_repo(
     terraform,
+    "test_nested_registry_modules",
     "test_providers_with_modules_ext",
     "test_providers_with_provider",
     "test_providers_with_third_party",

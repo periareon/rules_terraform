@@ -85,7 +85,7 @@ _PLACEHOLDER_FMT = "<<RTF_PATH_{}>>"
 # realistic args tree.
 _MAX_WALK_ITERATIONS = 100000
 
-def pick_root_file(files, context):
+def _pick_root_file(files, context):
     """Return the file that lives directly at the shared root of `files`.
 
     Used to pick a representative File from a provider's or module's install
@@ -107,7 +107,7 @@ def pick_root_file(files, context):
         contains a file that doesn't live under that root.
     """
     if not files:
-        fail("{}: pick_root_file needs at least one file".format(context))
+        fail("{}: _pick_root_file needs at least one file".format(context))
 
     # Single pass: pick the shallowest file and validate every deeper file
     # lives under its dirname. Depth is cached — `path.count("/")` on every
@@ -136,14 +136,14 @@ def build_file_manifest(files, context):
     """Return a `[{"src": File, "dst": str}, ...]` copy manifest.
 
     Each `dst` is the file's position relative to the shared root that
-    `pick_root_file` locates. The consuming Go tool just does
+    `_pick_root_file` locates. The consuming Go tool just does
     `filepath.Join(installDir, dst)` and copies — no walking, no
     `filepath.Rel`, no reliance on Bazel sandbox semantics to filter
     undeclared siblings.
 
     Args:
         files: (list[File]) A non-empty list of File objects that share a
-            common root directory (invariant validated by `pick_root_file`).
+            common root directory (invariant validated by `_pick_root_file`).
         context: (str) Human-readable label for fail messages.
 
     Returns:
@@ -151,12 +151,12 @@ def build_file_manifest(files, context):
         (`write_json_args` swaps it for a path-mapped placeholder); `dst`
         is the forward-slash relative path from the shared root.
     """
-    root_file = pick_root_file(files, context)
+    root_file = _pick_root_file(files, context)
     root_prefix = root_file.dirname + "/"
     manifest = []
     for f in files:
         if not f.path.startswith(root_prefix):
-            # pick_root_file already validated this via dirname prefix
+            # _pick_root_file already validated this via dirname prefix
             # checks; catching the string-slice edge case here just makes
             # the failure explicit if something upstream ever violates it.
             fail("{}: file {} not under {}".format(context, f.path, root_file.dirname))
