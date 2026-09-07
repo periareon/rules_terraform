@@ -2,6 +2,20 @@
 
 visibility(["//opentofu/...", "//terraform/...", "//tests/..."])
 
+def staged_path(file):
+    """Return the path a module staging tree places `file` at, relative to its root.
+
+    Args:
+        file: (File) A file that will be placed in a module staging tree.
+
+    Returns:
+        (str) A slash-separated path. External-repository files lose the
+        leading `../` so they land under `<repo_name>/...`.
+    """
+    if file.short_path.startswith("../"):
+        return file.short_path[len("../"):]
+    return file.short_path
+
 def rlocationpath(file, workspace_name):
     """Convert a file to its runfiles location path.
 
@@ -12,9 +26,28 @@ def rlocationpath(file, workspace_name):
     Returns:
         (str) The rlocationpath string for the file.
     """
+    staged = staged_path(file)
+
+    # An external-repository file's staged path is already repo-rooted, so it
+    # is the rlocationpath; a main-repo one needs the workspace prefix.
     if file.short_path.startswith("../"):
-        return file.short_path[len("../"):]
-    return "{}/{}".format(workspace_name, file.short_path)
+        return staged
+    return "{}/{}".format(workspace_name, staged)
+
+def staged_dir(file):
+    """Return the directory part of `file`'s staged path.
+
+    Args:
+        file: (File) A file that will be placed in a module staging tree.
+
+    Returns:
+        (str) The staged path with the basename removed, or `""` for a file
+        at the staging root.
+    """
+    staged = staged_path(file)
+    if "/" not in staged:
+        return ""
+    return staged.rsplit("/", 1)[0]
 
 def strip_canonical_repo_prefix(name):
     """Recover the tag-supplied `name` from a canonical repo name.
@@ -32,15 +65,15 @@ def strip_canonical_repo_prefix(name):
     """
     return name.rsplit("+", 1)[-1].rsplit("~", 1)[-1]
 
-def terraform_init_dir(target):
-    """Return the .terraform directory produced by `terraform_init_aspect`.
+def module_dir(target):
+    """Return the module directory produced by `terraform_init_aspect`.
 
     Args:
         target: (Target) A Bazel target the init aspect has been applied to.
 
     Returns:
-        (File|None) The declared .terraform directory, or None if the
-        aspect didn't run or produced no output.
+        (File|None) The declared module directory tree artifact, or None if
+        the aspect didn't run or produced no output.
     """
     if OutputGroupInfo not in target:
         return None

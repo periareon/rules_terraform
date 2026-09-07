@@ -30,7 +30,8 @@ terraform_module(
 terraform_init_test(
     name = "custom_provider_init_test",
     expected_files = [
-        "providers/registry.terraform.io/example/custom/1.0.0/linux_amd64/terraform-provider-custom",
+        "main.tf",
+        ".terraform/providers/registry.terraform.io/example/custom/1.0.0/linux_amd64/terraform-provider-custom",
         ".terraform.lock.hcl",
     ],
     target = ":with_custom_provider",

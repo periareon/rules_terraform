@@ -44,14 +44,16 @@ so no network access is required.
   [`MODULE.bazel`](MODULE.bazel) and installed into the aspect-built
   `.terraform/providers/` tree. `terraform init` never reaches the
   network at build time.
-- **Cross-package modules.** The root module references the greeter via
-  `source = "./modules/greeter"`; the `module_sources` attribute on
-  `terraform_module` maps that source path to the Bazel target
-  `//modules/greeter`, and the init tool copies its files into place
-  under `.terraform/modules/`.
+- **Child modules from the target graph.** The root module references
+  the greeter via `source = "./modules/greeter"`. Listing
+  `//modules/greeter` in `deps` is enough: the init aspect places the
+  dep's files at `modules/greeter` inside the module directory, so
+  Terraform resolves the source path normally. A child in an unrelated
+  package is matched to the block whose `source` names it, so it goes in
+  `deps` just the same.
 - **Reproducible lock files.** Lock file `h1:` hashes are recomputed
   against the platform-specific provider binaries Bazel installed, so
-  Terraform accepts the pre-built `.terraform` tree at run time.
+  Terraform accepts the pre-built tree at run time.
 - **Same lock file works for OpenTofu.** See `examples/opentofu` — the
   same provider entries are reused via the `opentofu_*` rule aliases.
 

@@ -1,0 +1,8 @@
+"""Repo root: no Terraform module lives here, only the shared provider lock.
+
+Every environment under `envs/` points its `lock` attribute at this file, so
+`bazel test //...` fails the moment one of them needs a provider the lock
+doesn't cover.
+"""
+
+exports_files([".terraform.lock.hcl"])

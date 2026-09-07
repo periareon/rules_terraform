@@ -17,28 +17,24 @@ load("@rules_terraform//terraform:terraform_modules_lock.bzl", "terraform_provid
 load("@rules_terraform//terraform:terraform_test.bzl", "terraform_test")
 load("@rules_terraform//terraform:terraform_validate_test.bzl", "terraform_validate_test")
 
-# The root module. `deps` wires in the provider group fetched by the
-# `terraform` extension. `module_sources` maps each `module "…" { source = "…" }`
-# block to its Bazel target so `terraform_init_aspect` can materialize the
-# sub-module inside `.terraform/modules/` at build time — the same way real
-# `terraform init` would after resolving the source path.
+# The root module: every .tf file in this directory and nothing deeper.
+# `//modules/greeter` sits under this package, so listing it in `deps` is
+# enough — it lands at `modules/greeter`, where
+# `module "greeter" { source = "./modules/greeter" }` looks for it.
 terraform_module(
     name = "example",
     srcs = glob(["*.tf"]),
     data = glob(["*.tftest.hcl"]),
     lock = ".terraform.lock.hcl",
-    module_sources = {
-        "./modules/greeter": "//modules/greeter",
-    },
     deps = [
         "//modules/greeter",
         "@example_providers//hashicorp_null",
     ],
 )
 
-# `bazel run //:terraform -- <subcommand>` executes the real terraform
-# binary inside a hermetic working directory pre-seeded with providers,
-# modules, and the rewritten lock file.
+# `bazel run //:terraform -- <subcommand>` copies the aspect-built module
+# directory — sources, providers, modules and the rewritten lock file — into
+# a temp dir and runs the real terraform binary there.
 terraform_binary(
     name = "terraform",
     root = ":example",

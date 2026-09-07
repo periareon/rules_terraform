@@ -24,26 +24,23 @@ load("@rules_terraform//opentofu:opentofu_providers_lock_test.bzl", "opentofu_pr
 load("@rules_terraform//opentofu:opentofu_test.bzl", "opentofu_test")
 load("@rules_terraform//opentofu:opentofu_validate_test.bzl", "opentofu_validate_test")
 
-# Root module. `deps` wires in the provider group fetched by the
-# `terraform` extension. `module_sources` maps each `module "…" { source = "…" }`
-# block to its Bazel target so the init aspect can materialize the
-# sub-module inside `.terraform/modules/` at build time.
+# The root module: every .tf file in this directory and nothing deeper.
+# `//modules/greeter` sits under this package, so listing it in `deps` is
+# enough — it lands at `modules/greeter`, where
+# `module "greeter" { source = "./modules/greeter" }` looks for it.
 opentofu_module(
     name = "example",
     srcs = glob(["*.tf"]),
     data = glob(["*.tftest.hcl"]),
     lock = ".terraform.lock.hcl",
-    module_sources = {
-        "./modules/greeter": "//modules/greeter",
-    },
     deps = [
         "//modules/greeter",
         "@example_providers//hashicorp_null",
     ],
 )
 
-# `bazel run //:tofu -- <subcommand>` executes the real tofu binary inside
-# a hermetic tmpdir with `.terraform/` pre-populated by the init aspect.
+# `bazel run //:tofu -- <subcommand>` copies the aspect-built module
+# directory into a temp dir and runs the real tofu binary there.
 opentofu_binary(
     name = "tofu",
     root = ":example",

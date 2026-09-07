@@ -1,0 +1,70 @@
+load("//opentofu:opentofu_binary.bzl", "opentofu_binary")
+load("//opentofu:opentofu_fmt_test.bzl", "opentofu_fmt_test")
+load("//opentofu:opentofu_test.bzl", "opentofu_test")
+load("//opentofu:opentofu_validate_test.bzl", "opentofu_validate_test")
+load("//terraform:terraform_binary.bzl", "terraform_binary")
+load("//terraform:terraform_fmt_test.bzl", "terraform_fmt_test")
+load("//terraform:terraform_module.bzl", "terraform_module")
+load("//terraform:terraform_test.bzl", "terraform_test")
+load("//terraform:terraform_validate_test.bzl", "terraform_validate_test")
+
+# A module with an unreachable remote backend. Every other fixture omits the
+# `backend` block, which means the engine configures the local backend and asks
+# for nothing — so none of them can tell whether a rule reached for the backend
+# it had no business reaching for. See main.tf.
+#
+# The bug this fixture exists for: the runner ran `terraform init` ahead of
+# every subcommand, so `terraform_test` on a module with a remote backend
+# needed live cloud credentials to pass, and any configuration error came back
+# spelled as a credentials error.
+terraform_module(
+    name = "with_remote_backend",
+    srcs = glob(["*.tf"]),
+    data = glob(["*.tftest.hcl"]),
+)
+
+# The load-bearing targets: both go through the runner, which is where the
+# unconditional `init` lived. They fail with `connection refused` if it comes
+# back.
+terraform_test(
+    name = "with_remote_backend_tftest",
+    root = ":with_remote_backend",
+)
+
+opentofu_test(
+    name = "with_remote_backend_tofu_tftest",
+    root = ":with_remote_backend",
+)
+
+terraform_validate_test(
+    name = "with_remote_backend_validate",
+    target = ":with_remote_backend",
+)
+
+opentofu_validate_test(
+    name = "with_remote_backend_tofu_validate",
+    target = ":with_remote_backend",
+)
+
+terraform_fmt_test(
+    name = "with_remote_backend_fmt",
+    target = ":with_remote_backend",
+)
+
+opentofu_fmt_test(
+    name = "with_remote_backend_tofu_fmt",
+    target = ":with_remote_backend",
+)
+
+# Not covered by `bazel test`, but this is the only place the backend-free
+# subcommands can be exercised by hand: `bazel run //tests/with_remote_backend:terraform
+# -- version` prints a version, where before it asked for a database.
+terraform_binary(
+    name = "terraform",
+    root = ":with_remote_backend",
+)
+
+opentofu_binary(
+    name = "tofu",
+    root = ":with_remote_backend",
+)

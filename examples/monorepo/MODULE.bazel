@@ -1,0 +1,31 @@
+"""rules_terraform monorepo example.
+
+A shared module library plus per-environment root modules — the layout most
+Terraform monorepos converge on. rules_terraform is resolved via
+`local_path_override`; a real consumer would drop the override and pin a
+version from the Bazel Central Registry:
+
+    bazel_dep(name = "rules_terraform", version = "x.y.z")
+"""
+
+module(
+    name = "rules_terraform_example_monorepo",
+    version = "0.0.0",
+)
+
+bazel_dep(name = "rules_terraform", version = "0.0.0")
+local_path_override(
+    module_name = "rules_terraform",
+    path = "../..",
+)
+
+# One provider lock for the whole repo, shared by every environment. A repo
+# that lets environments drift onto different provider versions would instead
+# keep a lock next to each root module and make one `terraform.providers()`
+# call per lock.
+terraform = use_extension("@rules_terraform//terraform:extensions.bzl", "terraform")
+terraform.providers(
+    name = "example_providers",
+    lock = "//:.terraform.lock.hcl",
+)
+use_repo(terraform, "example_providers")
