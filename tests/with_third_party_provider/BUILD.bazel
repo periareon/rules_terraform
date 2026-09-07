@@ -13,8 +13,6 @@ load(
 )
 load("//terraform:terraform_validate_test.bzl", "terraform_validate_test")
 
-exports_files([".terraform.lock.hcl"])
-
 terraform_module(
     name = "with_third_party_provider",
     srcs = glob(["*.tf"]),

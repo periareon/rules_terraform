@@ -105,9 +105,16 @@ _MODULES_TAG = tag_class(
             default = "",
         ),
         "root": attr.label(
-            doc = """Any `.tf` file inside the root module directory. The
-            extension reads every `*.tf` sibling of this file and
-            enumerates `module { source = "…" }` blocks.""",
+            doc = """Any `.tf` file in the root module directory, used
+            purely to name that directory. The extension enumerates
+            `module { source = "…" }` blocks across every `*.tf` in the
+            package; this file gets no special treatment and its own
+            contents carry no weight — a sibling would behave identically.
+
+            The file needs no `exports_files`. Only the label's package is
+            read, so nothing resolves it as a target and an
+            `opentofu_module` in that package keeps whatever `visibility`
+            it declares.""",
             mandatory = True,
             allow_single_file = [".tf"],
         ),

@@ -235,8 +235,8 @@
   "moduleExtensions": {
     "//terraform:extensions.bzl%terraform": {
       "general": {
-        "bzlTransitiveDigest": "e+A7aHq32y2OEt3yUZ6alpwLg6EFtfOm7m178d4jzsE=",
-        "usagesDigest": "Z8U7QV/w7n8gDlkcV+DleLCvkNnkFaEn0z495tNp47c=",
+        "bzlTransitiveDigest": "ndlwJ4gBblVTJjWFWPyg0yNJ8GzL1IGSSG3jth3nO6M=",
+        "usagesDigest": "dU8cl8cZBEZ1y+eTIc2cUAPNLzLUOsSk9+t2wT8Al8I=",
         "recordedInputs": [
           "REPO_MAPPING:,bazel_tools bazel_tools",
           "FILE:@@//tests/with_provider/.terraform.lock.hcl 5eef929349ea8a22381dccd9196af19d15b6993c6c20fd784bddebbf02fd4f46",
