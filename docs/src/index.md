@@ -85,9 +85,12 @@ resolve.
 
 ## Bazel-managed Terraform
 
-When a `terraform_module` is built through Bazel, the `.terraform`
-directory is assembled hermetically by an init aspect rather than by
-`terraform init`. Every network fetch happens at repository-rule /
+When a `terraform_module` is built through Bazel, an init aspect
+assembles the whole **module directory** hermetically — the directory
+the engine will run in, `.tf` files and `.terraform/` alike — rather
+than letting `terraform init` build it. The result is a single Bazel
+tree artifact that `terraform_binary` and the validate rules copy and
+`cd` into. Every network fetch happens at repository-rule /
 bzlmod-extension time; build actions are offline. As a consequence:
 
 - **Provider binaries** are fetched at repository-rule time and copied
@@ -97,10 +100,18 @@ bzlmod-extension time; build actions are offline. As a consequence:
 - **External modules** (from a Terraform registry) are resolved via a
   Bazel-owned lock file, downloaded at repository-rule time, and copied
   into `.terraform/modules/…` with a generated `modules.json` manifest.
-- **Cross-package modules** (other `terraform_module` targets in the
-  monorepo) are wired via the `module_sources` attribute on the parent
-  and materialized into `.terraform/modules/…` alongside the registry
-  modules.
+- **Local child modules** — other `terraform_module` targets in the
+  monorepo — are placed at the relative `source` path the parent's
+  `module` block names, so Terraform resolves them the way it resolves
+  any local module. Packages nested under the parent land there
+  automatically; anything else is matched to the `module` block whose
+  `source` names it.
+
+A `terraform_module` is exactly one directory: every file in `srcs`
+must live directly in the target's own package. Nested `.tf` files are
+a child module and belong in their own `terraform_module`. This is
+enforced at analysis time, and it is what lets the aspect know which
+directory it is building without guessing.
 
 The full mechanics — how the extensions resolve each dependency type,
 what each lock file looks like, and how to keep them fresh — are in
@@ -111,9 +122,9 @@ below.
 
 Once a `terraform_module` has Bazel-managed dependencies, running
 `terraform` (or `tofu`) directly outside Bazel is **not expected to work**:
-the `.terraform` directory is Bazel's construction, `h1:` hashes are
-rewritten for the installed platform binary, and `modules.json` reflects
-the Bazel target graph — not the source tree.
+the module directory is Bazel's construction, `h1:` hashes are rewritten
+for the installed platform binary, and `modules.json` reflects the Bazel
+target graph — not the source tree.
 
 Use `bazel run` to invoke the engine:
 
@@ -125,9 +136,9 @@ bazel run //path/to:terraform -- plan
 bazel run //path/to:terraform -- apply
 ```
 
-The `terraform_binary` rule creates an executable that sets up a
-hermetic working directory with all dependencies wired into place
-before delegating to the real `terraform` binary.
+The `terraform_binary` rule creates an executable that copies the
+aspect-built module directory into a writable temp dir and runs the
+real `terraform` binary there.
 
 For validation and formatting, use the corresponding test rules:
 
@@ -148,8 +159,8 @@ terraform_fmt_test(
 rules_terraform partitions external Terraform state into three buckets,
 each with its own resolution path and (where applicable) lock file. Every
 network fetch happens at repository-rule / bzlmod-extension time — build
-actions never touch the network. What the aspect and Terraform actually
-see at run time is a fully-populated `.terraform/` tree.
+actions never touch the network. What Terraform actually sees at run time
+is a fully-populated module directory.
 
 ### At a glance
 
@@ -157,7 +168,7 @@ see at run time is a fully-populated `.terraform/` tree.
 |--------------------------|----------------------------------|---------------------------------|----------------------------------------------------------|
 | Providers                | Terraform Registry v1 API        | `.terraform.lock.hcl`           | `bazel run //path:providers_lock` (a [`terraform_providers_lock`](./terraform/terraform_modules_lock.md) target) — see below |
 | Registry modules         | Terraform Registry v1 API        | none — live-resolved by the `terraform.modules(...)` / `opentofu.modules(...)` extension | Automatic on `bazel fetch`. See "External registry modules" below for the tradeoff. |
-| Local / in-repo modules  | Bazel target graph               | none                            | Edit `deps` / `module_sources` on the parent `terraform_module` |
+| Local / in-repo modules  | Bazel target graph               | none                            | Edit `deps` on the parent `terraform_module` |
 
 ### Providers
 
@@ -321,30 +332,48 @@ modules carry across evals; entries for removed modules prune naturally.
 Modules living inside your monorepo don't need a lock file — Bazel's
 own target graph is the source of truth.
 
+Give the child its own `terraform_module` and list it in the parent's
+`deps`. The path lives in one place — the `module` block — and `deps`
+just says which target supplies it, the way a `py_library` dep supplies
+an `import`:
+
+```hcl
+# root/main.tf
+module "greeter" {
+  source = "./modules/greeter"
+}
+```
+
 ```python
 terraform_module(
     name = "root",
     srcs = glob(["*.tf"]),
-    deps = ["//modules/greeter"],
-    module_sources = {
-        # Terraform source path (as written in `module "…" { source = "…" }`)
-        # → Bazel target the init aspect should materialize into
-        # `.terraform/modules/<key>/`.
-        "./modules/greeter": "//modules/greeter",
-    },
+    deps = ["//root/modules/greeter"],
 )
 ```
 
-The `module_sources` map translates each `module "greeter" { source = "./modules/greeter" }`
-block into a Bazel-managed file copy. The sub-module can live in an
-entirely different package — no filesystem-sibling relationship is
-required, because the aspect copies files into `.terraform/modules/…`
-based on the label, not on the original layout.
+When the child's package sits under the parent's — the usual case,
+`//root/modules/greeter` beneath `//root` — the aspect places it at
+`modules/greeter` inside the module directory, which is already what
+`source = "./modules/greeter"` names.
 
-For modules that genuinely sit alongside the parent's `.tf` files (i.e.
-`source = "./foo"` where `./foo` really is a subdirectory of the
-parent's own srcs), no `module_sources` entry is needed — the aspect
-discovers the block and includes those files automatically.
+When it doesn't, the source path is matched against the tail of each
+dep's package. A child at `//shared/greeter` satisfies `source =
+"./greeter"`; nothing changes in the BUILD file:
+
+```python
+terraform_module(
+    name = "root",
+    srcs = glob(["*.tf"]),
+    deps = ["//shared/greeter"],
+)
+```
+
+Two mistakes are build errors rather than a silently wrong module
+directory: a local `source` no dep supplies, and a `terraform_module`
+dep no `module` block references. If two deps could satisfy the same
+source, that's an error too — rename one directory or nest it under the
+parent's package.
 
 ### Update workflow — one-page summary
 
@@ -352,7 +381,7 @@ discovers the block and includes those files automatically.
 |---------------------------------------|---------------------------------------------------------------------------------------------------------------|
 | Bump / add a provider                 | Update `required_providers { }`; regenerate `.terraform.lock.hcl` (real `terraform providers lock` or `bazel run //:providers_lock`) |
 | Bump / add a registry module          | Edit the `module { source = "…" version = "…" }` block. Live-resolved on the next `bazel fetch`; regenerate `MODULE.bazel.lock` if you have it enabled. |
-| Add / rename a local module           | Update `deps` and `module_sources` on the parent; no lock file involved                                       |
+| Add / rename a local module           | Write the `module { source = "…" }` block and add the child to the parent's `deps`; no lock file involved |
 | Verify everything                     | `bazel test //...` — runs validate, fmt, tftest, and every lock drift check in one shot                       |
 
 ## Reproducibility

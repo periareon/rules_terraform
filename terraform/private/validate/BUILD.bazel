@@ -5,7 +5,7 @@ go_binary(
     srcs = ["validator.go"],
     visibility = ["//visibility:public"],
     deps = [
-        "//terraform/private/internal/fsutil",
+        "//terraform/private/internal/moduledir",
         "@rules_go//go/runfiles",
     ],
 )

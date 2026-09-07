@@ -235,15 +235,17 @@
   "moduleExtensions": {
     "//terraform:extensions.bzl%terraform": {
       "general": {
-        "bzlTransitiveDigest": "9EzqQLGaHkA0O3drZM/hnvSfX6IzKmzeX8g+mHhzwkg=",
-        "usagesDigest": "CIITXCcT80llaP0YCYdJQJbywpHP5aeX2/NwYvFGu40=",
+        "bzlTransitiveDigest": "e+A7aHq32y2OEt3yUZ6alpwLg6EFtfOm7m178d4jzsE=",
+        "usagesDigest": "Z8U7QV/w7n8gDlkcV+DleLCvkNnkFaEn0z495tNp47c=",
         "recordedInputs": [
           "REPO_MAPPING:,bazel_tools bazel_tools",
           "FILE:@@//tests/with_provider/.terraform.lock.hcl 5eef929349ea8a22381dccd9196af19d15b6993c6c20fd784bddebbf02fd4f46",
           "FILE:@@//tests/with_modules_ext/.terraform.lock.hcl cc99c78e0e8abd0d72ac09f529610eda38005f95ac94e9453e6b197fdeba62e0",
           "FILE:@@//tests/with_third_party_provider/.terraform.lock.hcl dff74f6f1fdac6249a16a5c1ca8cc16e6960f614c4848316f5844fa7fa2c121d",
           "DIRENTS:@@//tests/with_registry_module 505777b42b59f99e59abd665b98653f35009a3123048ca2cd3136d57b150c126",
-          "FILE:@@//tests/with_registry_module/main.tf b005e784b89ebba08818b0d9dcfd755012e82fbe58fc6340ae3a151e3699a23e"
+          "FILE:@@//tests/with_registry_module/main.tf b005e784b89ebba08818b0d9dcfd755012e82fbe58fc6340ae3a151e3699a23e",
+          "DIRENTS:@@//tests/nested_registry/modules/wrapper 505777b42b59f99e59abd665b98653f35009a3123048ca2cd3136d57b150c126",
+          "FILE:@@//tests/nested_registry/modules/wrapper/main.tf 3196e21fb1b93ddfb98e84bb42c7b3fc67ae91eb498793ad48e81c1420254efc"
         ],
         "generatedRepoSpecs": {
           "test_providers_with_provider_hashicorp_null_linux_amd64": {
@@ -506,6 +508,25 @@
             "attributes": {
               "module_repos": [
                 "test_registry_modules_label"
+              ]
+            }
+          },
+          "test_nested_registry_modules_label": {
+            "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_archive",
+            "attributes": {
+              "urls": [
+                "https://github.com/cloudposse/terraform-null-label/archive/refs/tags/0.25.0.tar.gz"
+              ],
+              "integrity": "sha256-fZlEtS/t7DyCrlnizzbduo9epOyV5w+Z9NGOx0HWCNw=",
+              "strip_prefix": "terraform-null-label-0.25.0",
+              "build_file_content": "load(\"@rules_terraform//terraform/private:terraform.bzl\", \"terraform_external_module\")\n\nterraform_external_module(\n    name = \"module\",\n    key = \"label\",\n    source = \"cloudposse/label/null\",\n    version = \"0.25.0\",\n    subdir = \"\",\n    srcs = glob(\n        [\"**/*.tf\", \"**/*.tf.json\"],\n        allow_empty = True,\n    ),\n    visibility = [\"//visibility:public\"],\n)\n"
+            }
+          },
+          "test_nested_registry_modules": {
+            "repoRuleId": "@@//terraform/private:module_repo.bzl%terraform_module_hub",
+            "attributes": {
+              "module_repos": [
+                "test_nested_registry_modules_label"
               ]
             }
           }

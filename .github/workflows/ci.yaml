@@ -58,7 +58,17 @@ jobs:
       matrix:
         os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest, windows-latest]
         bazel: ["7.x", "8.x", "9.x"]
-        example: [terraform, opentofu]
+        example: [terraform, opentofu, monorepo]
+        # The engine binary each example exposes. `bazel test //...` never
+        # builds these — a `terraform_binary` / `opentofu_binary` can break
+        # while every test still passes — so each one gets run below.
+        include:
+          - example: terraform
+            binary: "//:terraform"
+          - example: opentofu
+            binary: "//:tofu"
+          - example: monorepo
+            binary: "//envs/prod/app:terraform"
     defaults:
       run:
         working-directory: examples/${{ matrix.example }}
@@ -80,6 +90,17 @@ jobs:
       - name: Test (Windows)
         if: runner.os == 'Windows'
         run: bazel $env:BAZEL_STARTUP_FLAGS test //...
+      # `plan` is the cheapest subcommand that exercises the whole chain the
+      # binary wraps: staging the built module tree, the pre-populated
+      # `.terraform/`, the rewritten lock hashes, and the engine itself. The
+      # examples only use `hashicorp/null`, so it needs no credentials and no
+      # network.
+      - name: Run engine binary (Unix)
+        if: runner.os != 'Windows'
+        run: bazel ${BAZEL_STARTUP_FLAGS[@]} run ${{ matrix.binary }} -- plan -input=false
+      - name: Run engine binary (Windows)
+        if: runner.os == 'Windows'
+        run: bazel $env:BAZEL_STARTUP_FLAGS run ${{ matrix.binary }} "--" plan -input=false
 
   # Formatting + lint via pre-commit (buildifier, gofmt, whitespace hygiene).
   # See `.pre-commit-config.yaml` for the hook list — one source of truth

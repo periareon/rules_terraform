@@ -73,37 +73,16 @@ func CopyDirectory(src, dst string) error {
 			return err
 		}
 
-		return os.Chmod(dstPath, info.Mode())
+		// Owner-write on top of the source mode, for the same reason the
+		// directories above are forced to 0755: Bazel marks action outputs
+		// read-only, and the engine writes into its working directory —
+		// `terraform test` rewrites `.terraform.lock.hcl` as part of the
+		// implicit init. POSIX lets that through because replacing a file
+		// only needs a writable parent directory, so the bug is invisible
+		// there; Windows denies replacing a read-only file outright.
+		//
+		// OR rather than a fixed mode, so provider binaries keep their
+		// executable bit.
+		return os.Chmod(dstPath, info.Mode()|0200)
 	})
-}
-
-// SymlinkFile creates a symlink from src to dst using absolute paths.
-// If src is a directory, the directory is created at dst instead.
-// If dst already exists, it is removed first.
-func SymlinkFile(src, dst string) error {
-	srcInfo, err := os.Stat(src)
-	if err != nil {
-		return err
-	}
-
-	if srcInfo.IsDir() {
-		return os.MkdirAll(dst, srcInfo.Mode())
-	}
-
-	if _, err := os.Lstat(dst); err == nil {
-		if err := os.Remove(dst); err != nil {
-			return fmt.Errorf("failed to remove existing destination: %w", err)
-		}
-	}
-
-	absSrc, err := filepath.Abs(src)
-	if err != nil {
-		return fmt.Errorf("failed to get absolute path for source: %w", err)
-	}
-
-	if err := os.Symlink(absSrc, dst); err != nil {
-		return fmt.Errorf("failed to create symlink: %w", err)
-	}
-
-	return nil
 }

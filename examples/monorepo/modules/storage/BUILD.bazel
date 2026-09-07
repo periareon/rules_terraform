@@ -1,0 +1,17 @@
+"""Shared library module with no library-internal deps of its own.
+
+Because the aspect-based checks in `.bazelrc` validate *every* module, not just
+root modules, a library module that names a provider needs the lock and the
+provider dep too. That is the wrapper earning its keep: a broken shared module
+fails on its own target instead of in whichever environment adopts it next.
+"""
+
+load("@rules_terraform//terraform:terraform_module.bzl", "terraform_module")
+
+terraform_module(
+    name = "storage",
+    srcs = glob(["*.tf"]),
+    lock = "//:.terraform.lock.hcl",
+    visibility = ["//visibility:public"],
+    deps = ["@example_providers//hashicorp_null"],
+)

@@ -1,0 +1,47 @@
+"""Dev environment root module.
+
+`deps` names only what this module's own `module` blocks reference. `compute`
+pulls `network` in through its own `deps`, and the init aspect follows the whole
+closure — so a shared library module can gain a dependency without every
+environment that uses it editing a BUILD file.
+"""
+
+load("@rules_terraform//terraform:terraform_binary.bzl", "terraform_binary")
+load("@rules_terraform//terraform:terraform_fmt_test.bzl", "terraform_fmt_test")
+load("@rules_terraform//terraform:terraform_module.bzl", "terraform_module")
+load("@rules_terraform//terraform:terraform_modules_lock.bzl", "terraform_providers_lock_test")
+load("@rules_terraform//terraform:terraform_validate_test.bzl", "terraform_validate_test")
+
+terraform_module(
+    name = "app",
+    srcs = glob(["*.tf"]),
+    lock = "//:.terraform.lock.hcl",
+    deps = [
+        "//modules/compute",
+        "//modules/storage",
+        "@example_providers//hashicorp_null",
+    ],
+)
+
+# `bazel run //envs/dev/app:terraform -- plan`
+terraform_binary(
+    name = "terraform",
+    root = ":app",
+)
+
+terraform_validate_test(
+    name = "validate",
+    target = ":app",
+)
+
+terraform_fmt_test(
+    name = "fmt",
+    target = ":app",
+)
+
+# Covers `required_providers` in the shared library too, not just this file.
+terraform_providers_lock_test(
+    name = "providers_lock",
+    lock = "//:.terraform.lock.hcl",
+    target = ":app",
+)
