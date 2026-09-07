@@ -1,13 +1,18 @@
 load("//terraform:terraform_module.bzl", "terraform_module")
 
-exports_files(["main.tf"])
-
 # The external module dep sits here, next to the `module` block that names it,
 # rather than on the root module that has no idea it exists. That only reaches
 # the init action because `external_modules` is transitive.
+#
+# No `exports_files`, and `visibility` deliberately narrower than public, even
+# though `//MODULE.bazel` points a `terraform.modules` tag at `main.tf` in this
+# package. The extension only reads the label's package, so the file stays
+# unexported and this target is the sole way in — which is what makes the
+# narrow visibility mean anything. Widen either and the fixture stops proving
+# it.
 terraform_module(
     name = "wrapper",
     srcs = glob(["*.tf"]),
-    visibility = ["//visibility:public"],
+    visibility = ["//tests/nested_registry:__subpackages__"],
     deps = ["@test_nested_registry_modules"],
 )

@@ -5,4 +5,14 @@ Every environment under `envs/` points its `lock` attribute at this file, so
 doesn't cover.
 """
 
-exports_files([".terraform.lock.hcl"])
+# The one place this ruleset still makes you export a source file: `lock` takes
+# a file label, so sharing a single lock across packages means exporting it.
+# Modules themselves need no export — a `terraform_module` is consumed through
+# the target, and its `visibility` holds.
+#
+# Scoped rather than left at the `exports_files` default of public, since only
+# this example's own packages have any business reading it.
+exports_files(
+    [".terraform.lock.hcl"],
+    visibility = ["//:__subpackages__"],
+)

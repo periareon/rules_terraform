@@ -6,8 +6,6 @@ load("//terraform:terraform_fmt_test.bzl", "terraform_fmt_test")
 load("//terraform:terraform_module.bzl", "terraform_module")
 load("//terraform:terraform_validate_test.bzl", "terraform_validate_test")
 
-exports_files(["main.tf"])
-
 terraform_module(
     name = "with_registry_module",
     srcs = glob(["*.tf"]),
