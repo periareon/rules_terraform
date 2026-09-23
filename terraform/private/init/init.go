@@ -18,6 +18,7 @@ import (
 	"rules_terraform/terraform/private/internal/fsutil"
 	"rules_terraform/terraform/private/internal/lockparse"
 	"rules_terraform/terraform/private/internal/moduledir"
+	"rules_terraform/terraform/private/internal/semver"
 	"rules_terraform/terraform/private/internal/tfparse"
 )
 
@@ -654,7 +655,10 @@ func rewriteLockFileHashes(lockContent []byte, moduleDir string, providers []Pro
 // External modules come back as references rather than records because they
 // still have to be installed, and where they are installed is decided by the
 // same key. Both kinds fall out of one walk for that reason.
-func walkModules(moduleDir string) ([]moduleRecord, []externalRef, error) {
+// A fetched module is walked in its own right once installed, rooted at its
+// install directory and prefixed with its key, which is why `rootPrefix` and
+// `rootDir` are parameters rather than always `""` and `"."`.
+func walkModules(moduleDir, rootPrefix, rootDir string) ([]moduleRecord, []externalRef, error) {
 	var local []moduleRecord
 	var external []externalRef
 
@@ -734,10 +738,23 @@ func walkModules(moduleDir string) ([]moduleRecord, []externalRef, error) {
 		return nil
 	}
 
-	if err := walk("", "."); err != nil {
+	if err := walk(rootPrefix, rootDir); err != nil {
 		return nil, nil, err
 	}
 	return local, external, nil
+}
+
+// walkRoot is one directory a manifest round walks from: the staged tree on the
+// first round, then each module installed by the round before it.
+//
+// `sources` is the set of external module sources on the path to this root. A
+// registry module that reaches itself through its own children would otherwise
+// install forever under an ever-longer key, since each round mints keys the
+// round before it has never seen.
+type walkRoot struct {
+	prefix  string
+	dir     string
+	sources map[string]bool
 }
 
 // generateModulesManifest installs every external module the staged tree
@@ -746,15 +763,67 @@ func walkModules(moduleDir string) ([]moduleRecord, []externalRef, error) {
 // resolveLocalModules has already placed the local deps, so the tree is the
 // authority on what exists — walking it also picks up the child modules of
 // child modules, which no single list of blocks would name.
+//
+// A fetched module is not a leaf: registry modules are routinely composed of
+// others, both local (`./modules/…`) and registry. Those children only become
+// walkable once their parent is on disk, so installing and walking alternate
+// until a round finds no new references.
 func generateModulesManifest(moduleDir string, available []ExternalModuleInfo) error {
-	local, refs, err := walkModules(moduleDir)
-	if err != nil {
-		return err
-	}
+	var local, installed []moduleRecord
 
-	installed, err := installExternalModules(moduleDir, refs, available)
-	if err != nil {
-		return err
+	roots := []walkRoot{{prefix: "", dir: ".", sources: map[string]bool{}}}
+	for len(roots) > 0 {
+		var refs []externalRef
+		// Which root a reference came from, so the next round inherits that
+		// root's source path.
+		refRoots := []*walkRoot{}
+
+		for i := range roots {
+			root := &roots[i]
+			roundLocal, roundRefs, err := walkModules(moduleDir, root.prefix, root.dir)
+			if err != nil {
+				return err
+			}
+			local = append(local, roundLocal...)
+			for _, ref := range roundRefs {
+				// Checked before the install, not after: a cycle detected once
+				// the files are already on disk leaves a copy behind under a key
+				// nothing will ever look up.
+				//
+				// Normalized, because the two ends of a cycle are written by
+				// different authors. A module that spells its own source with
+				// the registry host in front looks like a different module to a
+				// raw comparison, and the guard only catches it a round later —
+				// after installing a spurious copy under a longer key.
+				if root.sources[normalizeModuleSource(ref.Source)] {
+					return fmt.Errorf("module %q is reached from itself through %q; `module` blocks may not form a cycle",
+						ref.Source, ref.Key)
+				}
+				refs = append(refs, ref)
+				refRoots = append(refRoots, root)
+			}
+		}
+
+		records, err := installExternalModules(moduleDir, refs, available)
+		if err != nil {
+			return err
+		}
+		installed = append(installed, records...)
+
+		next := []walkRoot{}
+		for i, ref := range refs {
+			parent := refRoots[i]
+			sources := map[string]bool{normalizeModuleSource(ref.Source): true}
+			for s := range parent.sources {
+				sources[s] = true
+			}
+			next = append(next, walkRoot{
+				prefix:  ref.Key,
+				dir:     path.Join(".terraform", "modules", ref.Key),
+				sources: sources,
+			})
+		}
+		roots = next
 	}
 
 	if len(local) == 0 && len(installed) == 0 {
@@ -799,15 +868,19 @@ func generateModulesManifest(moduleDir string, available []ExternalModuleInfo) e
 // on that group is a dep on a candidate pool. Some of the pool going unused is
 // the normal case, not a mistake to report.
 //
-// Not handled: `module` blocks *inside* a fetched module. A registry module
-// that is itself composed of others needs its own resolution pass rooted at
-// its install directory, including `../`-relative sources that climb out of
-// it, and further registry modules Bazel was never asked to fetch. Such a
-// module resolves to the key below and then fails on its own children.
+// `module` blocks *inside* a fetched module are handled by the caller, which
+// walks each install directory once this has placed it. Not handled there: a
+// `../`-relative source inside a fetched module that climbs out of its own
+// install directory. Nothing places those, because the dep that would supply
+// them is a `terraform_module` resolved against the staged tree, not against
+// `.terraform/modules`.
 func installExternalModules(moduleDir string, refs []externalRef, available []ExternalModuleInfo) ([]moduleRecord, error) {
 	var out []moduleRecord
 	for _, ref := range refs {
-		mod := matchExternal(ref, available)
+		mod, err := matchExternal(ref, available)
+		if err != nil {
+			return nil, err
+		}
 		if mod == nil {
 			return nil, fmt.Errorf(
 				"module %q in %s has source %q, but no dep supplies that module.\n"+
@@ -842,38 +915,79 @@ func installExternalModules(moduleDir string, refs []externalRef, available []Ex
 
 // matchExternal picks the dep supplying a reference, or nil when none does.
 //
-// Source is the identity; version only breaks a tie. A block's `version` is a
-// constraint (`~> 5.0`) while the dep records the exact version resolved for
-// it, so an equal version is good evidence and an unequal one is no evidence
-// at all.
-func matchExternal(ref externalRef, available []ExternalModuleInfo) *ExternalModuleInfo {
-	var fallback *ExternalModuleInfo
+// Source is the identity, but it is not a unique one: transitive resolution
+// routinely puts two versions of the same module in the pool, because the root
+// and one of its children can ask for different ones. So the block's version
+// constraint has to do real work here — `~> 5.0` never equals the concrete
+// `5.8.2` the dep records, and comparing them as strings would fall through to
+// whichever entry happened to come first.
+//
+// Among the deps satisfying the constraint, the highest wins, which is what
+// Terraform's own resolver does. A single candidate is taken whatever its
+// version says, since a dep with no recorded version is still the only thing
+// that could have been meant.
+func matchExternal(ref externalRef, available []ExternalModuleInfo) (*ExternalModuleInfo, error) {
+	var candidates []*ExternalModuleInfo
 	for i := range available {
-		mod := &available[i]
-		if !sameModuleSource(ref.Source, mod.Source) {
-			continue
-		}
-		if ref.Version == "" || ref.Version == mod.Version {
-			return mod
-		}
-		if fallback == nil {
-			fallback = mod
+		if sameModuleSource(ref.Source, available[i].Source) {
+			candidates = append(candidates, &available[i])
 		}
 	}
-	return fallback
+	if len(candidates) == 0 {
+		return nil, nil
+	}
+
+	constraints, ok := semver.ParseConstraints(ref.Version)
+	if ok {
+		var best *ExternalModuleInfo
+		var bestVersion semver.Version
+		for _, mod := range candidates {
+			v, parsed := semver.Parse(mod.Version)
+			if !parsed || !semver.Check(constraints, v) {
+				continue
+			}
+			if best == nil || semver.Compare(v, bestVersion) > 0 {
+				best, bestVersion = mod, v
+			}
+		}
+		if best != nil {
+			return best, nil
+		}
+	}
+
+	if len(candidates) == 1 {
+		return candidates[0], nil
+	}
+
+	versions := make([]string, 0, len(candidates))
+	for _, mod := range candidates {
+		versions = append(versions, mod.Version)
+	}
+	return nil, fmt.Errorf(
+		"module %q in %s has source %q with version %q, which %d deps could supply (%s) and none of them satisfies.\n"+
+			"Pin the `version` in the `module` block to one of those",
+		ref.Key, displayDir(ref.Dir), ref.Source, ref.Version,
+		len(candidates), strings.Join(versions, ", "))
 }
 
 // sameModuleSource reports whether a `module` block's source names the module a
 // dep supplies. Either may spell a public-registry source with the registry
 // host in front, so both are stripped before comparing — the dep's source is
 // itself copied out of a `module` block, so neither end is the canonical one.
-//
-// Only the default public registries are stripped. A source on a private
-// registry (`app.terraform.io/...`) names a different module than the same
-// path on the public one, so there the host is part of the identity.
 func sameModuleSource(blockSource, depSource string) bool {
-	return registryPrefixRE.ReplaceAllString(blockSource, "") ==
-		registryPrefixRE.ReplaceAllString(depSource, "")
+	return normalizeModuleSource(blockSource) == normalizeModuleSource(depSource)
+}
+
+// normalizeModuleSource is the spelling of a module source that identity
+// comparisons use. Only the default public registries are stripped: a source on
+// a private registry (`app.terraform.io/...`) names a different module than the
+// same path on the public one, so there the host is part of the identity.
+//
+// Any comparison of two sources goes through here. A guard that compared raw
+// strings would see one module under two names the moment one end wrote the
+// host, which is exactly the case the stripping exists for.
+func normalizeModuleSource(source string) string {
+	return registryPrefixRE.ReplaceAllString(source, "")
 }
 
 // externalHint lists the external modules on offer, so the "no dep supplies

@@ -1,12 +1,15 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 
+	"rules_terraform/terraform/private/internal/moduledir"
 	"rules_terraform/terraform/private/internal/tfparse"
 )
 
@@ -37,13 +40,61 @@ func block(key, source string) tfparse.ModuleBlock {
 	return tfparse.ModuleBlock{Key: key, Source: source}
 }
 
+func versioned(key, source, version string) tfparse.ModuleBlock {
+	return tfparse.ModuleBlock{Key: key, Source: source, Version: version}
+}
+
 // moduleTF renders the `.tf` text declaring `blocks`.
 func moduleTF(blocks ...tfparse.ModuleBlock) string {
 	var b strings.Builder
 	for _, blk := range blocks {
-		fmt.Fprintf(&b, "module %q {\n  source = %q\n}\n", blk.Key, blk.Source)
+		fmt.Fprintf(&b, "module %q {\n  source = %q\n", blk.Key, blk.Source)
+		if blk.Version != "" {
+			fmt.Fprintf(&b, "  version = %q\n", blk.Version)
+		}
+		b.WriteString("}\n")
 	}
 	return b.String()
+}
+
+// externalModule builds the dep an extension-fetched registry module arrives
+// as: a source/version pair plus the copy manifest for its files, keyed by
+// slash-relative path within the module.
+func externalModule(t *testing.T, source, version string, files map[string]string) ExternalModuleInfo {
+	t.Helper()
+
+	dir := t.TempDir()
+	entries := make([]FileEntry, 0, len(files))
+	for rel, content := range files {
+		full := filepath.Join(dir, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(full), 0755); err != nil {
+			t.Fatalf("mkdir for %s: %v", rel, err)
+		}
+		if err := os.WriteFile(full, []byte(content), 0644); err != nil {
+			t.Fatalf("write %s: %v", rel, err)
+		}
+		entries = append(entries, FileEntry{Src: full, Dst: rel})
+	}
+	return ExternalModuleInfo{Source: source, Version: version, Files: entries}
+}
+
+// manifestByKey reads the generated modules.json back as a key → record map.
+func manifestByKey(t *testing.T, root string) map[string]moduleRecord {
+	t.Helper()
+
+	data, err := os.ReadFile(moduledir.ModulesManifest(root))
+	if err != nil {
+		t.Fatalf("read modules.json: %v", err)
+	}
+	var manifest modulesManifest
+	if err := json.Unmarshal(data, &manifest); err != nil {
+		t.Fatalf("parse modules.json: %v", err)
+	}
+	byKey := make(map[string]moduleRecord, len(manifest.Modules))
+	for _, m := range manifest.Modules {
+		byKey[m.Key] = m
+	}
+	return byKey
 }
 
 // stagedTree creates a tree root holding one `main.tf` per entry of `modules`,
@@ -308,7 +359,7 @@ func TestWalkModulesRecordsNestedChildren(t *testing.T) {
 		"modules/network": "# leaf\n",
 	})
 
-	got, _, err := walkModules(root)
+	got, _, err := walkModules(root, "", ".")
 	if err != nil {
 		t.Fatalf("walkModules: %v", err)
 	}
@@ -338,7 +389,7 @@ func TestWalkModulesKeysExternalRefsByPosition(t *testing.T) {
 		"modules/unrelated": "# leaf\n",
 	})
 
-	_, refs, err := walkModules(root)
+	_, refs, err := walkModules(root, "", ".")
 	if err != nil {
 		t.Fatalf("walkModules: %v", err)
 	}
@@ -364,7 +415,7 @@ func TestWalkModulesRecordsSharedDirectoryUnderEachKey(t *testing.T) {
 		"leaf":   "# leaf\n",
 	})
 
-	got, _, err := walkModules(root)
+	got, _, err := walkModules(root, "", ".")
 	if err != nil {
 		t.Fatalf("walkModules: %v", err)
 	}
@@ -394,7 +445,7 @@ func TestWalkModulesRejectsCycle(t *testing.T) {
 		"two": moduleTF(block("c", "../one")),
 	})
 
-	if _, _, err := walkModules(root); err == nil {
+	if _, _, err := walkModules(root, "", "."); err == nil {
 		t.Fatal("walkModules accepted a module cycle")
 	} else if !strings.Contains(err.Error(), "cycle") {
 		t.Errorf("error %q does not mention a cycle", err)
@@ -484,26 +535,220 @@ func TestSameModuleSource(t *testing.T) {
 	}
 }
 
-// A block's `version` is a constraint and the dep's is the version actually
-// resolved, so equality is evidence and inequality is not. Source alone still
-// has to match something.
-func TestMatchExternalPrefersExactVersion(t *testing.T) {
+// Transitive resolution puts two versions of one module in the pool whenever
+// the root and one of its children disagree, so source no longer identifies a
+// dep on its own. The block's constraint has to choose between them, and a
+// constraint never equals a concrete version as a string.
+func TestMatchExternalResolvesConstraintAgainstPool(t *testing.T) {
 	available := []ExternalModuleInfo{
+		{Source: "terraform-aws-modules/vpc/aws", Version: "4.0.2"},
 		{Source: "terraform-aws-modules/vpc/aws", Version: "5.1.0"},
 		{Source: "terraform-aws-modules/vpc/aws", Version: "5.3.1"},
 	}
 
-	exact := matchExternal(externalRef{Source: "terraform-aws-modules/vpc/aws", Version: "5.3.1"}, available)
-	if exact == nil || exact.Version != "5.3.1" {
-		t.Errorf("exact version match = %+v, want 5.3.1", exact)
+	for _, tt := range []struct {
+		constraint string
+		want       string
+	}{
+		{"5.1.0", "5.1.0"},
+		{"~> 5.0", "5.3.1"},
+		{"~> 4.0", "4.0.2"},
+		{">= 4.0, < 5.2", "5.1.0"},
+		// No constraint means the engine takes the newest it has.
+		{"", "5.3.1"},
+	} {
+		got, err := matchExternal(externalRef{
+			Source:  "terraform-aws-modules/vpc/aws",
+			Version: tt.constraint,
+		}, available)
+		if err != nil {
+			t.Fatalf("matchExternal(%q): %v", tt.constraint, err)
+		}
+		if got == nil || got.Version != tt.want {
+			t.Errorf("matchExternal(%q) = %+v, want version %s", tt.constraint, got, tt.want)
+		}
+	}
+}
+
+// One candidate is taken whatever its version says: a dep that records no
+// version at all is still the only thing the block could have meant.
+func TestMatchExternalAcceptsLoneCandidate(t *testing.T) {
+	available := []ExternalModuleInfo{{Source: "cloudposse/label/null"}}
+
+	got, err := matchExternal(externalRef{Source: "cloudposse/label/null", Version: "~> 0.25"}, available)
+	if err != nil {
+		t.Fatalf("matchExternal: %v", err)
+	}
+	if got == nil {
+		t.Error("a lone candidate did not match; source alone should still resolve")
+	}
+}
+
+// With several candidates and none satisfying the constraint there is no
+// defensible pick, and silently taking the first is how the wrong version of a
+// module gets installed.
+func TestMatchExternalRejectsAmbiguousPool(t *testing.T) {
+	available := []ExternalModuleInfo{
+		{Source: "terraform-aws-modules/vpc/aws", Version: "4.0.2"},
+		{Source: "terraform-aws-modules/vpc/aws", Version: "5.3.1"},
 	}
 
-	constraint := matchExternal(externalRef{Source: "terraform-aws-modules/vpc/aws", Version: "~> 5.0"}, available)
-	if constraint == nil {
-		t.Fatal("a version constraint matched nothing; source alone should still resolve")
+	got, err := matchExternal(externalRef{
+		Source:  "terraform-aws-modules/vpc/aws",
+		Version: "~> 6.0",
+		Key:     "vpc",
+	}, available)
+	if err == nil {
+		t.Fatalf("matchExternal accepted an unsatisfiable constraint, returning %+v", got)
+	}
+	for _, want := range []string{"4.0.2", "5.3.1", "~> 6.0"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q does not mention %q", err, want)
+		}
+	}
+}
+
+func TestMatchExternalIgnoresUnrelatedSource(t *testing.T) {
+	available := []ExternalModuleInfo{{Source: "terraform-aws-modules/vpc/aws", Version: "5.3.1"}}
+
+	got, err := matchExternal(externalRef{Source: "cloudposse/label/null"}, available)
+	if err != nil {
+		t.Fatalf("matchExternal: %v", err)
+	}
+	if got != nil {
+		t.Errorf("unrelated source matched %+v", got)
+	}
+}
+
+// The gap this whole round-based design closes: a registry module is routinely
+// composed of others, and its children are only visible once it is on disk.
+func TestGenerateModulesManifestInstallsRegistryChildOfRegistryModule(t *testing.T) {
+	root := stagedTree(t, map[string]string{".": moduleTF(block("eks", "acme/eks/aws"))})
+	available := []ExternalModuleInfo{
+		externalModule(t, "acme/eks/aws", "1.0.0", map[string]string{
+			"main.tf": moduleTF(block("kms", "acme/kms/aws")),
+		}),
+		externalModule(t, "acme/kms/aws", "2.0.0", map[string]string{
+			"main.tf": "# kms\n",
+		}),
 	}
 
-	if miss := matchExternal(externalRef{Source: "cloudposse/label/null"}, available); miss != nil {
-		t.Errorf("unrelated source matched %+v", miss)
+	if err := generateModulesManifest(root, available); err != nil {
+		t.Fatalf("generateModulesManifest: %v", err)
 	}
+
+	// Terraform addresses the grandchild as `eks.kms`, and looks for it at the
+	// directory that key names — installing it at the top level puts it
+	// somewhere the engine never looks.
+	byKey := manifestByKey(t, root)
+	child, ok := byKey["eks.kms"]
+	if !ok {
+		t.Fatalf("modules.json has no `eks.kms` record; keys were %v", keysOf(byKey))
+	}
+	if child.Dir != ".terraform/modules/eks.kms" {
+		t.Errorf("eks.kms Dir = %q, want .terraform/modules/eks.kms", child.Dir)
+	}
+	if child.Version != "2.0.0" {
+		t.Errorf("eks.kms Version = %q, want 2.0.0", child.Version)
+	}
+	if _, err := os.Stat(filepath.Join(root, ".terraform", "modules", "eks.kms", "main.tf")); err != nil {
+		t.Errorf("the grandchild module was not installed: %v", err)
+	}
+}
+
+// A fetched module's *local* children are part of the same archive, so nothing
+// installs them — but they still have to reach modules.json, rooted at the
+// install directory rather than at the tree.
+func TestGenerateModulesManifestRecordsLocalChildOfFetchedModule(t *testing.T) {
+	root := stagedTree(t, map[string]string{".": moduleTF(block("eks", "acme/eks/aws"))})
+	available := []ExternalModuleInfo{
+		externalModule(t, "acme/eks/aws", "1.0.0", map[string]string{
+			"main.tf":               moduleTF(block("nodes", "./modules/nodes")),
+			"modules/nodes/main.tf": "# nodes\n",
+		}),
+	}
+
+	if err := generateModulesManifest(root, available); err != nil {
+		t.Fatalf("generateModulesManifest: %v", err)
+	}
+
+	byKey := manifestByKey(t, root)
+	child, ok := byKey["eks.nodes"]
+	if !ok {
+		t.Fatalf("modules.json has no `eks.nodes` record; keys were %v", keysOf(byKey))
+	}
+	if child.Dir != ".terraform/modules/eks/modules/nodes" {
+		t.Errorf("eks.nodes Dir = %q, want .terraform/modules/eks/modules/nodes", child.Dir)
+	}
+}
+
+// End to end for the pool ambiguity: the root pins one major and its child
+// pins another, so both versions are fetched and each block has to land on the
+// one it asked for.
+func TestGenerateModulesManifestInstallsTheVersionEachBlockAsksFor(t *testing.T) {
+	root := stagedTree(t, map[string]string{
+		".": moduleTF(versioned("app", "acme/app/aws", "~> 2.0")),
+	})
+	available := []ExternalModuleInfo{
+		externalModule(t, "acme/app/aws", "2.1.0", map[string]string{
+			"main.tf": moduleTF(versioned("label", "acme/label/null", "~> 1.0")),
+		}),
+		// Listed newest-first, so taking the first same-source entry — which is
+		// what a string comparison against a constraint falls through to —
+		// picks the wrong one.
+		externalModule(t, "acme/label/null", "3.0.0", map[string]string{"main.tf": "# v3\n"}),
+		externalModule(t, "acme/label/null", "1.4.0", map[string]string{"main.tf": "# v1\n"}),
+	}
+
+	if err := generateModulesManifest(root, available); err != nil {
+		t.Fatalf("generateModulesManifest: %v", err)
+	}
+
+	byKey := manifestByKey(t, root)
+	label, ok := byKey["app.label"]
+	if !ok {
+		t.Fatalf("modules.json has no `app.label` record; keys were %v", keysOf(byKey))
+	}
+	if label.Version != "1.4.0" {
+		t.Errorf("app.label Version = %q, want 1.4.0 — the `~> 1.0` block took the wrong entry from the pool", label.Version)
+	}
+	installed, err := os.ReadFile(filepath.Join(root, ".terraform", "modules", "app.label", "main.tf"))
+	if err != nil {
+		t.Fatalf("read installed app.label: %v", err)
+	}
+	if strings.TrimSpace(string(installed)) != "# v1" {
+		t.Errorf("app.label holds %q, want the v1 files", strings.TrimSpace(string(installed)))
+	}
+}
+
+// A module reaching itself has no fixed point to install to, and each round
+// would mint a key the round before it has never seen. The two ends may spell
+// the source differently, which is the case a raw string comparison misses.
+func TestGenerateModulesManifestRejectsRegistryCycle(t *testing.T) {
+	root := stagedTree(t, map[string]string{".": moduleTF(block("a", "acme/a/aws"))})
+	available := []ExternalModuleInfo{
+		externalModule(t, "acme/a/aws", "1.0.0", map[string]string{
+			"main.tf": moduleTF(block("a", "registry.terraform.io/acme/a/aws")),
+		}),
+	}
+
+	err := generateModulesManifest(root, available)
+	if err == nil {
+		t.Fatal("generateModulesManifest accepted a registry module cycle")
+	}
+	if !strings.Contains(err.Error(), "cycle") {
+		t.Errorf("error %q does not mention a cycle", err)
+	}
+	if _, statErr := os.Stat(filepath.Join(root, ".terraform", "modules", "a.a")); statErr == nil {
+		t.Error("the cycle was caught only after installing a copy under a key nothing will look up")
+	}
+}
+
+func keysOf(m map[string]moduleRecord) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
 }

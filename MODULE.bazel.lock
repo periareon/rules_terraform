@@ -235,8 +235,8 @@
   "moduleExtensions": {
     "//terraform:extensions.bzl%terraform": {
       "general": {
-        "bzlTransitiveDigest": "ndlwJ4gBblVTJjWFWPyg0yNJ8GzL1IGSSG3jth3nO6M=",
-        "usagesDigest": "dU8cl8cZBEZ1y+eTIc2cUAPNLzLUOsSk9+t2wT8Al8I=",
+        "bzlTransitiveDigest": "a6V7TlbkIiLfQo9LFmO2fmhI6hNJ60Yf6jrvcScn+aM=",
+        "usagesDigest": "GxP0g1ESr1eAYiAmJXv31okkOXyHQadrMCRaWFdJU+g=",
         "recordedInputs": [
           "REPO_MAPPING:,bazel_tools bazel_tools",
           "FILE:@@//tests/with_provider/.terraform.lock.hcl 5eef929349ea8a22381dccd9196af19d15b6993c6c20fd784bddebbf02fd4f46",
@@ -245,7 +245,9 @@
           "DIRENTS:@@//tests/with_registry_module 505777b42b59f99e59abd665b98653f35009a3123048ca2cd3136d57b150c126",
           "FILE:@@//tests/with_registry_module/main.tf b005e784b89ebba08818b0d9dcfd755012e82fbe58fc6340ae3a151e3699a23e",
           "DIRENTS:@@//tests/nested_registry/modules/wrapper 505777b42b59f99e59abd665b98653f35009a3123048ca2cd3136d57b150c126",
-          "FILE:@@//tests/nested_registry/modules/wrapper/main.tf 3196e21fb1b93ddfb98e84bb42c7b3fc67ae91eb498793ad48e81c1420254efc"
+          "FILE:@@//tests/nested_registry/modules/wrapper/main.tf 3196e21fb1b93ddfb98e84bb42c7b3fc67ae91eb498793ad48e81c1420254efc",
+          "DIRENTS:@@//tests/transitive_registry 505777b42b59f99e59abd665b98653f35009a3123048ca2cd3136d57b150c126",
+          "FILE:@@//tests/transitive_registry/main.tf 4d69ce4ec4bb650e30c4fbf1ff91f544e1376d23341fbbe004250244fc93c81d"
         ],
         "generatedRepoSpecs": {
           "test_providers_with_provider_hashicorp_null_linux_amd64": {
@@ -529,6 +531,37 @@
                 "test_nested_registry_modules_label"
               ]
             }
+          },
+          "test_transitive_registry_modules_sg": {
+            "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_archive",
+            "attributes": {
+              "urls": [
+                "https://github.com/cloudposse/terraform-aws-security-group/archive/refs/tags/2.2.0.tar.gz"
+              ],
+              "integrity": "sha256-0ipWHHP8v8th5tQt+5j5OFhZZNFtVChXuFZwCKjfWKo=",
+              "strip_prefix": "terraform-aws-security-group-2.2.0",
+              "build_file_content": "load(\"@rules_terraform//terraform/private:terraform.bzl\", \"terraform_external_module\")\n\nterraform_external_module(\n    name = \"module\",\n    key = \"sg\",\n    source = \"cloudposse/security-group/aws\",\n    version = \"2.2.0\",\n    subdir = \"\",\n    srcs = glob(\n        [\"**/*.tf\", \"**/*.tf.json\"],\n        allow_empty = True,\n    ),\n    visibility = [\"//visibility:public\"],\n)\n"
+            }
+          },
+          "test_transitive_registry_modules_cloudposse_label_null_0.25.0": {
+            "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_archive",
+            "attributes": {
+              "urls": [
+                "https://github.com/cloudposse/terraform-null-label/archive/refs/tags/0.25.0.tar.gz"
+              ],
+              "integrity": "sha256-fZlEtS/t7DyCrlnizzbduo9epOyV5w+Z9NGOx0HWCNw=",
+              "strip_prefix": "terraform-null-label-0.25.0",
+              "build_file_content": "load(\"@rules_terraform//terraform/private:terraform.bzl\", \"terraform_external_module\")\n\nterraform_external_module(\n    name = \"module\",\n    key = \"cloudposse_label_null_0.25.0\",\n    source = \"cloudposse/label/null\",\n    version = \"0.25.0\",\n    subdir = \"\",\n    srcs = glob(\n        [\"**/*.tf\", \"**/*.tf.json\"],\n        allow_empty = True,\n    ),\n    visibility = [\"//visibility:public\"],\n)\n"
+            }
+          },
+          "test_transitive_registry_modules": {
+            "repoRuleId": "@@//terraform/private:module_repo.bzl%terraform_module_hub",
+            "attributes": {
+              "module_repos": [
+                "test_transitive_registry_modules_sg",
+                "test_transitive_registry_modules_cloudposse_label_null_0.25.0"
+              ]
+            }
           }
         },
         "moduleExtensionMetadata": {
@@ -796,9 +829,21 @@
   "facts": {
     "//terraform:extensions.bzl%terraform": {
       "cloudposse/label/null@0.25.0": {
+        "deps": [],
         "integrity": "sha256-fZlEtS/t7DyCrlnizzbduo9epOyV5w+Z9NGOx0HWCNw=",
         "strip_prefix": "terraform-null-label-0.25.0",
         "url": "https://github.com/cloudposse/terraform-null-label/archive/refs/tags/0.25.0.tar.gz"
+      },
+      "cloudposse/security-group/aws@2.2.0": {
+        "deps": [
+          {
+            "source": "cloudposse/label/null",
+            "version": "0.25.0"
+          }
+        ],
+        "integrity": "sha256-0ipWHHP8v8th5tQt+5j5OFhZZNFtVChXuFZwCKjfWKo=",
+        "strip_prefix": "terraform-aws-security-group-2.2.0",
+        "url": "https://github.com/cloudposse/terraform-aws-security-group/archive/refs/tags/2.2.0.tar.gz"
       }
     },
     "@@rules_go+//go:extensions.bzl%go_sdk": {
