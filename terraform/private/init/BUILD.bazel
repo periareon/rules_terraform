@@ -10,6 +10,7 @@ go_library(
         "//terraform/private/internal/fsutil",
         "//terraform/private/internal/lockparse",
         "//terraform/private/internal/moduledir",
+        "//terraform/private/internal/semver",
         "//terraform/private/internal/tfparse",
     ],
 )

@@ -151,6 +151,32 @@ def resolve_archive_url(module_ctx, registry, source, version):
          "only https://github.com/… is supported today.").format(source, version, git_source),
     )
 
+def split_module_subdir(source):
+    """Split Terraform's `<module>//<subdir>` suffix off a module source.
+
+    A registry module may publish several modules in one repository, and a
+    `module` block reaches the inner ones with a double slash:
+    `terraform-aws-modules/eks/aws//modules/karpenter`. The registry API knows
+    nothing about the suffix — it addresses the whole module — so it has to
+    come off before any URL is built from the source, and come back on when
+    the archive is unpacked.
+
+    Only call this on a source `is_registry_source` has accepted: the `//` in
+    `https://…` is not a subdir separator.
+
+    Args:
+        source: (str) A registry-shaped `source` value.
+
+    Returns:
+        (tuple[str, str]) `(source_without_subdir, subdir)`; `subdir` is `""`
+        when the source has no suffix.
+    """
+    idx = source.find("//")
+    if idx < 0:
+        return source, ""
+    subdir = source[idx + 2:].strip("/")
+    return source[:idx], subdir
+
 def is_registry_source(source):
     """Return True iff `source` looks like a Terraform Registry reference.
 
@@ -169,4 +195,10 @@ def is_registry_source(source):
     for prefix in ("./", "../", "/", "git::", "git@", "http://", "https://", "s3::", "gcs::"):
         if source.startswith(prefix):
             return False
-    return len(source.split("/")) >= 3
+
+    # Shape is decided on the address alone. A `//subdir` suffix says which
+    # module inside the source is wanted, not whether the source is a registry
+    # one, and counting its segments would let any path with enough slashes in
+    # it pass for a registry reference.
+    base, _ = split_module_subdir(source)
+    return len(base.split("/")) >= 3

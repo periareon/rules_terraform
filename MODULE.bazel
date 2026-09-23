@@ -52,6 +52,14 @@ terraform.modules(
     name = "test_nested_registry_modules",
     root = "//tests/nested_registry/modules/wrapper:main.tf",
 )
+
+# A registry module composed of another registry module. The hub holds both,
+# though only the parent is named by a `module` block here — see
+# //tests/transitive_registry.
+terraform.modules(
+    name = "test_transitive_registry_modules",
+    root = "//tests/transitive_registry:main.tf",
+)
 use_repo(
     terraform,
     "test_nested_registry_modules",
@@ -59,6 +67,7 @@ use_repo(
     "test_providers_with_provider",
     "test_providers_with_third_party",
     "test_registry_modules",
+    "test_transitive_registry_modules",
 )
 
 go_sdk = use_extension("@rules_go//go:extensions.bzl", "go_sdk")

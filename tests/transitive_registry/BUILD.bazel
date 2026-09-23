@@ -1,0 +1,28 @@
+load("//terraform:terraform_module.bzl", "terraform_module")
+load("//tests/private:init_test.bzl", "terraform_init_test")
+
+terraform_module(
+    name = "transitive_registry",
+    srcs = glob(["*.tf"]),
+    # `cloudposse/security-group/aws` declares aws/null/random providers, and
+    # installing those to prove module *placement* would make the fixture about
+    # something else. What is under test is the tree the init aspect builds, so
+    # assert on that directly and let the engine sit this one out.
+    tags = ["no_validate"],
+    deps = ["@test_transitive_registry_modules"],
+)
+
+terraform_init_test(
+    name = "transitive_registry_init_test",
+    expected_files = [
+        "main.tf",
+        ".terraform/modules/sg/main.tf",
+        # The whole point. Keyed by the dotted path of block names reaching it,
+        # which is where the engine looks. Resolving one level deep left this
+        # directory missing on both halves at once: the extension never fetched
+        # the module, and the init tool never walked the parent to find out it
+        # was wanted.
+        ".terraform/modules/sg.this/main.tf",
+    ],
+    target = ":transitive_registry",
+)
