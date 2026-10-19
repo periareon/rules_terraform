@@ -3596,6 +3596,534 @@ TERRAFORM_VERSIONS = {
             "url": "https://releases.hashicorp.com/terraform/1.15.8/terraform_1.15.8_windows_arm64.zip",
         },
     },
+    "1.15.9": {
+        "darwin_amd64": {
+            "integrity": "sha256-PpfEmfrIB0rfo3YDAGYqAVjy/TJRRJZd0AKN7sQIbGs=",
+            "url": "https://releases.hashicorp.com/terraform/1.15.9/terraform_1.15.9_darwin_amd64.zip",
+        },
+        "darwin_arm64": {
+            "integrity": "sha256-BbJ1hqXX2EEFaQ7MzH7bv0i8PW1Xd0XLYfFjupkK308=",
+            "url": "https://releases.hashicorp.com/terraform/1.15.9/terraform_1.15.9_darwin_arm64.zip",
+        },
+        "freebsd_386": {
+            "integrity": "sha256-SbEs15nOZxYodijjO3wHVcY8Y+TmCeqpXbPAw6WuNdw=",
+            "url": "https://releases.hashicorp.com/terraform/1.15.9/terraform_1.15.9_freebsd_386.zip",
+        },
+        "freebsd_amd64": {
+            "integrity": "sha256-TVMaAvPYsfbZx32+JstC/fR5SAp3+o638Jd8e594mqs=",
+            "url": "https://releases.hashicorp.com/terraform/1.15.9/terraform_1.15.9_freebsd_amd64.zip",
+        },
+        "freebsd_arm": {
+            "integrity": "sha256-rdT3styLqyErFYkXaWhLT3Dvsc3s71UUk0YOaGZ4kQ8=",
+            "url": "https://releases.hashicorp.com/terraform/1.15.9/terraform_1.15.9_freebsd_arm.zip",
+        },
+        "linux_386": {
+            "integrity": "sha256-XKqjKnCZ3UDvtDZ545IQlbZl7dJ3s8S+guZag/Lk/IQ=",
+            "url": "https://releases.hashicorp.com/terraform/1.15.9/terraform_1.15.9_linux_386.zip",
+        },
+        "linux_amd64": {
+            "integrity": "sha256-du3Qsi0vJ9PS4JfNeTIJZG9xnPYPAv869iawc2ETfaE=",
+            "url": "https://releases.hashicorp.com/terraform/1.15.9/terraform_1.15.9_linux_amd64.zip",
+        },
+        "linux_arm": {
+            "integrity": "sha256-m3pnov8ttHaKaX25b6WFmuTJSQ98TzZfqLm0Dse4cK4=",
+            "url": "https://releases.hashicorp.com/terraform/1.15.9/terraform_1.15.9_linux_arm.zip",
+        },
+        "linux_arm64": {
+            "integrity": "sha256-CvpsKfYcpeonDpUOQ+UOzyQYtZhQe/WA6K524eZpmxk=",
+            "url": "https://releases.hashicorp.com/terraform/1.15.9/terraform_1.15.9_linux_arm64.zip",
+        },
+        "linux_s390x": {
+            "integrity": "sha256-rjpyGzWxY23n5yvAEb7cPTdymIhYQW8ayFruCy9XtkQ=",
+            "url": "https://releases.hashicorp.com/terraform/1.15.9/terraform_1.15.9_linux_s390x.zip",
+        },
+        "openbsd_386": {
+            "integrity": "sha256-WXyyvPtL3RATSy4C+swymuno0izKV20XhRosUOLGzD0=",
+            "url": "https://releases.hashicorp.com/terraform/1.15.9/terraform_1.15.9_openbsd_386.zip",
+        },
+        "openbsd_amd64": {
+            "integrity": "sha256-rg5ZwDBluHf435JNTTjHDgZb9wIsAgD/KxgelyecydQ=",
+            "url": "https://releases.hashicorp.com/terraform/1.15.9/terraform_1.15.9_openbsd_amd64.zip",
+        },
+        "solaris_amd64": {
+            "integrity": "sha256-aEECR+1JvjgJQU58BHTHUwi/6dxsGCCjgf3S4VZaGro=",
+            "url": "https://releases.hashicorp.com/terraform/1.15.9/terraform_1.15.9_solaris_amd64.zip",
+        },
+        "windows_386": {
+            "integrity": "sha256-UZXpuoC9yJ566CvFoD6MzP7aucfmh89Q5XMQo1ZVZ3s=",
+            "url": "https://releases.hashicorp.com/terraform/1.15.9/terraform_1.15.9_windows_386.zip",
+        },
+        "windows_amd64": {
+            "integrity": "sha256-sPzVfiq9GfxtjmS4aiL18/tzSwQHOFVTzc/8ZGd/GLY=",
+            "url": "https://releases.hashicorp.com/terraform/1.15.9/terraform_1.15.9_windows_amd64.zip",
+        },
+        "windows_arm64": {
+            "integrity": "sha256-rjWg31iZZA3wnT7Wpd6IFZSVubUNLj66muVkNUGTgy8=",
+            "url": "https://releases.hashicorp.com/terraform/1.15.9/terraform_1.15.9_windows_arm64.zip",
+        },
+    },
+    "1.16.0": {
+        "darwin_amd64": {
+            "integrity": "sha256-Kyt9N/aJNHT6NiL6lgU+VJScTd/KSroQU4BxgVeTZGU=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.0/terraform_1.16.0_darwin_amd64.zip",
+        },
+        "darwin_arm64": {
+            "integrity": "sha256-XdaSxsx2tZYCn/PCsrTDoXEPktPebS2j9mvS4MLaqSo=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.0/terraform_1.16.0_darwin_arm64.zip",
+        },
+        "freebsd_386": {
+            "integrity": "sha256-AhbwpiXCK/MJ6NhbsW7bAd/vvADEEL0iVGxdJMsXcTU=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.0/terraform_1.16.0_freebsd_386.zip",
+        },
+        "freebsd_amd64": {
+            "integrity": "sha256-O/R1WxYruqEC9Kgmk2nfKELzNZ0xQUnN9OKgShBn0Js=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.0/terraform_1.16.0_freebsd_amd64.zip",
+        },
+        "freebsd_arm": {
+            "integrity": "sha256-Kg1aEIxzYmaoJarI+XyTpOBFC1NfD8WnRogGy7D0Cy0=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.0/terraform_1.16.0_freebsd_arm.zip",
+        },
+        "linux_386": {
+            "integrity": "sha256-GmGCneo7tRlEM/ikRhnNaWgXcG+04tZ8qqVqoL3GveM=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.0/terraform_1.16.0_linux_386.zip",
+        },
+        "linux_amd64": {
+            "integrity": "sha256-QdBbknqhdPFdEijE66gyoyO3FsaLQV71oAF59GzGAtM=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.0/terraform_1.16.0_linux_amd64.zip",
+        },
+        "linux_arm": {
+            "integrity": "sha256-rm96iR+n1lsw18HOvNArLqKZhjLsPe8gC0+509PxNck=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.0/terraform_1.16.0_linux_arm.zip",
+        },
+        "linux_arm64": {
+            "integrity": "sha256-YPhs6kmmU+Iqk8AA8Wy/o5HOQcb2oR02VXw12kEfaEw=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.0/terraform_1.16.0_linux_arm64.zip",
+        },
+        "linux_s390x": {
+            "integrity": "sha256-fYqhipIaKHvXn7smKjJbghDBDNNHMqg6DW4mej9i1G8=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.0/terraform_1.16.0_linux_s390x.zip",
+        },
+        "openbsd_386": {
+            "integrity": "sha256-tBoTeZNKA+olRC6wC/wLDGyMVCb0z59TH6GOZIzA/vo=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.0/terraform_1.16.0_openbsd_386.zip",
+        },
+        "openbsd_amd64": {
+            "integrity": "sha256-lCUUQ+w3SJl+3Z6FFjd/KS2VC3IFBfon3K3T4dS1Qbc=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.0/terraform_1.16.0_openbsd_amd64.zip",
+        },
+        "solaris_amd64": {
+            "integrity": "sha256-W4snR9qNbw6Kxof44vWChXLFIvJbYzgH/sW1EzzGi9A=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.0/terraform_1.16.0_solaris_amd64.zip",
+        },
+        "windows_386": {
+            "integrity": "sha256-6umMFkLudKlrMt9uXCqdYmfWUqQ1FxGZE519bTxZQp8=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.0/terraform_1.16.0_windows_386.zip",
+        },
+        "windows_amd64": {
+            "integrity": "sha256-KlCpUgUYnByfzvvTTqqelOyQWjKkiAv+o075+XdXxz8=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.0/terraform_1.16.0_windows_amd64.zip",
+        },
+        "windows_arm64": {
+            "integrity": "sha256-/eQCvhGXkRz1QBo7z8sfSj03MpT41B6RC5Pcz51Gjw4=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.0/terraform_1.16.0_windows_arm64.zip",
+        },
+    },
+    "1.16.1": {
+        "darwin_amd64": {
+            "integrity": "sha256-PxZef6vbjsRBUUlEGO+h6AlcP1ie2Ddqk1eKloZ6Biw=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.1/terraform_1.16.1_darwin_amd64.zip",
+        },
+        "darwin_arm64": {
+            "integrity": "sha256-4iy6dh3b1NIYk5socVqzrzeq+KQu+kH311ssPXNjYGA=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.1/terraform_1.16.1_darwin_arm64.zip",
+        },
+        "freebsd_386": {
+            "integrity": "sha256-ucvPHql9TvkKi2aHdT+3p4MBrXMP1Xp4mMvo8epLW6A=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.1/terraform_1.16.1_freebsd_386.zip",
+        },
+        "freebsd_amd64": {
+            "integrity": "sha256-M5iePV10JVAw3+sJeCqNqA1zVUzYOvgqtLyMSVX/6vE=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.1/terraform_1.16.1_freebsd_amd64.zip",
+        },
+        "freebsd_arm": {
+            "integrity": "sha256-UDlfLiNi4dcD4wA/lq5CqhGzpiputD2w/RxMClDSfGg=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.1/terraform_1.16.1_freebsd_arm.zip",
+        },
+        "linux_386": {
+            "integrity": "sha256-bCvKkln2To6h2iNvPbf0dCZhQfK1Db91WUuEp4RUfT0=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.1/terraform_1.16.1_linux_386.zip",
+        },
+        "linux_amd64": {
+            "integrity": "sha256-dF0ztLAreYDGKjjsG+6iTuCE6oyvP1A8IAVUvZoMvkk=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.1/terraform_1.16.1_linux_amd64.zip",
+        },
+        "linux_arm": {
+            "integrity": "sha256-1grW36gT6olHCtHqL1R3bltKbBaHFhlXFYxximChQCA=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.1/terraform_1.16.1_linux_arm.zip",
+        },
+        "linux_arm64": {
+            "integrity": "sha256-QjKIojqwJNQqwFxAmXJYX37AzxvlcrdzrZUvmhxBOH0=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.1/terraform_1.16.1_linux_arm64.zip",
+        },
+        "linux_s390x": {
+            "integrity": "sha256-XN9wyJUEQaqdgOw8SmYIooRMa1txrMkvsF418QGcAzE=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.1/terraform_1.16.1_linux_s390x.zip",
+        },
+        "openbsd_386": {
+            "integrity": "sha256-AfwuYFZ/x26YvQAzP6K9wJMdiyfNKTVvxaOr176c1s4=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.1/terraform_1.16.1_openbsd_386.zip",
+        },
+        "openbsd_amd64": {
+            "integrity": "sha256-LzwwEj99T6nNtr5/0/k7qfZk46TRuQrdSeRTqDVID3I=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.1/terraform_1.16.1_openbsd_amd64.zip",
+        },
+        "solaris_amd64": {
+            "integrity": "sha256-kZHj/788ZWmcIZKpDKEDp9sGX38MnMF57ZK8pMONwYM=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.1/terraform_1.16.1_solaris_amd64.zip",
+        },
+        "windows_386": {
+            "integrity": "sha256-gsPIoMMcYKx/WcH538jyakcgFCwmtSfBl1RLrEDm7rg=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.1/terraform_1.16.1_windows_386.zip",
+        },
+        "windows_amd64": {
+            "integrity": "sha256-XGxtj+31bOKcVfDB/JHePCWfQsLSIKKOgntbYP1Hv6E=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.1/terraform_1.16.1_windows_amd64.zip",
+        },
+        "windows_arm64": {
+            "integrity": "sha256-oXd9nmvOd2SEPCOoivqqpoxDdF3K12vnvvDNGExEddk=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.1/terraform_1.16.1_windows_arm64.zip",
+        },
+    },
+    "1.16.2": {
+        "darwin_amd64": {
+            "integrity": "sha256-J19Q7Rcq8vI+FaLOfjJRqsixe3aPLmLs64HDU80Qar8=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.2/terraform_1.16.2_darwin_amd64.zip",
+        },
+        "darwin_arm64": {
+            "integrity": "sha256-fAoLMciqVBNRNpvPe2KnKJ+8Id5+V3ZprrptQvTmzEE=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.2/terraform_1.16.2_darwin_arm64.zip",
+        },
+        "freebsd_386": {
+            "integrity": "sha256-Vg5UShOtAZG1OyFe9mqnGaORpn36AFu52OKktBKjrN0=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.2/terraform_1.16.2_freebsd_386.zip",
+        },
+        "freebsd_amd64": {
+            "integrity": "sha256-3tMCs2l83eaEMzoAFW5i49MresK1PouPujxzyay55Po=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.2/terraform_1.16.2_freebsd_amd64.zip",
+        },
+        "freebsd_arm": {
+            "integrity": "sha256-R+grrBXAn6Eg4IUxLSKcpSZ6Ky1GXDjVqbKWTpX9X6Y=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.2/terraform_1.16.2_freebsd_arm.zip",
+        },
+        "linux_386": {
+            "integrity": "sha256-QLkPL21z6GIqc+X6dpidoq/Lg6KrhyrSRyhEwT/YZQY=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.2/terraform_1.16.2_linux_386.zip",
+        },
+        "linux_amd64": {
+            "integrity": "sha256-DRcBHwxGZFObFksESQPQTilshsE8ufKAQAdsZc+zmFo=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.2/terraform_1.16.2_linux_amd64.zip",
+        },
+        "linux_arm": {
+            "integrity": "sha256-RW0/xLLTsEUJzcC9HwD+RTXSxMjHTn2nKYZLx1tnM1s=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.2/terraform_1.16.2_linux_arm.zip",
+        },
+        "linux_arm64": {
+            "integrity": "sha256-wEC9HjEitCkPcPdCiNjFpU3dQlSj5Sop58xmZlP1Cgo=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.2/terraform_1.16.2_linux_arm64.zip",
+        },
+        "linux_s390x": {
+            "integrity": "sha256-qF8NOyZAhxj1n13TPlL8lgk+UkXSFZmQk7xN1gRw0qM=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.2/terraform_1.16.2_linux_s390x.zip",
+        },
+        "openbsd_386": {
+            "integrity": "sha256-+vnVAV0orexM3k6sOtdYZFNrf9BqDunRacaUKmEmsuc=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.2/terraform_1.16.2_openbsd_386.zip",
+        },
+        "openbsd_amd64": {
+            "integrity": "sha256-5GmxNQKgEGXeljOyGRefaE71VbaRoPACCQRxuR6HNW4=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.2/terraform_1.16.2_openbsd_amd64.zip",
+        },
+        "solaris_amd64": {
+            "integrity": "sha256-SBypubnY8xL8OT0CUYm5/XotHKdwrxe9Jz4rs1Wq8/I=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.2/terraform_1.16.2_solaris_amd64.zip",
+        },
+        "windows_386": {
+            "integrity": "sha256-aiLR5gZUgwIvklEjGReDEdz4IHJYvoAtw+/OBzARLgI=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.2/terraform_1.16.2_windows_386.zip",
+        },
+        "windows_amd64": {
+            "integrity": "sha256-bvFAzh05ncQ7gxUZQXbdwt+1wh1geWjoLvIKVc//QNA=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.2/terraform_1.16.2_windows_amd64.zip",
+        },
+        "windows_arm64": {
+            "integrity": "sha256-Ri6wDAaHwye19LJ+z2/Vuqy8/quLFf7r0vrPl+YxstE=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.2/terraform_1.16.2_windows_arm64.zip",
+        },
+    },
+    "1.16.3": {
+        "darwin_amd64": {
+            "integrity": "sha256-G5M8YXgjkFMTdCkDCa2oQGzZI2R4k8L1K13YON4jgDo=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.3/terraform_1.16.3_darwin_amd64.zip",
+        },
+        "darwin_arm64": {
+            "integrity": "sha256-wsRUJepFaNqYA+En5YkYbLN5illE2a/1pbwV3RgmdWA=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.3/terraform_1.16.3_darwin_arm64.zip",
+        },
+        "freebsd_386": {
+            "integrity": "sha256-Sgaoz/aBU0teeSyBbunmjyU1NGZVurJHa+m/yvElloA=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.3/terraform_1.16.3_freebsd_386.zip",
+        },
+        "freebsd_amd64": {
+            "integrity": "sha256-KzqCqKqsENYiKVpOfDL2yd6chO1kU9PheRqW+cF0NGM=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.3/terraform_1.16.3_freebsd_amd64.zip",
+        },
+        "freebsd_arm": {
+            "integrity": "sha256-B/yiKOuncpENT0KFH9ZGiyijUiUHeGSumbulLnac+fg=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.3/terraform_1.16.3_freebsd_arm.zip",
+        },
+        "linux_386": {
+            "integrity": "sha256-iliItmfVWCcJ36CdQ26LDnUhT6LR1cjd5ij1gW87sAA=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.3/terraform_1.16.3_linux_386.zip",
+        },
+        "linux_amd64": {
+            "integrity": "sha256-CTtq6aIiivUCnEFga8lutYNVNSiq0b/n4LTWL8keJdg=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.3/terraform_1.16.3_linux_amd64.zip",
+        },
+        "linux_arm": {
+            "integrity": "sha256-L1DYi5nXwBRcwc9RrfksRsv/byEadTnES/Mxm6pQu18=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.3/terraform_1.16.3_linux_arm.zip",
+        },
+        "linux_arm64": {
+            "integrity": "sha256-trKTVQr3pqf/2GegSQDOFh24bslAeyNKY2wq264sqfA=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.3/terraform_1.16.3_linux_arm64.zip",
+        },
+        "linux_s390x": {
+            "integrity": "sha256-D4CndxHkPYG811lz10kOnwgklxBWJlr0rv6B7WswhMI=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.3/terraform_1.16.3_linux_s390x.zip",
+        },
+        "openbsd_386": {
+            "integrity": "sha256-ckwZ43CVdOqW8QfZnTDV8Fr6QHVxBv/qHCGRQ+TKdQk=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.3/terraform_1.16.3_openbsd_386.zip",
+        },
+        "openbsd_amd64": {
+            "integrity": "sha256-IT2hMCGufWex6ej/J+6WugwIgYvoIW26vjuCHc4ADKw=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.3/terraform_1.16.3_openbsd_amd64.zip",
+        },
+        "solaris_amd64": {
+            "integrity": "sha256-7BRk6/cVUC96Yd3y23QnKBGDDz078bDLus5Nlqoe19g=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.3/terraform_1.16.3_solaris_amd64.zip",
+        },
+        "windows_386": {
+            "integrity": "sha256-bhA5PjzjRW7xON/yzmh21Bk/AZ0GAYGrH9mp7JPbW70=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.3/terraform_1.16.3_windows_386.zip",
+        },
+        "windows_amd64": {
+            "integrity": "sha256-b5CKkOVjev5ycFKQr9HNcfxPKHcwPKd/BajG6tGWsRw=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.3/terraform_1.16.3_windows_amd64.zip",
+        },
+        "windows_arm64": {
+            "integrity": "sha256-WIKEdZiLoGdMiFT4SZHewvM3Krx41t72J01HSTsBFwA=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.3/terraform_1.16.3_windows_arm64.zip",
+        },
+    },
+    "1.16.4": {
+        "darwin_amd64": {
+            "integrity": "sha256-LuS2IGQIbksksNbPLmFxj7rwVW/rqZD3CKXjJVdVSzs=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.4/terraform_1.16.4_darwin_amd64.zip",
+        },
+        "darwin_arm64": {
+            "integrity": "sha256-Qs/fl61yL3kIX+InmwbUuGgBct41NLIu7d2aD7vnuPE=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.4/terraform_1.16.4_darwin_arm64.zip",
+        },
+        "freebsd_386": {
+            "integrity": "sha256-EIwULvXwis2hWGVJ21x7asQvkEJeOttiQeZTC4XPYDQ=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.4/terraform_1.16.4_freebsd_386.zip",
+        },
+        "freebsd_amd64": {
+            "integrity": "sha256-QsCZWZ8l0q8Regov5VUs612fPxDv1P4nxd8JE6c48SM=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.4/terraform_1.16.4_freebsd_amd64.zip",
+        },
+        "freebsd_arm": {
+            "integrity": "sha256-aOHd+zf4ED6JNzwnbeW512TxorMe++wxjb/QnlGZRqU=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.4/terraform_1.16.4_freebsd_arm.zip",
+        },
+        "linux_386": {
+            "integrity": "sha256-01xQIJRuxhMRqFpoGfrKxcWw1CQWaMJQjeuOKe9a/pE=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.4/terraform_1.16.4_linux_386.zip",
+        },
+        "linux_amd64": {
+            "integrity": "sha256-3JSvDu8RR3GK18ja6nku0Znj4Eku7BgNCtr6KmWoed8=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.4/terraform_1.16.4_linux_amd64.zip",
+        },
+        "linux_arm": {
+            "integrity": "sha256-lPmz/F+LnQE5L/tTR68LrV9qebz9umGTa0knnu9ghA8=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.4/terraform_1.16.4_linux_arm.zip",
+        },
+        "linux_arm64": {
+            "integrity": "sha256-gmPzAcsaJEiaSt7tFHvyhQQFP3cjez6peg7ylyZZ3jA=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.4/terraform_1.16.4_linux_arm64.zip",
+        },
+        "linux_s390x": {
+            "integrity": "sha256-Vi7+OszaPLCL4DjKY3e4tVWzPStkV7pKjhG4Pc8iN38=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.4/terraform_1.16.4_linux_s390x.zip",
+        },
+        "openbsd_386": {
+            "integrity": "sha256-tAn7CktaOhghABtuP+WGRdAfwcva1ncEstnrzpaadFo=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.4/terraform_1.16.4_openbsd_386.zip",
+        },
+        "openbsd_amd64": {
+            "integrity": "sha256-smTUCnoeOno/DHjQEdqNAUrOjqdzkea/SRxbpvl2Juo=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.4/terraform_1.16.4_openbsd_amd64.zip",
+        },
+        "solaris_amd64": {
+            "integrity": "sha256-8td6c6VgC8HPohb4PrjnZ/yfIgK7S8j1edeN/x88Zls=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.4/terraform_1.16.4_solaris_amd64.zip",
+        },
+        "windows_386": {
+            "integrity": "sha256-LPr/SH06rDfvCJeAMJzuNHJPJsnIZmLonSVD+DOxak8=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.4/terraform_1.16.4_windows_386.zip",
+        },
+        "windows_amd64": {
+            "integrity": "sha256-XHNu1rDxPpi8UCn+FZV0zKM2NMNHdGbFZELCi1E6cFQ=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.4/terraform_1.16.4_windows_amd64.zip",
+        },
+        "windows_arm64": {
+            "integrity": "sha256-7phMRBbVWS3rxuMU+TGtsiLKRFuKsjznVsd3IlOJ6fY=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.4/terraform_1.16.4_windows_arm64.zip",
+        },
+    },
+    "1.16.5": {
+        "darwin_amd64": {
+            "integrity": "sha256-mAkVjkgc8tOoQz5ZF585e47bUXI5dxG9mPa7Mu3K9Ts=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.5/terraform_1.16.5_darwin_amd64.zip",
+        },
+        "darwin_arm64": {
+            "integrity": "sha256-7N72XiQZPWJ/J8ObrtoxKV8IyTjYo9R2T0QvuRbUt9w=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.5/terraform_1.16.5_darwin_arm64.zip",
+        },
+        "freebsd_386": {
+            "integrity": "sha256-4O1Nv9qJeWRzP8e4o2l3JehMPRqY5dZ8jKdd17A7qbY=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.5/terraform_1.16.5_freebsd_386.zip",
+        },
+        "freebsd_amd64": {
+            "integrity": "sha256-BCsctodzVcX3QzWUyiY1Zwe6e4O9zCZkiiz5jqDNP4M=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.5/terraform_1.16.5_freebsd_amd64.zip",
+        },
+        "freebsd_arm": {
+            "integrity": "sha256-JeJSox7lP9uQUY6NvX1qZUj2imEGPgnL7OfZ2S26J/Y=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.5/terraform_1.16.5_freebsd_arm.zip",
+        },
+        "linux_386": {
+            "integrity": "sha256-5t56C0rPtstNq6XGVNyG77K1wq+OzViyoomDooloVhk=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.5/terraform_1.16.5_linux_386.zip",
+        },
+        "linux_amd64": {
+            "integrity": "sha256-K8L8//AzJlyeAsoDUfAXlOsSL2KpsqSaMpS55J6qteQ=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.5/terraform_1.16.5_linux_amd64.zip",
+        },
+        "linux_arm": {
+            "integrity": "sha256-5pg518Po19HEnnihymkC6VgYoUF52thzKxMXG7xggJ4=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.5/terraform_1.16.5_linux_arm.zip",
+        },
+        "linux_arm64": {
+            "integrity": "sha256-YaULAEhe5IEM8gWB7wgPxU001mbhdcWNmhBQHGXBzN4=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.5/terraform_1.16.5_linux_arm64.zip",
+        },
+        "linux_s390x": {
+            "integrity": "sha256-krVriyUaR5kx+X9oLlqQBEvhI5xTfSmuIerqKZqv2e0=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.5/terraform_1.16.5_linux_s390x.zip",
+        },
+        "openbsd_386": {
+            "integrity": "sha256-3XuRJjxu+XetJ0Irsu1ueub9bUl8WSl3aDhQG708lsg=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.5/terraform_1.16.5_openbsd_386.zip",
+        },
+        "openbsd_amd64": {
+            "integrity": "sha256-Os8exFiZ5gu06CCKsWLeauZRMxCDnkPEUGXvRNfWo+g=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.5/terraform_1.16.5_openbsd_amd64.zip",
+        },
+        "solaris_amd64": {
+            "integrity": "sha256-/HIyy3tfdHD+yEpZrs3uBHdJdUUO+YywZaUlZgKaojI=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.5/terraform_1.16.5_solaris_amd64.zip",
+        },
+        "windows_386": {
+            "integrity": "sha256-u7OlJe+6TORNLTgM02qp/S/yN3j1Eg4LdElFZP73xAQ=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.5/terraform_1.16.5_windows_386.zip",
+        },
+        "windows_amd64": {
+            "integrity": "sha256-AXABArcpH5XAq2E5S1W/1fV6EqxlYywsGVhpHIz0OO8=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.5/terraform_1.16.5_windows_amd64.zip",
+        },
+        "windows_arm64": {
+            "integrity": "sha256-9ZeMxzZ4r3ZMB5nNSWD5OmANidqiP4M8bzBw8udYxJA=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.5/terraform_1.16.5_windows_arm64.zip",
+        },
+    },
+    "1.16.6": {
+        "darwin_amd64": {
+            "integrity": "sha256-eUo2w/fr9sWPIInCJgaKU50XBbo1ilZ5tRZxyNx+vHs=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.6/terraform_1.16.6_darwin_amd64.zip",
+        },
+        "darwin_arm64": {
+            "integrity": "sha256-heG8eKtFvcX4KnusOSnjfQcoNKWE0iWDokmNxnu2JM0=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.6/terraform_1.16.6_darwin_arm64.zip",
+        },
+        "freebsd_386": {
+            "integrity": "sha256-+oDR2MWmUpb8DlGyYTKO1PBnsPGy8tgfvObAmAgtL0c=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.6/terraform_1.16.6_freebsd_386.zip",
+        },
+        "freebsd_amd64": {
+            "integrity": "sha256-vwSSAXCvOIMDoXaCT1tfzL7SS8uNOahndaGIQbkjpSY=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.6/terraform_1.16.6_freebsd_amd64.zip",
+        },
+        "freebsd_arm": {
+            "integrity": "sha256-FcN2E1IUT0XlQ+p+nUl6DBaxkpn/EACijsVWN90YFg4=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.6/terraform_1.16.6_freebsd_arm.zip",
+        },
+        "linux_386": {
+            "integrity": "sha256-8bgd1+YhF1B3F7hIj+8mCHnSJuFJowIDH6lKPML36HU=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.6/terraform_1.16.6_linux_386.zip",
+        },
+        "linux_amd64": {
+            "integrity": "sha256-OANLONAwljmaehJkoUVhqAKbK0lv0fFpRSZW5Tlo8bc=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.6/terraform_1.16.6_linux_amd64.zip",
+        },
+        "linux_arm": {
+            "integrity": "sha256-2Go/N/xg/Y0XPTyWaVfYoPp8juEx7p7BAL6NBnM8dyg=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.6/terraform_1.16.6_linux_arm.zip",
+        },
+        "linux_arm64": {
+            "integrity": "sha256-p1C1oRA48WWEayZYxAyIzXBwqmemG6tDGhS6J5KOqeo=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.6/terraform_1.16.6_linux_arm64.zip",
+        },
+        "linux_s390x": {
+            "integrity": "sha256-kwLHuB5uk/xt/aIwWVW9G6KKFOisTHC8JrlyYt184bY=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.6/terraform_1.16.6_linux_s390x.zip",
+        },
+        "openbsd_386": {
+            "integrity": "sha256-HCanTWcs2xwZXXxFUmpqt7Jj0q9YeTKqo2tlkNLpPNQ=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.6/terraform_1.16.6_openbsd_386.zip",
+        },
+        "openbsd_amd64": {
+            "integrity": "sha256-/qaufWc8dBuwVrYv5myQGpoQXFmUCBI3OelfQWy4uSE=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.6/terraform_1.16.6_openbsd_amd64.zip",
+        },
+        "solaris_amd64": {
+            "integrity": "sha256-a7Uyh3oiN/tCkjCu4nmZjWDNsccuRJrhwb/gm69AOfo=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.6/terraform_1.16.6_solaris_amd64.zip",
+        },
+        "windows_386": {
+            "integrity": "sha256-UqYcHc16dQzxxr/3FPp8rl+8BiTnY3xHFixeOKR9gP0=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.6/terraform_1.16.6_windows_386.zip",
+        },
+        "windows_amd64": {
+            "integrity": "sha256-bqLBhuDnahE68w+83PektMcHVjF5lKBJKeXJC56Usd8=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.6/terraform_1.16.6_windows_amd64.zip",
+        },
+        "windows_arm64": {
+            "integrity": "sha256-De5DS1OJ1aJcBgYdAPFE3w2GkaBjs2p/TY8Z6CiHeZM=",
+            "url": "https://releases.hashicorp.com/terraform/1.16.6/terraform_1.16.6_windows_arm64.zip",
+        },
+    },
     "1.2.0": {
         "darwin_amd64": {
             "integrity": "sha256-GxAro78MYP9svudPchv4EFeTwRB6HG0D3KuY1wefDHc=",
@@ -7368,4 +7896,4 @@ TERRAFORM_VERSIONS = {
     },
 }
 
-TERRAFORM_DEFAULT_VERSION = "1.15.8"
+TERRAFORM_DEFAULT_VERSION = "1.16.6"
