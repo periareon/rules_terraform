@@ -79,7 +79,15 @@ func ParseFile(path string) ([]ModuleBlock, error) {
 	return out, nil
 }
 
-// ParseDir scans every .tf file directly under dir (non-recursive) for module blocks.
+// IsConfigFile reports whether name is an HCL configuration file the scanner
+// reads: `.tf`, or OpenTofu's `.tofu`. JSON-syntax configuration is not
+// scanned.
+func IsConfigFile(name string) bool {
+	return strings.HasSuffix(name, ".tf") || strings.HasSuffix(name, ".tofu")
+}
+
+// ParseDir scans every .tf and .tofu file directly under dir (non-recursive)
+// for module blocks.
 func ParseDir(dir string) ([]ModuleBlock, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -88,7 +96,7 @@ func ParseDir(dir string) ([]ModuleBlock, error) {
 
 	var out []ModuleBlock
 	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".tf") {
+		if entry.IsDir() || !IsConfigFile(entry.Name()) {
 			continue
 		}
 		blocks, err := ParseFile(filepath.Join(dir, entry.Name()))

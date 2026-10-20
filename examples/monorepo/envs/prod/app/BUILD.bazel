@@ -9,19 +9,25 @@ environment that uses it editing a BUILD file.
 load("@rules_terraform//terraform:terraform_binary.bzl", "terraform_binary")
 load("@rules_terraform//terraform:terraform_fmt_test.bzl", "terraform_fmt_test")
 load("@rules_terraform//terraform:terraform_module.bzl", "terraform_module")
-load("@rules_terraform//terraform:terraform_modules_lock.bzl", "terraform_providers_lock_test")
+load("@rules_terraform//terraform:terraform_providers_lock.bzl", "terraform_providers_lock")
+load("@rules_terraform//terraform:terraform_providers_lock_test.bzl", "terraform_providers_lock_test")
 load("@rules_terraform//terraform:terraform_test.bzl", "terraform_test")
 load("@rules_terraform//terraform:terraform_validate_test.bzl", "terraform_validate_test")
 
 terraform_module(
     name = "app",
     srcs = glob(["*.tf"]),
+    # Example environments have no backend; see examples/terraform.
+    allow_ephemeral_state = True,
     data = glob(["*.tftest.hcl"]),
-    lock = "//:.terraform.lock.hcl",
+    # `@shared` is the hub for the shared lock: every provider it pins, plus the
+    # lock itself. A Terraform maintainer who adds a provider edits .tf files
+    # and reruns the lock updater; no BUILD file changes.
     deps = [
         "//modules/compute",
+        "//modules/naming",
         "//modules/storage",
-        "@example_providers//hashicorp_null",
+        "@shared",
     ],
 )
 
@@ -51,5 +57,21 @@ terraform_fmt_test(
 terraform_providers_lock_test(
     name = "providers_lock",
     lock = "//:.terraform.lock.hcl",
+    target = ":app",
+)
+
+# `bazel run //envs/prod/app:providers_lock.update` rewrites the repo's shared
+# lock for every platform in the default set, using the toolchain-fetched
+# engine — nothing has to be installed on the host. It lives here rather than
+# at the root because the updater reads this module's sources, and the module
+# is visible only to its own package. `output` is relative to this BUILD file,
+# so it climbs to the root where the shared lock lives.
+#
+# Any root module that reaches every provider the repo uses will do; the lock
+# is resolved from the transitive `required_providers` blocks of `target`,
+# shared library included.
+terraform_providers_lock(
+    name = "providers_lock.update",
+    output = "../../../.terraform.lock.hcl",
     target = ":app",
 )

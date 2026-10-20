@@ -17,6 +17,7 @@ TERRAFORM_RULES = make_engine_rules(
 
 terraform_binary = TERRAFORM_RULES.binary
 terraform_test = TERRAFORM_RULES.test
+terraform_plan_test = TERRAFORM_RULES.plan_test
 terraform_validate_aspect = TERRAFORM_RULES.validate_aspect
 terraform_validate_test = TERRAFORM_RULES.validate_test
 terraform_fmt_aspect = TERRAFORM_RULES.fmt_aspect

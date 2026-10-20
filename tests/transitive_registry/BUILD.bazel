@@ -9,7 +9,7 @@ terraform_module(
     # something else. What is under test is the tree the init aspect builds, so
     # assert on that directly and let the engine sit this one out.
     tags = ["no_validate"],
-    deps = ["@test_transitive_registry_modules"],
+    deps = ["@test_registry_modules"],
 )
 
 terraform_init_test(

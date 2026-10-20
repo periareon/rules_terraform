@@ -1,7 +1,7 @@
 // cli is a thin `bazel run` wrapper: chdir to $BUILD_WORKING_DIRECTORY,
 // then exec the toolchain-resolved terraform/tofu binary with the user's
 // argv. Lets a downstream user drop into any subdirectory of their
-// workspace and invoke `bazel run @terraform -- <cmd>` (or `@opentofu`)
+// workspace and invoke `bazel run @terraform -- <cmd>` (or `@tofu`)
 // as they would run `terraform` / `tofu` natively — without wiring up a
 // per-module `terraform_binary` target.
 //

@@ -1,0 +1,18 @@
+"""Shared library that wraps a registry module.
+
+No provider and therefore no lock: `cloudposse/label/null` is pure
+computation. What it does need is the registry module's files, which arrive
+through the repo's `@shared` hub. `@shared//:modules` is the registry-module half
+of that hub on its own, so validating this library does not install providers
+it never uses. Any environment that depends on this library inherits the dep,
+so nothing registry-related appears in the environments' BUILD files.
+"""
+
+load("@rules_terraform//terraform:terraform_module.bzl", "terraform_module")
+
+terraform_module(
+    name = "naming",
+    srcs = glob(["*.tf"]),
+    visibility = ["//visibility:public"],
+    deps = ["@shared//:modules"],
+)

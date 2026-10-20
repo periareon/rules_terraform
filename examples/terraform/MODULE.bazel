@@ -21,14 +21,18 @@ local_path_override(
 # Toolchains for both terraform and tofu are auto-registered by
 # rules_terraform's own MODULE.bazel. Pick a Terraform release with:
 #
-#   --@rules_terraform//terraform/settings:version=1.14.1
+#   terraform_toolchains = use_extension("@rules_terraform//terraform:extensions.bzl", "terraform_toolchains")
+#   terraform_toolchains.version(version = "1.9.8", default = True)
+#
+# or select among the known releases per invocation with
+#   --@rules_terraform//terraform/settings:version=1.9.8
 #
 # The `terraform` extension fetches every provider named in the checked-in
 # `.terraform.lock.hcl`. Providers land in an external repo — you reference
 # them from `terraform_module.deps` as `@example_providers//<namespace>_<name>`.
 terraform = use_extension("@rules_terraform//terraform:extensions.bzl", "terraform")
-terraform.providers(
-    name = "example_providers",
+terraform.deps(
+    name = "app",
     lock = "//:.terraform.lock.hcl",
 )
-use_repo(terraform, "example_providers")
+use_repo(terraform, "app")

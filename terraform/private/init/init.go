@@ -101,7 +101,6 @@ type ExternalModuleInfo struct {
 	Source  string      `json:"source"`
 	Version string      `json:"version"`
 	Files   []FileEntry `json:"files"`
-	Subdir  string      `json:"subdir,omitempty"`
 }
 
 // LocalModuleInfo is one `terraform_module` dep, offered to resolveLocalModules
@@ -342,8 +341,8 @@ func resolveModuleDir(treeRoot, dir string, candidates []LocalModuleInfo, used [
 		case !staged:
 			return fmt.Errorf(
 				"module %q in %s has source %q, but no dep supplies that directory.\n"+
-					"Add the terraform_module for it to `deps`.%s",
-				block.Key, displayDir(dir), block.Source, unmatchedHint(candidates, used))
+					"Add the terraform_module for it to `deps`.%s%s",
+				block.Key, displayDir(dir), block.Source, relocatedHint(dir, rel, candidates), unmatchedHint(candidates, used))
 		}
 
 		if err := resolveModuleDir(treeRoot, target, candidates, used, visited); err != nil {
@@ -440,6 +439,33 @@ func displayDir(dir string) string {
 func isDir(p string) bool {
 	info, err := os.Stat(p)
 	return err == nil && info.IsDir()
+}
+
+// relocatedHint explains the one way a `../` source goes unmatched that is not
+// a missing dep. A `./` source may be satisfied by a dep from any package whose
+// name ends the same way, which installs that dep somewhere other than where
+// its own `../` sources were written against. The sibling it names is then a
+// directory nothing supplies, and "add the dep" is the wrong advice: the dep is
+// usually already there, under its real path.
+func relocatedHint(dir, rel string, candidates []LocalModuleInfo) string {
+	if !strings.HasPrefix(rel, "../") {
+		return ""
+	}
+	var owner string
+	for _, c := range candidates {
+		if c.Dir == dir {
+			owner = c.Package
+			break
+		}
+	}
+	if owner == "" || strings.HasSuffix(owner, "/"+dir) || owner == dir {
+		return ""
+	}
+	return fmt.Sprintf(
+		"\nNote: %s was installed at %q because a `./` source matched the tail of its package, "+
+			"so its own `../` sources no longer point where they did in the source tree. "+
+			"Reference it by the path it really sits at, or nest it under the module that uses it",
+		owner, dir)
 }
 
 // unmatchedHint lists the deps still looking for a `module` block, so the

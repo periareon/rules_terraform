@@ -15,10 +15,9 @@ load("@rules_terraform//terraform:terraform_module.bzl", "terraform_module")
 terraform_module(
     name = "compute",
     srcs = glob(["*.tf"]),
-    lock = "//:.terraform.lock.hcl",
     visibility = ["//visibility:public"],
     deps = [
         "//modules/network",
-        "@example_providers//hashicorp_null",
+        "@shared",
     ],
 )

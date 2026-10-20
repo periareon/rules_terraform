@@ -4,3 +4,6 @@
 user.bazelrc
 
 .terraform/
+
+# macOS Finder metadata
+.DS_Store

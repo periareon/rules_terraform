@@ -1,22 +1,22 @@
-"""`bazel run @terraform` / `bazel run @opentofu` wrapper rules and hubs.
+"""`bazel run @terraform` / `bazel run @tofu` wrapper rules and hubs.
 
 The wrapper is a small Go binary that resolves the toolchain-provided
 engine binary via runfiles, `chdir`s to `$BUILD_WORKING_DIRECTORY`, and
 execs the engine with the user's argv. See //terraform/private/cli/cli.go
 for the runtime. The hub repository rules (`terraform_cli_hub`,
-`opentofu_cli_hub`) generate the `@terraform` and `@opentofu` external
+`tofu_cli_hub`) generate the `@terraform` and `@tofu` external
 repositories the toolchain extensions materialize automatically.
 """
 
 load(":util.bzl", "rlocationpath")
 
-# Extension-generated `@terraform` / `@opentofu` hub BUILD files load
-# `terraform_cli` / `opentofu_cli` from here, so the file has to be
+# Extension-generated `@terraform` / `@tofu` hub BUILD files load
+# `terraform_cli` / `tofu_cli` from here, so the file has to be
 # publicly loadable (same story as //terraform/private:terraform.bzl).
 visibility("public")
 
 _TERRAFORM_TOOLCHAIN_TYPE = str(Label("//terraform:toolchain_type"))
-_OPENTOFU_TOOLCHAIN_TYPE = str(Label("//opentofu:toolchain_type"))
+_TOFU_TOOLCHAIN_TYPE = str(Label("//tofu:toolchain_type"))
 
 def _build_cli(ctx, toolchain_type):
     toolchain = ctx.toolchains[toolchain_type]
@@ -61,14 +61,14 @@ terraform_cli = rule(
     executable = True,
 )
 
-def _opentofu_cli_impl(ctx):
-    return _build_cli(ctx, _OPENTOFU_TOOLCHAIN_TYPE)
+def _tofu_cli_impl(ctx):
+    return _build_cli(ctx, _TOFU_TOOLCHAIN_TYPE)
 
-opentofu_cli = rule(
+tofu_cli = rule(
     doc = "`bazel run` wrapper that runs `tofu` in $BUILD_WORKING_DIRECTORY.",
-    implementation = _opentofu_cli_impl,
+    implementation = _tofu_cli_impl,
     attrs = _CLI_ATTRS,
-    toolchains = [_OPENTOFU_TOOLCHAIN_TYPE],
+    toolchains = [_TOFU_TOOLCHAIN_TYPE],
     executable = True,
 )
 
@@ -81,11 +81,11 @@ terraform_cli(
 )
 """
 
-_OPENTOFU_HUB_BUILD = """\
-load("@rules_terraform//terraform/private:cli.bzl", "opentofu_cli")
+_TOFU_HUB_BUILD = """\
+load("@rules_terraform//terraform/private:cli.bzl", "tofu_cli")
 
-opentofu_cli(
-    name = "opentofu",
+tofu_cli(
+    name = "tofu",
     visibility = ["//visibility:public"],
 )
 """
@@ -109,6 +109,6 @@ def terraform_cli_hub(name):
     """Materialize `@<name>` (typically `@terraform`) with a `terraform_cli` target."""
     _cli_hub(name = name, build_content = _TERRAFORM_HUB_BUILD)
 
-def opentofu_cli_hub(name):
-    """Materialize `@<name>` (typically `@opentofu`) with an `opentofu_cli` target."""
-    _cli_hub(name = name, build_content = _OPENTOFU_HUB_BUILD)
+def tofu_cli_hub(name):
+    """Materialize `@<name>` (typically `@tofu`) with an `tofu_cli` target."""
+    _cli_hub(name = name, build_content = _TOFU_HUB_BUILD)

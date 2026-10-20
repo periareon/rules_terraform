@@ -1,10 +1,9 @@
-"""Shared impl of the `terraform.modules(...)` / `opentofu.modules(...)` tag class.
+"""Registry-module resolution for the `deps` tag's `roots`.
 
-Both engine-specific extensions delegate here — their `_impl` bodies
-reduce to a single call to `resolve_all_modules(module_ctx, registry_default)`
-below. Per module block:
+`extension_impl.bzl` calls `resolve_registry_modules` once per tag and
+`declare_module_pool` once per evaluation. Per module block:
 
-1. Resolve the `root` label to a filesystem path, enumerate every `*.tf`
+1. Resolve each `roots` label to a filesystem path, enumerate every `*.tf`
    sibling via `module_ctx.path(root).dirname.readdir()`, and read each.
 2. Parse `module { }` blocks (`tfparse.parse_module_blocks`).
 3. For each registry-shaped source, resolve the concrete version. If the
@@ -18,8 +17,19 @@ below. Per module block:
 5. Feed those blocks back into step 3. A registry module is commonly
    composed of others, and the engine resolves the whole graph, so
    fetching only what the root names leaves the rest uninstalled.
-6. Register a `terraform_module_repository` per distinct (source,
-   version) + the `terraform_module_hub` wrapping them.
+6. Once every tag is resolved, register one `terraform_module_repository`
+   per distinct (registry, module address, version) across *all* hubs —
+   the pool. The hub itself is declared by `extension_impl.bzl`.
+
+## Why a pool
+
+Hubs are per root module; the archives they need mostly are not. Two
+environments calling the same `vpc` module, or a module reached both
+directly and through another module, are one download. Keying
+repositories by what the archive is, rather than by which hub asked,
+means the extraction happens once and every hub aliases it. A
+`//subdir` reference is a target inside that one repository, not a
+second copy of the archive stripped differently.
 
 ## Why facts
 
@@ -48,7 +58,7 @@ we can't statically prove every block is pinned. See
 `docs/src/index.md#reproducibility`.
 """
 
-load(":module_repo.bzl", "terraform_module_hub", "terraform_module_repository")
+load(":module_repo.bzl", "module_target_name", "terraform_module_repository")
 load(
     ":registry.bzl",
     "is_registry_source",
@@ -59,7 +69,7 @@ load(
 load(":semver.bzl", "parse_constraints")
 load(":tfparse.bzl", "parse_module_blocks")
 
-visibility(["//opentofu/...", "//terraform/..."])
+visibility(["//terraform/...", "//tofu/..."])
 
 # Starlark has no unbounded loops, so the two tree walks below are written as
 # worklists driven by a `range`. Both limits are far above any real module —
@@ -73,12 +83,12 @@ _MAX_MODULE_DIRS = 2048
 _MAX_REGISTRY_MODULES = 512
 
 def _read_tf_dir(module_ctx, dir_path):
-    """Concatenate every `*.tf` file directly inside `dir_path`."""
+    """Concatenate every `*.tf` and `*.tofu` file directly inside `dir_path`."""
     if not dir_path.exists:
         return ""
     combined = []
     for entry in dir_path.readdir():
-        if entry.is_dir or not entry.basename.endswith(".tf"):
+        if entry.is_dir or not (entry.basename.endswith(".tf") or entry.basename.endswith(".tofu")):
             continue
         combined.append(module_ctx.read(entry))
     return "\n".join(combined)
@@ -242,25 +252,46 @@ def _fetch_archive(module_ctx, registry, base_source, version, archives):
     )
     return archives[memo_key]
 
-def _resolve_one(module_ctx, tag, registry_default, existing_facts, new_facts):
-    """Resolve one `terraform.modules(...)` / `opentofu.modules(...)` tag.
+def _pool_key(registry, base_source, version):
+    """Identity of one fetched archive, which is also its repository name."""
+    return "rt_mod_{}_{}_{}".format(registry, base_source.replace("/", "_"), version)
+
+def resolve_registry_modules(module_ctx, *, name, roots, registry, existing_facts, new_facts, pool):
+    """Resolve the registry modules named under `roots` for one `deps` tag.
+
+    Declares nothing. Archives are recorded in `pool`, and the hub's members
+    are returned, so the caller can declare each archive once after every
+    tag has been seen.
 
     Args:
         module_ctx: (module_ctx) The extension context.
-        tag: The parsed tag instance; needs `name`, `root`, and
-            `registry` (may be empty to signal "use default").
-        registry_default: (str) Registry hostname used when the tag's
-            `registry` attr is empty.
+        name: (str) The hub name, for messages.
+        roots: (list[Label]) `.tf` files naming the directories to scan.
+        registry: (str) Registry hostname for sources that name none.
         existing_facts: (Facts|None) The previous eval's persisted facts
             (or None if `module_ctx.facts` isn't available).
         new_facts: (dict) Mutable dict of facts to write on this eval.
             Populated with entries for every currently-declared module,
             whether cached or freshly resolved.
-    """
-    registry = tag.registry if tag.registry else registry_default
+        pool: (dict) Shared across tags, mutated in place. Maps pool
+            repository name to a dict describing the archive and the
+            `subdirs` requested of it so far.
 
-    root_path = module_ctx.path(tag.root).dirname
-    blocks = parse_module_blocks(_read_tf_dir(module_ctx, root_path))
+    Returns:
+        (list[str]) Labels of the pool targets this hub resolved to.
+    """
+    root_labels = roots
+
+    # One hub may cover many directories. Each is read once even if listed
+    # twice, and the blocks from all of them seed one worklist.
+    blocks = []
+    seen_dirs = {}
+    for label in root_labels:
+        dir_path = module_ctx.path(label).dirname
+        if str(dir_path) in seen_dirs:
+            continue
+        seen_dirs[str(dir_path)] = True
+        blocks.extend(parse_module_blocks(_read_tf_dir(module_ctx, dir_path)))
 
     # A registry module is routinely composed of others, and the engine will
     # not resolve a `module` block just because its parent was fetched. So the
@@ -268,11 +299,11 @@ def _resolve_one(module_ctx, tag, registry_default, existing_facts, new_facts):
     # is scanned, rather than being the one list of blocks beside `tag.root`.
     #
     # Entries are `(source, constraint, key)`; `key` is the block name for a
-    # root-level block and empty for anything discovered deeper, where no
-    # single block names the module. `queued` drops a reference already on the
-    # list *before* it is pushed: a diamond in the module graph reaches the
-    # same `(source, constraint)` down every path, and deduplicating only at
-    # pop time would pay a `/versions` round trip for each one and count each
+    # root-level block and empty for anything discovered deeper, kept for
+    # diagnostics. `queued` drops a reference already on the list *before*
+    # it is pushed: a diamond in the module graph reaches the same
+    # `(source, constraint)` down every path, and deduplicating only at pop
+    # time would pay a `/versions` round trip for each one and count each
     # one against the worklist limit.
     pending = []
     queued = {}
@@ -284,7 +315,7 @@ def _resolve_one(module_ctx, tag, registry_default, existing_facts, new_facts):
         queued[_ref_key(block.source, block.version)] = True
         pending.append((block.source, block.version, block.key))
 
-    module_repo_names = []
+    members = []
     resolved = {}
 
     # Archive per `(source-without-subdir, version)`, not per reference: two
@@ -297,10 +328,9 @@ def _resolve_one(module_ctx, tag, registry_default, existing_facts, new_facts):
             break
 
         # Breadth first, so the root module's own blocks are all resolved
-        # before anything found inside a fetched module. A module reached both
-        # ways then takes its repo name from the block that names it rather
-        # than from whichever path happened to be walked first.
-        source, constraint, block_key = pending.pop(0)
+        # before anything found inside a fetched module: a constraint written
+        # by the user is resolved before one written by a dependency.
+        source, constraint, _ = pending.pop(0)
 
         # The registry addresses the whole module; `//subdir` picks out one
         # module published inside it. Everything up to the archive is keyed on
@@ -369,79 +399,66 @@ def _resolve_one(module_ctx, tag, registry_default, existing_facts, new_facts):
             queued[_ref_key(dep["source"], dep["version"])] = True
             pending.append((dep["source"], dep["version"], ""))
 
-        # A module nobody named gets a name from its own identity. Two versions
-        # of one module are two repos, so the version has to be in there — and
-        # so does the subdir, since two submodules of one archive are two more.
-        repo_segment = block_key if block_key else "{}_{}".format(
-            _sanitize_repo_segment(source),
-            _sanitize_repo_segment(version),
-        )
-        repo_name = "{}_{}".format(tag.name, _sanitize_repo_segment(repo_segment))
-        terraform_module_repository(
-            name = repo_name,
-            key = repo_segment,
-            # The full source, subdir and all, because the init tool matches a
-            # `module` block against this string and the block wrote the subdir.
-            source = source,
-            version = version,
-            url = archive_url,
-            integrity = integrity,
-            strip_prefix = strip_prefix,
-            subdir = subdir,
-        )
-        module_repo_names.append(repo_name)
+        # The archive is pooled under its own identity; this hub only notes
+        # which module inside it was wanted. The repository renders one target
+        # per subdir asked for, across every hub, from one extraction.
+        pool_key = _pool_key(registry, base_source, version)
+        if pool_key not in pool:
+            pool[pool_key] = {
+                "base_source": base_source,
+                "integrity": integrity,
+                "strip_prefix": strip_prefix,
+                "subdirs": {},
+                "url": archive_url,
+                "version": version,
+            }
+        pool[pool_key]["subdirs"][subdir] = True
+        members.append("@{}//:{}".format(pool_key, module_target_name(subdir)))
 
     if pending:
         fail("`{}` pulls in more than {} distinct registry modules".format(
-            tag.name,
+            name,
             _MAX_REGISTRY_MODULES,
         ))
 
-    terraform_module_hub(
-        name = tag.name,
-        module_repos = module_repo_names,
-    )
+    return members
 
-def resolve_all_modules(module_ctx, registry_default):
-    """Run the modules-tag orchestration end-to-end for one engine.
+def claim_hub_name(claimed, name, module_name, kind):
+    """Record that `module_name` declared a hub called `name`, or fail if taken.
 
-    Reads facts, iterates every `modules` tag under `module_ctx`, and
-    builds the `extension_metadata` return. Both
-    `//terraform:extensions.bzl` and `//opentofu:extensions.bzl` call
-    this — the only per-engine difference is `registry_default`.
+    Every repository an extension declares shares one namespace, whichever
+    Bazel module asked for it. Two `name = "providers"` tags from two modules
+    would otherwise fail inside bzlmod as a duplicate repository, with neither
+    tag named.
 
     Args:
-        module_ctx: (module_ctx) The extension context.
-        registry_default: (str) Hostname used when a tag's `registry`
-            attr is empty (`registry.terraform.io` /
-            `registry.opentofu.org`).
-
-    Returns:
-        (extension_metadata) `reproducible = False` metadata carrying
-        the current eval's facts. On Bazel 7 (no facts API), returns
-        metadata without the `facts` kwarg so the extension still
-        works — no caching, every re-eval pays the full network cost.
+        claimed: (dict) Mutated in place; hub name → description of claimant.
+        name: (str) The hub name being claimed.
+        module_name: (str) The Bazel module declaring it.
+        kind: (str) The tag class, for the message.
     """
-    supports_facts = hasattr(module_ctx, "facts")
-    existing_facts = module_ctx.facts if supports_facts else None
-    new_facts = {}
+    claimant = "{} tag in module '{}'".format(kind, module_name)
+    if name in claimed:
+        fail("hub name '{}' is declared twice: by a {} and by a {}. Hub names are shared across every module using this extension; pick distinct ones.".format(
+            name,
+            claimed[name],
+            claimant,
+        ))
+    claimed[name] = claimant
 
-    for mod in module_ctx.modules:
-        for attrs in mod.tags.modules:
-            _resolve_one(
-                module_ctx,
-                attrs,
-                registry_default = registry_default,
-                existing_facts = existing_facts,
-                new_facts = new_facts,
-            )
+def declare_module_pool(pool):
+    """Declare one `http_archive` per entry of the pool built by `resolve_registry_modules`.
 
-    # `reproducible = False` — module version constraints (`~> 5.0`,
-    # `>= 1.0`) resolve against the live Registry API and can pick
-    # different versions over time as new releases publish. Pin every
-    # `module {}` block to an exact SemVer to make resolution
-    # deterministic.
-    kwargs = {"reproducible": False}
-    if supports_facts:
-        kwargs["facts"] = new_facts
-    return module_ctx.extension_metadata(**kwargs)
+    Args:
+        pool: (dict) Pool repository name → archive dict.
+    """
+    for repo_name, entry in pool.items():
+        terraform_module_repository(
+            name = repo_name,
+            source = entry["base_source"],
+            version = entry["version"],
+            url = entry["url"],
+            integrity = entry["integrity"],
+            strip_prefix = entry["strip_prefix"],
+            subdirs = sorted(entry["subdirs"].keys()),
+        )

@@ -1,5 +1,10 @@
 """Render `TERRAFORM_VERSIONS` / `TOFU_VERSIONS` .bzl files from upstream release metadata.
 
+Only the newest few releases (`--limit`, default 3) are shipped with
+checksums. Any other release can still be requested with a `version` tag on
+the toolchains extension, which fetches that release's SHA256SUMS once and
+records it in MODULE.bazel.lock.
+
 The two engines differ in how they publish releases and checksums:
 
 * Terraform: HTML listing at `releases.hashicorp.com` + SHA256SUMS files there.
@@ -48,7 +53,7 @@ AUTO-GENERATED: DO NOT MODIFY
 Update using the following command:
 
 ```bash
-bazel run //tools/update_versions -- --engine=opentofu
+bazel run //tools/update_versions -- --engine=tofu
 ```
 \"\"\"
 
@@ -111,7 +116,7 @@ def _fetch_terraform_releases() -> list[str]:
     return parser.versions
 
 
-def _fetch_opentofu_releases() -> list[str]:
+def _fetch_tofu_releases() -> list[str]:
     """Walk the OpenTofu GitHub Releases API. Handles pagination."""
     versions: list[str] = []
     url = "https://api.github.com/repos/opentofu/opentofu/releases?per_page=100"
@@ -214,14 +219,14 @@ def _terraform_config(repo_root: Path) -> EngineConfig:
     )
 
 
-def _opentofu_config(repo_root: Path) -> EngineConfig:
+def _tofu_config(repo_root: Path) -> EngineConfig:
     return EngineConfig(
-        name="opentofu",
-        list_versions=_fetch_opentofu_releases,
+        name="tofu",
+        list_versions=_fetch_tofu_releases,
         sha256sums_url=lambda v: f"https://github.com/opentofu/opentofu/releases/download/v{v}/tofu_{v}_SHA256SUMS",
         download_url=lambda v, p: f"https://github.com/opentofu/opentofu/releases/download/v{v}/tofu_{v}_{p}.zip",
         checksum_line=_TOFU_CHECKSUM_LINE,
-        output_path=repo_root / "opentofu/private/versions.bzl",
+        output_path=repo_root / "tofu/private/versions.bzl",
         template=_TOFU_TEMPLATE,
         versions_var="TOFU_VERSIONS",
         default_var="TOFU_DEFAULT_VERSION",
@@ -236,7 +241,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--engine",
-        choices=("terraform", "opentofu", "all"),
+        choices=("terraform", "tofu", "all"),
         default="all",
         help="Which engine's versions to render. `all` renders both.",
     )
@@ -244,6 +249,14 @@ def parse_args() -> argparse.Namespace:
         "--min-version",
         default="1.0.0",
         help="Minimum version to include (semver-comparable).",
+    )
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=3,
+        help="How many of the newest stable releases to ship checksums for. "
+        "Older releases stay usable: the toolchains extension fetches a tagged "
+        "release's SHA256SUMS on demand and records it in MODULE.bazel.lock.",
     )
     parser.add_argument(
         "--output",
@@ -259,7 +272,18 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def render(config: EngineConfig, min_version: str, output_override: Path | None) -> None:
+def _starlark_literal(value: dict) -> str:
+    """Render a nested dict of strings as the Starlark literal buildifier wants.
+
+    JSON is valid Starlark, but buildifier insists on a trailing comma after
+    the last element of a multi-line collection, so add one before every
+    closing brace. CI runs buildifier in check mode over the generated file.
+    """
+    rendered = json.dumps(value, indent=4, sort_keys=True)
+    return re.sub(r"([^\s,{\[])\n(?=\s*[}\]])", r"\1,\n", rendered)
+
+
+def render(config: EngineConfig, min_version: str, limit: int, output_override: Path | None) -> None:
     logging.info(f"[{config.name}] listing releases")
     all_versions = config.list_versions()
     logging.info(f"[{config.name}] {len(all_versions)} total releases")
@@ -271,6 +295,9 @@ def render(config: EngineConfig, min_version: str, output_override: Path | None)
     kept = [v for v in stable if _parse_version(v) >= min_tuple]
     kept.sort(key=_parse_version, reverse=True)
     logging.info(f"[{config.name}] {len(kept)} releases >= {min_version}")
+    if limit > 0:
+        kept = kept[:limit]
+        logging.info(f"[{config.name}] shipping the newest {len(kept)}")
 
     versions: dict[str, dict[str, dict[str, str]]] = {}
     for version in kept:
@@ -292,7 +319,7 @@ def render(config: EngineConfig, min_version: str, output_override: Path | None)
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(
         config.template.format(
-            versions=json.dumps(versions, indent=4, sort_keys=True),
+            versions=_starlark_literal(versions),
             default=default_version,
         ),
         encoding="utf-8",
@@ -307,14 +334,14 @@ def main() -> None:
     engines: list[EngineConfig] = []
     if args.engine in ("terraform", "all"):
         engines.append(_terraform_config(args.repo_root))
-    if args.engine in ("opentofu", "all"):
-        engines.append(_opentofu_config(args.repo_root))
+    if args.engine in ("tofu", "all"):
+        engines.append(_tofu_config(args.repo_root))
 
     if args.output and len(engines) != 1:
         raise SystemExit("--output requires a single --engine")
 
     for config in engines:
-        render(config, args.min_version, args.output)
+        render(config, args.min_version, args.limit, args.output)
 
 
 if __name__ == "__main__":

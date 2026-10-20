@@ -51,12 +51,12 @@ build --incompatible_autoload_externally=
 ##
 ## Downstream users copy these lines into their own `.bazelrc` to opt in.
 ## Per-target opt-out — engine-specific or generic tags:
-##   ["no_terraform_format"] / ["no_opentofu_format"]  — skip one engine's fmt
-##   ["no_terraform_validate"] / ["no_opentofu_validate"]  — skip one engine's validate
+##   ["no_terraform_format"] / ["no_tofu_format"]  — skip one engine's fmt
+##   ["no_terraform_validate"] / ["no_tofu_validate"]  — skip one engine's validate
 ##   ["no_format"] or ["no_validate"]  — skip both engines' equivalent aspect
 ##
 ## Each engine emits its own output groups (`terraform_fmt_checks` vs
-## `opentofu_fmt_checks`) so both aspect sets can be attached to the
+## `tofu_fmt_checks`) so both aspect sets can be attached to the
 ## same target without collisions or silent no-ops.
 ###############################################################################
 
@@ -67,15 +67,15 @@ build:terraform_validate --output_groups=+terraform_validate_checks
 build:terraform_checks --config=terraform_fmt
 build:terraform_checks --config=terraform_validate
 
-build:opentofu_fmt --aspects=@rules_terraform//opentofu:opentofu_fmt_aspect.bzl%opentofu_fmt_aspect
-build:opentofu_fmt --output_groups=+opentofu_fmt_checks
-build:opentofu_validate --aspects=@rules_terraform//opentofu:opentofu_validate_aspect.bzl%opentofu_validate_aspect
-build:opentofu_validate --output_groups=+opentofu_validate_checks
-build:opentofu_checks --config=opentofu_fmt
-build:opentofu_checks --config=opentofu_validate
+build:tofu_fmt --aspects=@rules_terraform//tofu:tofu_fmt_aspect.bzl%tofu_fmt_aspect
+build:tofu_fmt --output_groups=+tofu_fmt_checks
+build:tofu_validate --aspects=@rules_terraform//tofu:tofu_validate_aspect.bzl%tofu_validate_aspect
+build:tofu_validate --output_groups=+tofu_validate_checks
+build:tofu_checks --config=tofu_fmt
+build:tofu_checks --config=tofu_validate
 
 test --config=terraform_checks
-test --config=opentofu_checks
+test --config=tofu_checks
 
 ###############################################################################
 ## Custom user flags

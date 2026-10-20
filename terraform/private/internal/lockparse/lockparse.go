@@ -1,69 +1,17 @@
-// Package lockparse reads the two lock file formats rules_terraform cares about:
+// Package lockparse reads Terraform's `.terraform.lock.hcl` provider lock
+// file.
 //
-//   - terraform_modules.lock.json — our own JSON format for external registry
-//     modules
-//   - .terraform.lock.hcl — Terraform's on-disk provider lock file
-//
-// Both parsers are lenient: they extract the fields we need for drift checks
-// (source + version) and ignore everything else. They do not validate hashes.
+// The parser is lenient: it extracts the fields rules_terraform needs
+// (source, registry host, version, and the recorded hashes) and ignores
+// everything else. It does not validate hashes.
 package lockparse
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"regexp"
 	"strings"
 )
-
-// ModuleEntry is one row from terraform_modules.lock.json.
-type ModuleEntry struct {
-	Key       string
-	Source    string
-	Version   string
-	URL       string
-	Integrity string
-	Subdir    string
-}
-
-type modulesLockDoc struct {
-	Modules map[string]struct {
-		Source    string `json:"source"`
-		Version   string `json:"version"`
-		URL       string `json:"url"`
-		Integrity string `json:"integrity"`
-		Subdir    string `json:"subdir,omitempty"`
-	} `json:"modules"`
-}
-
-// ReadModulesLock parses a terraform_modules.lock.json file. A missing file
-// yields an empty slice, no error, so drift tests can treat "no lock" as
-// "no locked entries" and let the .tf source contents drive the decision.
-func ReadModulesLock(path string) ([]ModuleEntry, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("read %s: %w", path, err)
-	}
-	var doc modulesLockDoc
-	if err := json.Unmarshal(data, &doc); err != nil {
-		return nil, fmt.Errorf("parse %s: %w", path, err)
-	}
-	out := make([]ModuleEntry, 0, len(doc.Modules))
-	for key, info := range doc.Modules {
-		out = append(out, ModuleEntry{
-			Key:       key,
-			Source:    info.Source,
-			Version:   info.Version,
-			URL:       info.URL,
-			Integrity: info.Integrity,
-			Subdir:    info.Subdir,
-		})
-	}
-	return out, nil
-}
 
 // ProviderEntry is one `provider "..." {}` block from .terraform.lock.hcl.
 type ProviderEntry struct {

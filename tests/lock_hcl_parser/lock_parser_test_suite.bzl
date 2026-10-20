@@ -28,6 +28,7 @@ provider "registry.terraform.io/hashicorp/null" {
 
     provider = providers[0]
     asserts.equals(env, "hashicorp/null", provider.source, "Should parse provider source")
+    asserts.equals(env, "", provider.host, "A public-registry host is dropped")
     asserts.equals(env, "3.2.4", provider.version, "Should parse version")
     asserts.equals(env, "~> 3.0", provider.constraints, "Should parse constraints")
     asserts.equals(env, 2, len(provider.hashes), "Should parse hashes")
@@ -140,6 +141,37 @@ provider "registry.terraform.io/hashicorp/null" {
 
 parse_provider_with_many_hashes_test = unittest.make(_parse_provider_with_many_hashes_test_impl)
 
+def _parse_private_registry_host_test_impl(ctx):
+    env = unittest.begin(ctx)
+
+    lock_content = """\
+provider "app.terraform.io/acme/internal" {
+  version = "0.4.2"
+  hashes = [
+    "h1:abc123",
+  ]
+}
+
+provider "registry.opentofu.org/hashicorp/null" {
+  version = "3.2.4"
+  hashes = [
+    "h1:def456",
+  ]
+}
+"""
+
+    providers = parse_lock_file(lock_content)
+
+    asserts.equals(env, 2, len(providers), "Should parse two providers")
+    asserts.equals(env, "acme/internal", providers[0].source, "Private host is split off the source")
+    asserts.equals(env, "app.terraform.io", providers[0].host, "Private host is kept, it is where the provider lives")
+    asserts.equals(env, "hashicorp/null", providers[1].source, "OpenTofu's public host is stripped too")
+    asserts.equals(env, "", providers[1].host, "A public host is not recorded")
+
+    return unittest.end(env)
+
+parse_private_registry_host_test = unittest.make(_parse_private_registry_host_test_impl)
+
 def lock_parser_test_suite(name):
     """Create the test suite for lock parser tests.
 
@@ -161,6 +193,9 @@ def lock_parser_test_suite(name):
     parse_provider_with_many_hashes_test(
         name = "parse_provider_with_many_hashes_test",
     )
+    parse_private_registry_host_test(
+        name = "parse_private_registry_host_test",
+    )
 
     native.test_suite(
         name = name,
@@ -170,5 +205,6 @@ def lock_parser_test_suite(name):
             "parse_empty_file_test",
             "parse_provider_without_registry_prefix_test",
             "parse_provider_with_many_hashes_test",
+            "parse_private_registry_host_test",
         ],
     )

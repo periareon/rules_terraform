@@ -1,0 +1,27 @@
+"""Public settings for `//tofu`.
+
+The `:version` string flag picks which OpenTofu release the auto-registered
+toolchains resolve to. Empty, the default, means the version the
+`tofu_toolchains` extension chose: the one the root module's
+`version(default = True)` tag named, else the newest release shipped in
+`//tofu/private:versions.bzl`. Any other value must be a release the hub
+knows — shipped, or requested with a `version` tag — and can be set
+globally in `.bazelrc`, per invocation
+(`--@rules_terraform//tofu/settings:version=1.9.1`), or per target through
+a transition.
+
+The per-version `config_setting`s live in the `@tofu_toolchains` hub, next
+to the toolchains they select, so a release added by a tag is selectable
+without this package changing.
+"""
+
+load("@bazel_skylib//rules:common_settings.bzl", "string_flag")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files(["settings.bzl"])
+
+string_flag(
+    name = "version",
+    build_setting_default = "",
+)

@@ -169,7 +169,7 @@ func queryTargets(scope []string, bazel, workspaceDir string) ([]string, error) 
 	//
 	scopeStr := strings.Join(scope, " ")
 	queryTemplate := fmt.Sprintf(
-		`filter("^//.*\.tf$", kind("source file", deps(set(%s) except attr(tags, "(^\[|, )(noformat|no-format|no-terraform-format)(, |\]$)", set(%s)), 1)))`,
+		`filter("^//.*\.tf$", kind("source file", deps(set(%s) except attr(tags, "(^\[|, )(noformat|nofmt|no[-_]format|no[-_]fmt|no[-_]terraform[-_]format|no[-_]tofu[-_]format)(, |\]$)", set(%s)), 1)))`,
 		scopeStr, scopeStr,
 	)
 

@@ -236,22 +236,22 @@
   "moduleExtensions": {
     "//terraform:extensions.bzl%terraform": {
       "general": {
-        "bzlTransitiveDigest": "a6V7TlbkIiLfQo9LFmO2fmhI6hNJ60Yf6jrvcScn+aM=",
-        "usagesDigest": "GxP0g1ESr1eAYiAmJXv31okkOXyHQadrMCRaWFdJU+g=",
+        "bzlTransitiveDigest": "Zzz6Hf9bPehrr7g5uVb63Y6RfpAuAnvkJgT24ypPShE=",
+        "usagesDigest": "BESlSDgweSEVoh6TWB3WypRjkFxh67n+hO6qohGlFsQ=",
         "recordedInputs": [
           "REPO_MAPPING:,bazel_tools bazel_tools",
           "FILE:@@//tests/with_provider/.terraform.lock.hcl 5eef929349ea8a22381dccd9196af19d15b6993c6c20fd784bddebbf02fd4f46",
           "FILE:@@//tests/with_modules_ext/.terraform.lock.hcl cc99c78e0e8abd0d72ac09f529610eda38005f95ac94e9453e6b197fdeba62e0",
           "FILE:@@//tests/with_third_party_provider/.terraform.lock.hcl dff74f6f1fdac6249a16a5c1ca8cc16e6960f614c4848316f5844fa7fa2c121d",
-          "DIRENTS:@@//tests/with_registry_module 505777b42b59f99e59abd665b98653f35009a3123048ca2cd3136d57b150c126",
-          "FILE:@@//tests/with_registry_module/main.tf b005e784b89ebba08818b0d9dcfd755012e82fbe58fc6340ae3a151e3699a23e",
+          "FILE:@@//tests/nested_registry/modules/wrapper DIR",
           "DIRENTS:@@//tests/nested_registry/modules/wrapper 505777b42b59f99e59abd665b98653f35009a3123048ca2cd3136d57b150c126",
           "FILE:@@//tests/nested_registry/modules/wrapper/main.tf 3196e21fb1b93ddfb98e84bb42c7b3fc67ae91eb498793ad48e81c1420254efc",
+          "FILE:@@//tests/transitive_registry DIR",
           "DIRENTS:@@//tests/transitive_registry 505777b42b59f99e59abd665b98653f35009a3123048ca2cd3136d57b150c126",
           "FILE:@@//tests/transitive_registry/main.tf 4d69ce4ec4bb650e30c4fbf1ff91f544e1376d23341fbbe004250244fc93c81d"
         ],
         "generatedRepoSpecs": {
-          "test_providers_with_provider_hashicorp_null_linux_amd64": {
+          "rt_prov_registry.terraform.io_hashicorp_null_3.2.4_linux_amd64": {
             "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_archive",
             "attributes": {
               "urls": [
@@ -261,7 +261,7 @@
               "build_file_content": "load(\"@rules_terraform//terraform/private:terraform.bzl\", \"terraform_provider\")\n\nterraform_provider(\n    name = \"provider\",\n    source = \"hashicorp/null\",\n    version = \"3.2.4\",\n    platform = \"linux_amd64\",\n    # Include every file the provider archive shipped with (binary + LICENSE +\n    # any other data). Terraform's `h1:` (PackageHashV1) hashes the entire\n    # provider directory; leaving any file out makes our install diverge from\n    # what real `terraform init` would produce.\n    files = glob(\n        [\"**/*\"],\n        exclude = [\"BUILD.bazel\", \"REPO.bazel\", \"WORKSPACE\", \"WORKSPACE.bazel\", \"MODULE.bazel\"],\n    ),\n    visibility = [\"//visibility:public\"],\n)\n\n"
             }
           },
-          "test_providers_with_provider_hashicorp_null_linux_arm64": {
+          "rt_prov_registry.terraform.io_hashicorp_null_3.2.4_linux_arm64": {
             "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_archive",
             "attributes": {
               "urls": [
@@ -271,7 +271,7 @@
               "build_file_content": "load(\"@rules_terraform//terraform/private:terraform.bzl\", \"terraform_provider\")\n\nterraform_provider(\n    name = \"provider\",\n    source = \"hashicorp/null\",\n    version = \"3.2.4\",\n    platform = \"linux_arm64\",\n    # Include every file the provider archive shipped with (binary + LICENSE +\n    # any other data). Terraform's `h1:` (PackageHashV1) hashes the entire\n    # provider directory; leaving any file out makes our install diverge from\n    # what real `terraform init` would produce.\n    files = glob(\n        [\"**/*\"],\n        exclude = [\"BUILD.bazel\", \"REPO.bazel\", \"WORKSPACE\", \"WORKSPACE.bazel\", \"MODULE.bazel\"],\n    ),\n    visibility = [\"//visibility:public\"],\n)\n\n"
             }
           },
-          "test_providers_with_provider_hashicorp_null_darwin_amd64": {
+          "rt_prov_registry.terraform.io_hashicorp_null_3.2.4_darwin_amd64": {
             "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_archive",
             "attributes": {
               "urls": [
@@ -281,7 +281,7 @@
               "build_file_content": "load(\"@rules_terraform//terraform/private:terraform.bzl\", \"terraform_provider\")\n\nterraform_provider(\n    name = \"provider\",\n    source = \"hashicorp/null\",\n    version = \"3.2.4\",\n    platform = \"darwin_amd64\",\n    # Include every file the provider archive shipped with (binary + LICENSE +\n    # any other data). Terraform's `h1:` (PackageHashV1) hashes the entire\n    # provider directory; leaving any file out makes our install diverge from\n    # what real `terraform init` would produce.\n    files = glob(\n        [\"**/*\"],\n        exclude = [\"BUILD.bazel\", \"REPO.bazel\", \"WORKSPACE\", \"WORKSPACE.bazel\", \"MODULE.bazel\"],\n    ),\n    visibility = [\"//visibility:public\"],\n)\n\n"
             }
           },
-          "test_providers_with_provider_hashicorp_null_darwin_arm64": {
+          "rt_prov_registry.terraform.io_hashicorp_null_3.2.4_darwin_arm64": {
             "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_archive",
             "attributes": {
               "urls": [
@@ -291,7 +291,7 @@
               "build_file_content": "load(\"@rules_terraform//terraform/private:terraform.bzl\", \"terraform_provider\")\n\nterraform_provider(\n    name = \"provider\",\n    source = \"hashicorp/null\",\n    version = \"3.2.4\",\n    platform = \"darwin_arm64\",\n    # Include every file the provider archive shipped with (binary + LICENSE +\n    # any other data). Terraform's `h1:` (PackageHashV1) hashes the entire\n    # provider directory; leaving any file out makes our install diverge from\n    # what real `terraform init` would produce.\n    files = glob(\n        [\"**/*\"],\n        exclude = [\"BUILD.bazel\", \"REPO.bazel\", \"WORKSPACE\", \"WORKSPACE.bazel\", \"MODULE.bazel\"],\n    ),\n    visibility = [\"//visibility:public\"],\n)\n\n"
             }
           },
-          "test_providers_with_provider_hashicorp_null_windows_amd64": {
+          "rt_prov_registry.terraform.io_hashicorp_null_3.2.4_windows_amd64": {
             "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_archive",
             "attributes": {
               "urls": [
@@ -301,20 +301,7 @@
               "build_file_content": "load(\"@rules_terraform//terraform/private:terraform.bzl\", \"terraform_provider\")\n\nterraform_provider(\n    name = \"provider\",\n    source = \"hashicorp/null\",\n    version = \"3.2.4\",\n    platform = \"windows_amd64\",\n    # Include every file the provider archive shipped with (binary + LICENSE +\n    # any other data). Terraform's `h1:` (PackageHashV1) hashes the entire\n    # provider directory; leaving any file out makes our install diverge from\n    # what real `terraform init` would produce.\n    files = glob(\n        [\"**/*\"],\n        exclude = [\"BUILD.bazel\", \"REPO.bazel\", \"WORKSPACE\", \"WORKSPACE.bazel\", \"MODULE.bazel\"],\n    ),\n    visibility = [\"//visibility:public\"],\n)\n\n"
             }
           },
-          "test_providers_with_provider": {
-            "repoRuleId": "@@//terraform/private:provider_repo.bzl%terraform_provider_hub",
-            "attributes": {
-              "provider_repos": {
-                "hashicorp/null:linux_amd64": "test_providers_with_provider_hashicorp_null_linux_amd64",
-                "hashicorp/null:linux_arm64": "test_providers_with_provider_hashicorp_null_linux_arm64",
-                "hashicorp/null:darwin_amd64": "test_providers_with_provider_hashicorp_null_darwin_amd64",
-                "hashicorp/null:darwin_arm64": "test_providers_with_provider_hashicorp_null_darwin_arm64",
-                "hashicorp/null:windows_amd64": "test_providers_with_provider_hashicorp_null_windows_amd64"
-              },
-              "lock_file_label": "@@//tests/with_provider:.terraform.lock.hcl"
-            }
-          },
-          "test_providers_with_modules_ext_hashicorp_aws_linux_amd64": {
+          "rt_prov_registry.terraform.io_hashicorp_aws_6.24.0_linux_amd64": {
             "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_archive",
             "attributes": {
               "urls": [
@@ -324,7 +311,7 @@
               "build_file_content": "load(\"@rules_terraform//terraform/private:terraform.bzl\", \"terraform_provider\")\n\nterraform_provider(\n    name = \"provider\",\n    source = \"hashicorp/aws\",\n    version = \"6.24.0\",\n    platform = \"linux_amd64\",\n    # Include every file the provider archive shipped with (binary + LICENSE +\n    # any other data). Terraform's `h1:` (PackageHashV1) hashes the entire\n    # provider directory; leaving any file out makes our install diverge from\n    # what real `terraform init` would produce.\n    files = glob(\n        [\"**/*\"],\n        exclude = [\"BUILD.bazel\", \"REPO.bazel\", \"WORKSPACE\", \"WORKSPACE.bazel\", \"MODULE.bazel\"],\n    ),\n    visibility = [\"//visibility:public\"],\n)\n\n"
             }
           },
-          "test_providers_with_modules_ext_hashicorp_aws_linux_arm64": {
+          "rt_prov_registry.terraform.io_hashicorp_aws_6.24.0_linux_arm64": {
             "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_archive",
             "attributes": {
               "urls": [
@@ -334,7 +321,7 @@
               "build_file_content": "load(\"@rules_terraform//terraform/private:terraform.bzl\", \"terraform_provider\")\n\nterraform_provider(\n    name = \"provider\",\n    source = \"hashicorp/aws\",\n    version = \"6.24.0\",\n    platform = \"linux_arm64\",\n    # Include every file the provider archive shipped with (binary + LICENSE +\n    # any other data). Terraform's `h1:` (PackageHashV1) hashes the entire\n    # provider directory; leaving any file out makes our install diverge from\n    # what real `terraform init` would produce.\n    files = glob(\n        [\"**/*\"],\n        exclude = [\"BUILD.bazel\", \"REPO.bazel\", \"WORKSPACE\", \"WORKSPACE.bazel\", \"MODULE.bazel\"],\n    ),\n    visibility = [\"//visibility:public\"],\n)\n\n"
             }
           },
-          "test_providers_with_modules_ext_hashicorp_aws_darwin_amd64": {
+          "rt_prov_registry.terraform.io_hashicorp_aws_6.24.0_darwin_amd64": {
             "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_archive",
             "attributes": {
               "urls": [
@@ -344,7 +331,7 @@
               "build_file_content": "load(\"@rules_terraform//terraform/private:terraform.bzl\", \"terraform_provider\")\n\nterraform_provider(\n    name = \"provider\",\n    source = \"hashicorp/aws\",\n    version = \"6.24.0\",\n    platform = \"darwin_amd64\",\n    # Include every file the provider archive shipped with (binary + LICENSE +\n    # any other data). Terraform's `h1:` (PackageHashV1) hashes the entire\n    # provider directory; leaving any file out makes our install diverge from\n    # what real `terraform init` would produce.\n    files = glob(\n        [\"**/*\"],\n        exclude = [\"BUILD.bazel\", \"REPO.bazel\", \"WORKSPACE\", \"WORKSPACE.bazel\", \"MODULE.bazel\"],\n    ),\n    visibility = [\"//visibility:public\"],\n)\n\n"
             }
           },
-          "test_providers_with_modules_ext_hashicorp_aws_darwin_arm64": {
+          "rt_prov_registry.terraform.io_hashicorp_aws_6.24.0_darwin_arm64": {
             "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_archive",
             "attributes": {
               "urls": [
@@ -354,7 +341,7 @@
               "build_file_content": "load(\"@rules_terraform//terraform/private:terraform.bzl\", \"terraform_provider\")\n\nterraform_provider(\n    name = \"provider\",\n    source = \"hashicorp/aws\",\n    version = \"6.24.0\",\n    platform = \"darwin_arm64\",\n    # Include every file the provider archive shipped with (binary + LICENSE +\n    # any other data). Terraform's `h1:` (PackageHashV1) hashes the entire\n    # provider directory; leaving any file out makes our install diverge from\n    # what real `terraform init` would produce.\n    files = glob(\n        [\"**/*\"],\n        exclude = [\"BUILD.bazel\", \"REPO.bazel\", \"WORKSPACE\", \"WORKSPACE.bazel\", \"MODULE.bazel\"],\n    ),\n    visibility = [\"//visibility:public\"],\n)\n\n"
             }
           },
-          "test_providers_with_modules_ext_hashicorp_aws_windows_amd64": {
+          "rt_prov_registry.terraform.io_hashicorp_aws_6.24.0_windows_amd64": {
             "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_archive",
             "attributes": {
               "urls": [
@@ -364,75 +351,7 @@
               "build_file_content": "load(\"@rules_terraform//terraform/private:terraform.bzl\", \"terraform_provider\")\n\nterraform_provider(\n    name = \"provider\",\n    source = \"hashicorp/aws\",\n    version = \"6.24.0\",\n    platform = \"windows_amd64\",\n    # Include every file the provider archive shipped with (binary + LICENSE +\n    # any other data). Terraform's `h1:` (PackageHashV1) hashes the entire\n    # provider directory; leaving any file out makes our install diverge from\n    # what real `terraform init` would produce.\n    files = glob(\n        [\"**/*\"],\n        exclude = [\"BUILD.bazel\", \"REPO.bazel\", \"WORKSPACE\", \"WORKSPACE.bazel\", \"MODULE.bazel\"],\n    ),\n    visibility = [\"//visibility:public\"],\n)\n\n"
             }
           },
-          "test_providers_with_modules_ext_hashicorp_null_linux_amd64": {
-            "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_archive",
-            "attributes": {
-              "urls": [
-                "https://releases.hashicorp.com/terraform-provider-null/3.2.4/terraform-provider-null_3.2.4_linux_amd64.zip"
-              ],
-              "sha256": "9d32ac3619cfc93eb3c4f423492a8e0f79db05fec58e449dee9b2d5873d5f69f",
-              "build_file_content": "load(\"@rules_terraform//terraform/private:terraform.bzl\", \"terraform_provider\")\n\nterraform_provider(\n    name = \"provider\",\n    source = \"hashicorp/null\",\n    version = \"3.2.4\",\n    platform = \"linux_amd64\",\n    # Include every file the provider archive shipped with (binary + LICENSE +\n    # any other data). Terraform's `h1:` (PackageHashV1) hashes the entire\n    # provider directory; leaving any file out makes our install diverge from\n    # what real `terraform init` would produce.\n    files = glob(\n        [\"**/*\"],\n        exclude = [\"BUILD.bazel\", \"REPO.bazel\", \"WORKSPACE\", \"WORKSPACE.bazel\", \"MODULE.bazel\"],\n    ),\n    visibility = [\"//visibility:public\"],\n)\n\n"
-            }
-          },
-          "test_providers_with_modules_ext_hashicorp_null_linux_arm64": {
-            "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_archive",
-            "attributes": {
-              "urls": [
-                "https://releases.hashicorp.com/terraform-provider-null/3.2.4/terraform-provider-null_3.2.4_linux_arm64.zip"
-              ],
-              "sha256": "85e33ab43e0e1726e5f97a874b8e24820b6565ff8076523cc2922ba671492991",
-              "build_file_content": "load(\"@rules_terraform//terraform/private:terraform.bzl\", \"terraform_provider\")\n\nterraform_provider(\n    name = \"provider\",\n    source = \"hashicorp/null\",\n    version = \"3.2.4\",\n    platform = \"linux_arm64\",\n    # Include every file the provider archive shipped with (binary + LICENSE +\n    # any other data). Terraform's `h1:` (PackageHashV1) hashes the entire\n    # provider directory; leaving any file out makes our install diverge from\n    # what real `terraform init` would produce.\n    files = glob(\n        [\"**/*\"],\n        exclude = [\"BUILD.bazel\", \"REPO.bazel\", \"WORKSPACE\", \"WORKSPACE.bazel\", \"MODULE.bazel\"],\n    ),\n    visibility = [\"//visibility:public\"],\n)\n\n"
-            }
-          },
-          "test_providers_with_modules_ext_hashicorp_null_darwin_amd64": {
-            "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_archive",
-            "attributes": {
-              "urls": [
-                "https://releases.hashicorp.com/terraform-provider-null/3.2.4/terraform-provider-null_3.2.4_darwin_amd64.zip"
-              ],
-              "sha256": "7b9c7b16f118fbc2b05a983817b8ce2f86df125857966ad356353baf4bff5c0a",
-              "build_file_content": "load(\"@rules_terraform//terraform/private:terraform.bzl\", \"terraform_provider\")\n\nterraform_provider(\n    name = \"provider\",\n    source = \"hashicorp/null\",\n    version = \"3.2.4\",\n    platform = \"darwin_amd64\",\n    # Include every file the provider archive shipped with (binary + LICENSE +\n    # any other data). Terraform's `h1:` (PackageHashV1) hashes the entire\n    # provider directory; leaving any file out makes our install diverge from\n    # what real `terraform init` would produce.\n    files = glob(\n        [\"**/*\"],\n        exclude = [\"BUILD.bazel\", \"REPO.bazel\", \"WORKSPACE\", \"WORKSPACE.bazel\", \"MODULE.bazel\"],\n    ),\n    visibility = [\"//visibility:public\"],\n)\n\n"
-            }
-          },
-          "test_providers_with_modules_ext_hashicorp_null_darwin_arm64": {
-            "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_archive",
-            "attributes": {
-              "urls": [
-                "https://releases.hashicorp.com/terraform-provider-null/3.2.4/terraform-provider-null_3.2.4_darwin_arm64.zip"
-              ],
-              "sha256": "c43723e8cc65bcdf5e0c92581dcbbdcbdcf18b8d2037406a5f2033b1e22de442",
-              "build_file_content": "load(\"@rules_terraform//terraform/private:terraform.bzl\", \"terraform_provider\")\n\nterraform_provider(\n    name = \"provider\",\n    source = \"hashicorp/null\",\n    version = \"3.2.4\",\n    platform = \"darwin_arm64\",\n    # Include every file the provider archive shipped with (binary + LICENSE +\n    # any other data). Terraform's `h1:` (PackageHashV1) hashes the entire\n    # provider directory; leaving any file out makes our install diverge from\n    # what real `terraform init` would produce.\n    files = glob(\n        [\"**/*\"],\n        exclude = [\"BUILD.bazel\", \"REPO.bazel\", \"WORKSPACE\", \"WORKSPACE.bazel\", \"MODULE.bazel\"],\n    ),\n    visibility = [\"//visibility:public\"],\n)\n\n"
-            }
-          },
-          "test_providers_with_modules_ext_hashicorp_null_windows_amd64": {
-            "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_archive",
-            "attributes": {
-              "urls": [
-                "https://releases.hashicorp.com/terraform-provider-null/3.2.4/terraform-provider-null_3.2.4_windows_amd64.zip"
-              ],
-              "sha256": "ed0fe2acdb61330b01841fa790be00ec6beaac91d41f311fb8254f74eb6a711f",
-              "build_file_content": "load(\"@rules_terraform//terraform/private:terraform.bzl\", \"terraform_provider\")\n\nterraform_provider(\n    name = \"provider\",\n    source = \"hashicorp/null\",\n    version = \"3.2.4\",\n    platform = \"windows_amd64\",\n    # Include every file the provider archive shipped with (binary + LICENSE +\n    # any other data). Terraform's `h1:` (PackageHashV1) hashes the entire\n    # provider directory; leaving any file out makes our install diverge from\n    # what real `terraform init` would produce.\n    files = glob(\n        [\"**/*\"],\n        exclude = [\"BUILD.bazel\", \"REPO.bazel\", \"WORKSPACE\", \"WORKSPACE.bazel\", \"MODULE.bazel\"],\n    ),\n    visibility = [\"//visibility:public\"],\n)\n\n"
-            }
-          },
-          "test_providers_with_modules_ext": {
-            "repoRuleId": "@@//terraform/private:provider_repo.bzl%terraform_provider_hub",
-            "attributes": {
-              "provider_repos": {
-                "hashicorp/aws:linux_amd64": "test_providers_with_modules_ext_hashicorp_aws_linux_amd64",
-                "hashicorp/aws:linux_arm64": "test_providers_with_modules_ext_hashicorp_aws_linux_arm64",
-                "hashicorp/aws:darwin_amd64": "test_providers_with_modules_ext_hashicorp_aws_darwin_amd64",
-                "hashicorp/aws:darwin_arm64": "test_providers_with_modules_ext_hashicorp_aws_darwin_arm64",
-                "hashicorp/aws:windows_amd64": "test_providers_with_modules_ext_hashicorp_aws_windows_amd64",
-                "hashicorp/null:linux_amd64": "test_providers_with_modules_ext_hashicorp_null_linux_amd64",
-                "hashicorp/null:linux_arm64": "test_providers_with_modules_ext_hashicorp_null_linux_arm64",
-                "hashicorp/null:darwin_amd64": "test_providers_with_modules_ext_hashicorp_null_darwin_amd64",
-                "hashicorp/null:darwin_arm64": "test_providers_with_modules_ext_hashicorp_null_darwin_arm64",
-                "hashicorp/null:windows_amd64": "test_providers_with_modules_ext_hashicorp_null_windows_amd64"
-              },
-              "lock_file_label": "@@//tests/with_modules_ext:.terraform.lock.hcl"
-            }
-          },
-          "test_providers_with_third_party_carlpett_sops_linux_amd64": {
+          "rt_prov_registry.terraform.io_carlpett_sops_1.2.0_linux_amd64": {
             "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_archive",
             "attributes": {
               "urls": [
@@ -442,7 +361,7 @@
               "build_file_content": "load(\"@rules_terraform//terraform/private:terraform.bzl\", \"terraform_provider\")\n\nterraform_provider(\n    name = \"provider\",\n    source = \"carlpett/sops\",\n    version = \"1.2.0\",\n    platform = \"linux_amd64\",\n    # Include every file the provider archive shipped with (binary + LICENSE +\n    # any other data). Terraform's `h1:` (PackageHashV1) hashes the entire\n    # provider directory; leaving any file out makes our install diverge from\n    # what real `terraform init` would produce.\n    files = glob(\n        [\"**/*\"],\n        exclude = [\"BUILD.bazel\", \"REPO.bazel\", \"WORKSPACE\", \"WORKSPACE.bazel\", \"MODULE.bazel\"],\n    ),\n    visibility = [\"//visibility:public\"],\n)\n\n"
             }
           },
-          "test_providers_with_third_party_carlpett_sops_linux_arm64": {
+          "rt_prov_registry.terraform.io_carlpett_sops_1.2.0_linux_arm64": {
             "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_archive",
             "attributes": {
               "urls": [
@@ -452,7 +371,7 @@
               "build_file_content": "load(\"@rules_terraform//terraform/private:terraform.bzl\", \"terraform_provider\")\n\nterraform_provider(\n    name = \"provider\",\n    source = \"carlpett/sops\",\n    version = \"1.2.0\",\n    platform = \"linux_arm64\",\n    # Include every file the provider archive shipped with (binary + LICENSE +\n    # any other data). Terraform's `h1:` (PackageHashV1) hashes the entire\n    # provider directory; leaving any file out makes our install diverge from\n    # what real `terraform init` would produce.\n    files = glob(\n        [\"**/*\"],\n        exclude = [\"BUILD.bazel\", \"REPO.bazel\", \"WORKSPACE\", \"WORKSPACE.bazel\", \"MODULE.bazel\"],\n    ),\n    visibility = [\"//visibility:public\"],\n)\n\n"
             }
           },
-          "test_providers_with_third_party_carlpett_sops_darwin_amd64": {
+          "rt_prov_registry.terraform.io_carlpett_sops_1.2.0_darwin_amd64": {
             "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_archive",
             "attributes": {
               "urls": [
@@ -462,7 +381,7 @@
               "build_file_content": "load(\"@rules_terraform//terraform/private:terraform.bzl\", \"terraform_provider\")\n\nterraform_provider(\n    name = \"provider\",\n    source = \"carlpett/sops\",\n    version = \"1.2.0\",\n    platform = \"darwin_amd64\",\n    # Include every file the provider archive shipped with (binary + LICENSE +\n    # any other data). Terraform's `h1:` (PackageHashV1) hashes the entire\n    # provider directory; leaving any file out makes our install diverge from\n    # what real `terraform init` would produce.\n    files = glob(\n        [\"**/*\"],\n        exclude = [\"BUILD.bazel\", \"REPO.bazel\", \"WORKSPACE\", \"WORKSPACE.bazel\", \"MODULE.bazel\"],\n    ),\n    visibility = [\"//visibility:public\"],\n)\n\n"
             }
           },
-          "test_providers_with_third_party_carlpett_sops_darwin_arm64": {
+          "rt_prov_registry.terraform.io_carlpett_sops_1.2.0_darwin_arm64": {
             "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_archive",
             "attributes": {
               "urls": [
@@ -472,7 +391,7 @@
               "build_file_content": "load(\"@rules_terraform//terraform/private:terraform.bzl\", \"terraform_provider\")\n\nterraform_provider(\n    name = \"provider\",\n    source = \"carlpett/sops\",\n    version = \"1.2.0\",\n    platform = \"darwin_arm64\",\n    # Include every file the provider archive shipped with (binary + LICENSE +\n    # any other data). Terraform's `h1:` (PackageHashV1) hashes the entire\n    # provider directory; leaving any file out makes our install diverge from\n    # what real `terraform init` would produce.\n    files = glob(\n        [\"**/*\"],\n        exclude = [\"BUILD.bazel\", \"REPO.bazel\", \"WORKSPACE\", \"WORKSPACE.bazel\", \"MODULE.bazel\"],\n    ),\n    visibility = [\"//visibility:public\"],\n)\n\n"
             }
           },
-          "test_providers_with_third_party_carlpett_sops_windows_amd64": {
+          "rt_prov_registry.terraform.io_carlpett_sops_1.2.0_windows_amd64": {
             "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_archive",
             "attributes": {
               "urls": [
@@ -482,20 +401,7 @@
               "build_file_content": "load(\"@rules_terraform//terraform/private:terraform.bzl\", \"terraform_provider\")\n\nterraform_provider(\n    name = \"provider\",\n    source = \"carlpett/sops\",\n    version = \"1.2.0\",\n    platform = \"windows_amd64\",\n    # Include every file the provider archive shipped with (binary + LICENSE +\n    # any other data). Terraform's `h1:` (PackageHashV1) hashes the entire\n    # provider directory; leaving any file out makes our install diverge from\n    # what real `terraform init` would produce.\n    files = glob(\n        [\"**/*\"],\n        exclude = [\"BUILD.bazel\", \"REPO.bazel\", \"WORKSPACE\", \"WORKSPACE.bazel\", \"MODULE.bazel\"],\n    ),\n    visibility = [\"//visibility:public\"],\n)\n\n"
             }
           },
-          "test_providers_with_third_party": {
-            "repoRuleId": "@@//terraform/private:provider_repo.bzl%terraform_provider_hub",
-            "attributes": {
-              "provider_repos": {
-                "carlpett/sops:linux_amd64": "test_providers_with_third_party_carlpett_sops_linux_amd64",
-                "carlpett/sops:linux_arm64": "test_providers_with_third_party_carlpett_sops_linux_arm64",
-                "carlpett/sops:darwin_amd64": "test_providers_with_third_party_carlpett_sops_darwin_amd64",
-                "carlpett/sops:darwin_arm64": "test_providers_with_third_party_carlpett_sops_darwin_arm64",
-                "carlpett/sops:windows_amd64": "test_providers_with_third_party_carlpett_sops_windows_amd64"
-              },
-              "lock_file_label": "@@//tests/with_third_party_provider:.terraform.lock.hcl"
-            }
-          },
-          "test_registry_modules_label": {
+          "rt_mod_registry.terraform.io_cloudposse_label_null_0.25.0": {
             "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_archive",
             "attributes": {
               "urls": [
@@ -503,37 +409,10 @@
               ],
               "integrity": "sha256-fZlEtS/t7DyCrlnizzbduo9epOyV5w+Z9NGOx0HWCNw=",
               "strip_prefix": "terraform-null-label-0.25.0",
-              "build_file_content": "load(\"@rules_terraform//terraform/private:terraform.bzl\", \"terraform_external_module\")\n\nterraform_external_module(\n    name = \"module\",\n    key = \"label\",\n    source = \"cloudposse/label/null\",\n    version = \"0.25.0\",\n    subdir = \"\",\n    srcs = glob(\n        [\"**/*.tf\", \"**/*.tf.json\"],\n        allow_empty = True,\n    ),\n    visibility = [\"//visibility:public\"],\n)\n"
+              "build_file_content": "load(\"@rules_terraform//terraform/private:terraform.bzl\", \"terraform_external_module\")\n\nterraform_external_module(\n    name = \"module\",\n    source = \"cloudposse/label/null\",\n    version = \"0.25.0\",\n    srcs = glob(\n        [\"**/*.tf\", \"**/*.tf.json\", \"**/*.tofu\", \"**/*.tofu.json\"],\n        allow_empty = True,\n    ),\n    visibility = [\"//visibility:public\"],\n)\n"
             }
           },
-          "test_registry_modules": {
-            "repoRuleId": "@@//terraform/private:module_repo.bzl%terraform_module_hub",
-            "attributes": {
-              "module_repos": [
-                "test_registry_modules_label"
-              ]
-            }
-          },
-          "test_nested_registry_modules_label": {
-            "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_archive",
-            "attributes": {
-              "urls": [
-                "https://github.com/cloudposse/terraform-null-label/archive/refs/tags/0.25.0.tar.gz"
-              ],
-              "integrity": "sha256-fZlEtS/t7DyCrlnizzbduo9epOyV5w+Z9NGOx0HWCNw=",
-              "strip_prefix": "terraform-null-label-0.25.0",
-              "build_file_content": "load(\"@rules_terraform//terraform/private:terraform.bzl\", \"terraform_external_module\")\n\nterraform_external_module(\n    name = \"module\",\n    key = \"label\",\n    source = \"cloudposse/label/null\",\n    version = \"0.25.0\",\n    subdir = \"\",\n    srcs = glob(\n        [\"**/*.tf\", \"**/*.tf.json\"],\n        allow_empty = True,\n    ),\n    visibility = [\"//visibility:public\"],\n)\n"
-            }
-          },
-          "test_nested_registry_modules": {
-            "repoRuleId": "@@//terraform/private:module_repo.bzl%terraform_module_hub",
-            "attributes": {
-              "module_repos": [
-                "test_nested_registry_modules_label"
-              ]
-            }
-          },
-          "test_transitive_registry_modules_sg": {
+          "rt_mod_registry.terraform.io_cloudposse_security-group_aws_2.2.0": {
             "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_archive",
             "attributes": {
               "urls": [
@@ -541,26 +420,101 @@
               ],
               "integrity": "sha256-0ipWHHP8v8th5tQt+5j5OFhZZNFtVChXuFZwCKjfWKo=",
               "strip_prefix": "terraform-aws-security-group-2.2.0",
-              "build_file_content": "load(\"@rules_terraform//terraform/private:terraform.bzl\", \"terraform_external_module\")\n\nterraform_external_module(\n    name = \"module\",\n    key = \"sg\",\n    source = \"cloudposse/security-group/aws\",\n    version = \"2.2.0\",\n    subdir = \"\",\n    srcs = glob(\n        [\"**/*.tf\", \"**/*.tf.json\"],\n        allow_empty = True,\n    ),\n    visibility = [\"//visibility:public\"],\n)\n"
+              "build_file_content": "load(\"@rules_terraform//terraform/private:terraform.bzl\", \"terraform_external_module\")\n\nterraform_external_module(\n    name = \"module\",\n    source = \"cloudposse/security-group/aws\",\n    version = \"2.2.0\",\n    srcs = glob(\n        [\"**/*.tf\", \"**/*.tf.json\", \"**/*.tofu\", \"**/*.tofu.json\"],\n        allow_empty = True,\n    ),\n    visibility = [\"//visibility:public\"],\n)\n"
             }
           },
-          "test_transitive_registry_modules_cloudposse_label_null_0.25.0": {
+          "test_providers_with_provider": {
+            "repoRuleId": "@@//terraform/private:deps_hub.bzl%terraform_deps_hub",
+            "attributes": {
+              "lock_file_label": "@@//tests/with_provider:.terraform.lock.hcl",
+              "provider_repos": {
+                "hashicorp/null:linux_amd64": "rt_prov_registry.terraform.io_hashicorp_null_3.2.4_linux_amd64",
+                "hashicorp/null:linux_arm64": "rt_prov_registry.terraform.io_hashicorp_null_3.2.4_linux_arm64",
+                "hashicorp/null:darwin_amd64": "rt_prov_registry.terraform.io_hashicorp_null_3.2.4_darwin_amd64",
+                "hashicorp/null:darwin_arm64": "rt_prov_registry.terraform.io_hashicorp_null_3.2.4_darwin_arm64",
+                "hashicorp/null:windows_amd64": "rt_prov_registry.terraform.io_hashicorp_null_3.2.4_windows_amd64"
+              },
+              "module_targets": []
+            }
+          },
+          "test_providers_with_modules_ext": {
+            "repoRuleId": "@@//terraform/private:deps_hub.bzl%terraform_deps_hub",
+            "attributes": {
+              "lock_file_label": "@@//tests/with_modules_ext:.terraform.lock.hcl",
+              "provider_repos": {
+                "hashicorp/aws:linux_amd64": "rt_prov_registry.terraform.io_hashicorp_aws_6.24.0_linux_amd64",
+                "hashicorp/aws:linux_arm64": "rt_prov_registry.terraform.io_hashicorp_aws_6.24.0_linux_arm64",
+                "hashicorp/aws:darwin_amd64": "rt_prov_registry.terraform.io_hashicorp_aws_6.24.0_darwin_amd64",
+                "hashicorp/aws:darwin_arm64": "rt_prov_registry.terraform.io_hashicorp_aws_6.24.0_darwin_arm64",
+                "hashicorp/aws:windows_amd64": "rt_prov_registry.terraform.io_hashicorp_aws_6.24.0_windows_amd64",
+                "hashicorp/null:linux_amd64": "rt_prov_registry.terraform.io_hashicorp_null_3.2.4_linux_amd64",
+                "hashicorp/null:linux_arm64": "rt_prov_registry.terraform.io_hashicorp_null_3.2.4_linux_arm64",
+                "hashicorp/null:darwin_amd64": "rt_prov_registry.terraform.io_hashicorp_null_3.2.4_darwin_amd64",
+                "hashicorp/null:darwin_arm64": "rt_prov_registry.terraform.io_hashicorp_null_3.2.4_darwin_arm64",
+                "hashicorp/null:windows_amd64": "rt_prov_registry.terraform.io_hashicorp_null_3.2.4_windows_amd64"
+              },
+              "module_targets": []
+            }
+          },
+          "test_providers_with_third_party": {
+            "repoRuleId": "@@//terraform/private:deps_hub.bzl%terraform_deps_hub",
+            "attributes": {
+              "lock_file_label": "@@//tests/with_third_party_provider:.terraform.lock.hcl",
+              "provider_repos": {
+                "carlpett/sops:linux_amd64": "rt_prov_registry.terraform.io_carlpett_sops_1.2.0_linux_amd64",
+                "carlpett/sops:linux_arm64": "rt_prov_registry.terraform.io_carlpett_sops_1.2.0_linux_arm64",
+                "carlpett/sops:darwin_amd64": "rt_prov_registry.terraform.io_carlpett_sops_1.2.0_darwin_amd64",
+                "carlpett/sops:darwin_arm64": "rt_prov_registry.terraform.io_carlpett_sops_1.2.0_darwin_arm64",
+                "carlpett/sops:windows_amd64": "rt_prov_registry.terraform.io_carlpett_sops_1.2.0_windows_amd64"
+              },
+              "module_targets": []
+            }
+          },
+          "test_registry_modules": {
+            "repoRuleId": "@@//terraform/private:deps_hub.bzl%terraform_deps_hub",
+            "attributes": {
+              "provider_repos": {},
+              "module_targets": [
+                "@rt_mod_registry.terraform.io_cloudposse_label_null_0.25.0//:module",
+                "@rt_mod_registry.terraform.io_cloudposse_security-group_aws_2.2.0//:module"
+              ]
+            }
+          }
+        },
+        "moduleExtensionMetadata": {
+          "useAllRepos": "NO",
+          "reproducible": false
+        }
+      }
+    },
+    "//tofu:extensions.bzl%tofu": {
+      "general": {
+        "bzlTransitiveDigest": "tzE2emiB8+K35QYJLi9ogx1Z1RDAsRYvnEUz+XyEy9w=",
+        "usagesDigest": "TusXPF1iGkgMgtWVnM7Ag/z5LQOm+hQiLpeauw+njbU=",
+        "recordedInputs": [
+          "REPO_MAPPING:,bazel_tools bazel_tools",
+          "FILE:@@//tests/with_registry_module DIR",
+          "DIRENTS:@@//tests/with_registry_module 505777b42b59f99e59abd665b98653f35009a3123048ca2cd3136d57b150c126",
+          "FILE:@@//tests/with_registry_module/main.tf b005e784b89ebba08818b0d9dcfd755012e82fbe58fc6340ae3a151e3699a23e"
+        ],
+        "generatedRepoSpecs": {
+          "rt_mod_registry.opentofu.org_cloudposse_label_null_0.25.0": {
             "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_archive",
             "attributes": {
               "urls": [
-                "https://github.com/cloudposse/terraform-null-label/archive/refs/tags/0.25.0.tar.gz"
+                "https://github.com/cloudposse/terraform-null-label/archive/488ab91e34a24a86957e397d9f7262ec5925586a.tar.gz"
               ],
-              "integrity": "sha256-fZlEtS/t7DyCrlnizzbduo9epOyV5w+Z9NGOx0HWCNw=",
-              "strip_prefix": "terraform-null-label-0.25.0",
-              "build_file_content": "load(\"@rules_terraform//terraform/private:terraform.bzl\", \"terraform_external_module\")\n\nterraform_external_module(\n    name = \"module\",\n    key = \"cloudposse_label_null_0.25.0\",\n    source = \"cloudposse/label/null\",\n    version = \"0.25.0\",\n    subdir = \"\",\n    srcs = glob(\n        [\"**/*.tf\", \"**/*.tf.json\"],\n        allow_empty = True,\n    ),\n    visibility = [\"//visibility:public\"],\n)\n"
+              "integrity": "sha256-sI4Uk4ZMbtx07nkBRF1QHEPYi81dOIIwPrOAkgZQJ3c=",
+              "strip_prefix": "terraform-null-label-488ab91e34a24a86957e397d9f7262ec5925586a",
+              "build_file_content": "load(\"@rules_terraform//terraform/private:terraform.bzl\", \"terraform_external_module\")\n\nterraform_external_module(\n    name = \"module\",\n    source = \"cloudposse/label/null\",\n    version = \"0.25.0\",\n    srcs = glob(\n        [\"**/*.tf\", \"**/*.tf.json\", \"**/*.tofu\", \"**/*.tofu.json\"],\n        allow_empty = True,\n    ),\n    visibility = [\"//visibility:public\"],\n)\n"
             }
           },
-          "test_transitive_registry_modules": {
-            "repoRuleId": "@@//terraform/private:module_repo.bzl%terraform_module_hub",
+          "test_tofu_registry_modules": {
+            "repoRuleId": "@@//terraform/private:deps_hub.bzl%terraform_deps_hub",
             "attributes": {
-              "module_repos": [
-                "test_transitive_registry_modules_sg",
-                "test_transitive_registry_modules_cloudposse_label_null_0.25.0"
+              "provider_repos": {},
+              "module_targets": [
+                "@rt_mod_registry.opentofu.org_cloudposse_label_null_0.25.0//:module"
               ]
             }
           }
@@ -845,6 +799,108 @@
         "integrity": "sha256-0ipWHHP8v8th5tQt+5j5OFhZZNFtVChXuFZwCKjfWKo=",
         "strip_prefix": "terraform-aws-security-group-2.2.0",
         "url": "https://github.com/cloudposse/terraform-aws-security-group/archive/refs/tags/2.2.0.tar.gz"
+      },
+      "provider:registry.terraform.io/carlpett/sops@1.2.0:darwin_amd64": {
+        "sha256": "817bb1d00219de01a1bb84d7a8f216a2e92f488dd7f9491792dc3443f723aa72",
+        "url": "https://github.com/carlpett/terraform-provider-sops/releases/download/v1.2.0/terraform-provider-sops_1.2.0_darwin_amd64.zip"
+      },
+      "provider:registry.terraform.io/carlpett/sops@1.2.0:darwin_arm64": {
+        "sha256": "b37cdcd416c27e7ce6ca763a9e856a69ebe4d9c4dcd30b008a14c949bcb018ca",
+        "url": "https://github.com/carlpett/terraform-provider-sops/releases/download/v1.2.0/terraform-provider-sops_1.2.0_darwin_arm64.zip"
+      },
+      "provider:registry.terraform.io/carlpett/sops@1.2.0:linux_amd64": {
+        "sha256": "fda02aa8797463cfe562490c7c8534e1522231cb3a784cb3ffb42620f0e9ac77",
+        "url": "https://github.com/carlpett/terraform-provider-sops/releases/download/v1.2.0/terraform-provider-sops_1.2.0_linux_amd64.zip"
+      },
+      "provider:registry.terraform.io/carlpett/sops@1.2.0:linux_arm64": {
+        "sha256": "98b9dbe46f2b04a39bf0032243e4ec8cf32c6da12b94bfc9f46da6c619defa17",
+        "url": "https://github.com/carlpett/terraform-provider-sops/releases/download/v1.2.0/terraform-provider-sops_1.2.0_linux_arm64.zip"
+      },
+      "provider:registry.terraform.io/carlpett/sops@1.2.0:windows_amd64": {
+        "sha256": "cad7d0e5256aadc079fd6b3b4ab5c71c963347bd8a80752e1f5c4f69591a99e5",
+        "url": "https://github.com/carlpett/terraform-provider-sops/releases/download/v1.2.0/terraform-provider-sops_1.2.0_windows_amd64.zip"
+      },
+      "provider:registry.terraform.io/hashicorp/aws@6.24.0:darwin_amd64": {
+        "sha256": "99154ea404bd6949afdadbc2a46dfdac75bf94d23cb6287d2ae6da9965ec066a",
+        "url": "https://releases.hashicorp.com/terraform-provider-aws/6.24.0/terraform-provider-aws_6.24.0_darwin_amd64.zip"
+      },
+      "provider:registry.terraform.io/hashicorp/aws@6.24.0:darwin_arm64": {
+        "sha256": "9a520955e8b3d735c717e730ddeee2d2b27ac276f140ea805b49b9ef79a34829",
+        "url": "https://releases.hashicorp.com/terraform-provider-aws/6.24.0/terraform-provider-aws_6.24.0_darwin_arm64.zip"
+      },
+      "provider:registry.terraform.io/hashicorp/aws@6.24.0:linux_amd64": {
+        "sha256": "11283019ffc77cbd445447c74d3b741a155bbaa69162f971cceb394cf4219f4b",
+        "url": "https://releases.hashicorp.com/terraform-provider-aws/6.24.0/terraform-provider-aws_6.24.0_linux_amd64.zip"
+      },
+      "provider:registry.terraform.io/hashicorp/aws@6.24.0:linux_arm64": {
+        "sha256": "b3496079295b5f41b31e24c8292fe8d685fd21b941927eb654c2e6df3b4d24dd",
+        "url": "https://releases.hashicorp.com/terraform-provider-aws/6.24.0/terraform-provider-aws_6.24.0_linux_arm64.zip"
+      },
+      "provider:registry.terraform.io/hashicorp/aws@6.24.0:windows_amd64": {
+        "sha256": "ced4f3e74156669f074e30b2c9afa48a3e4062fcafe1d9da1c4db4b569bf82b7",
+        "url": "https://releases.hashicorp.com/terraform-provider-aws/6.24.0/terraform-provider-aws_6.24.0_windows_amd64.zip"
+      },
+      "provider:registry.terraform.io/hashicorp/null@3.2.4:darwin_amd64": {
+        "sha256": "7b9c7b16f118fbc2b05a983817b8ce2f86df125857966ad356353baf4bff5c0a",
+        "url": "https://releases.hashicorp.com/terraform-provider-null/3.2.4/terraform-provider-null_3.2.4_darwin_amd64.zip"
+      },
+      "provider:registry.terraform.io/hashicorp/null@3.2.4:darwin_arm64": {
+        "sha256": "c43723e8cc65bcdf5e0c92581dcbbdcbdcf18b8d2037406a5f2033b1e22de442",
+        "url": "https://releases.hashicorp.com/terraform-provider-null/3.2.4/terraform-provider-null_3.2.4_darwin_arm64.zip"
+      },
+      "provider:registry.terraform.io/hashicorp/null@3.2.4:linux_amd64": {
+        "sha256": "9d32ac3619cfc93eb3c4f423492a8e0f79db05fec58e449dee9b2d5873d5f69f",
+        "url": "https://releases.hashicorp.com/terraform-provider-null/3.2.4/terraform-provider-null_3.2.4_linux_amd64.zip"
+      },
+      "provider:registry.terraform.io/hashicorp/null@3.2.4:linux_arm64": {
+        "sha256": "85e33ab43e0e1726e5f97a874b8e24820b6565ff8076523cc2922ba671492991",
+        "url": "https://releases.hashicorp.com/terraform-provider-null/3.2.4/terraform-provider-null_3.2.4_linux_arm64.zip"
+      },
+      "provider:registry.terraform.io/hashicorp/null@3.2.4:windows_amd64": {
+        "sha256": "ed0fe2acdb61330b01841fa790be00ec6beaac91d41f311fb8254f74eb6a711f",
+        "url": "https://releases.hashicorp.com/terraform-provider-null/3.2.4/terraform-provider-null_3.2.4_windows_amd64.zip"
+      }
+    },
+    "//terraform:extensions.bzl%terraform_toolchains": {
+      "terraform@1.12.2": {
+        "darwin_amd64": "c65aa74bed1dbb1c48ba4bbab11f08e7f7eeb54a422146561490275340468f19",
+        "darwin_arm64": "1ca02f336ff4f993d6441806d38a0bcc0bbca0e3c877b84c9c2dc80cfcd0dc8b",
+        "freebsd_386": "1775139ffda321f730f91c0ce2bb2364c8eafe32c0d3950788086302d49d3005",
+        "freebsd_amd64": "4a72a9770e971ad0fead17221b9488f4552d1a58a860b2a6b2c66ca15376b40e",
+        "freebsd_arm": "3ec3d8028b4e2977853cbf8f3119e2bbebb14c5bfa3542d90f0d32cac1b0df7d",
+        "linux_386": "73b380f262324985e911323ecc446066343ffe78add6570a122b7444b04b120b",
+        "linux_amd64": "1eaed12ca41fcfe094da3d76a7e9aa0639ad3409c43be0103ee9f5a1ff4b7437",
+        "linux_arm": "4d5d39d57755a45b7bb6c6ad7301ac3c301eba44b647e2d0ca79c117cb817259",
+        "linux_arm64": "f8a0347dc5e68e6d60a9fa2db361762e7943ed084a773f28a981d988ceb6fdc9",
+        "openbsd_386": "f92bbb5c7f2141d5b28a69d16770fd8b6afff5ff1b8ab0cfaab32e833b793b41",
+        "openbsd_amd64": "7dc9bbfcf814386f3d680dc86d5f99eca78d2560863c0be219f9627c863ee903",
+        "windows_386": "5503656530278ff63741fd74609e847e181969ee96dd76fb722e11da40e19063",
+        "windows_amd64": "0a1565ace9da37c2778868c2e97452d8fc25e40e530bafbbab97231e69b0a201"
+      }
+    },
+    "//tofu:extensions.bzl%tofu": {
+      "cloudposse/label/null@0.25.0": {
+        "deps": [],
+        "integrity": "sha256-sI4Uk4ZMbtx07nkBRF1QHEPYi81dOIIwPrOAkgZQJ3c=",
+        "strip_prefix": "terraform-null-label-488ab91e34a24a86957e397d9f7262ec5925586a",
+        "url": "https://github.com/cloudposse/terraform-null-label/archive/488ab91e34a24a86957e397d9f7262ec5925586a.tar.gz"
+      }
+    },
+    "//tofu:extensions.bzl%tofu_toolchains": {
+      "tofu@1.9.1": {
+        "darwin_amd64": "c31fb27137cfee7d965e347e3270e932efac08a2acbbc5d36fdaf1b50f404522",
+        "darwin_arm64": "4245801ef0a6b8edb79df1fb7eaabf65eae9b5be6796330c7bf71647b75568cc",
+        "freebsd_386": "49f63161ffc4b006b0c6a34c00a884a1f55cf0fcadb657b641b4039d94dffb0f",
+        "freebsd_amd64": "dbb86da69a01398cca6cbc3ee036411d3233aa9a6f5c79ad3ce8a25a64d4e1fd",
+        "freebsd_arm": "b44bafd25968d221d4f231180b3c08b3192716b3388d1473636241eec4897bb7",
+        "linux_386": "391ce077caa513d8c0bc6cffc05a6e7fcb1c3ede00981128a76f20f797cbec6c",
+        "linux_amd64": "19eda43eaa45bef3e21d87c58f31a6df73e8534ea30e78619a463bdfdb889cd2",
+        "linux_arm": "f6ca41f1f48fc9539b4f1431e419248992b6a772fbca5d4071544f6cc2037835",
+        "linux_arm64": "733f41baef5923178385c1fc441140988aa98ba41e7669def97e3418347b4ed6",
+        "openbsd_386": "a726b9d0ce9ca135d281932f600434db29ea9d6e90b464b31d2a6d1cf914c76b",
+        "openbsd_amd64": "a1dd5efa9b0afa7ac6f71a29049a2415660af57ab46c3db6ea2124e94ac5aad0",
+        "windows_386": "4fb83b23de21eff40291723e8ac53ec75d907a065c9e66fafef2ef7b5598d03f",
+        "windows_amd64": "8b384e1724c098bbd6e3329d3121ffd5f3a24c5daab483168b1308f50d2a2279"
       }
     },
     "@@rules_go+//go:extensions.bzl%go_sdk": {

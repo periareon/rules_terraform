@@ -1,16 +1,21 @@
 """Public settings for `//terraform`.
 
-The `:version` string flag picks which Terraform version the auto-registered
-toolchains resolve to. Flip it globally (via `.bazelrc`), per-invocation
-(`--@rules_terraform//terraform/settings:version=1.10.5`), or per-target
-(via a `transition_rule` that mutates it).
+The `:version` string flag picks which Terraform release the auto-registered
+toolchains resolve to. Empty, the default, means the version the
+`terraform_toolchains` extension chose: the one the root module's
+`version(default = True)` tag named, else the newest release shipped in
+`//terraform/private:versions.bzl`. Any other value must be a release the
+hub knows — shipped, or requested with a `version` tag — and can be set
+globally in `.bazelrc`, per invocation
+(`--@rules_terraform//terraform/settings:version=1.9.8`), or per target
+through a transition.
 
-The list of accepted values is derived from `//terraform/private:versions.bzl`
-so it stays in sync with what the ruleset can actually download.
+The per-version `config_setting`s live in the `@terraform_toolchains` hub,
+next to the toolchains they select, so a release added by a tag is
+selectable without this package changing.
 """
 
 load("@bazel_skylib//rules:common_settings.bzl", "string_flag")
-load(":settings.bzl", "TERRAFORM_DEFAULT_VERSION_VALUE", "TERRAFORM_VERSION_LIST")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -18,17 +23,5 @@ exports_files(["settings.bzl"])
 
 string_flag(
     name = "version",
-    build_setting_default = TERRAFORM_DEFAULT_VERSION_VALUE,
-    # No `values` restriction: newer Terraform releases will show up in the
-    # generated versions table before old bazelrc settings need bumping.
+    build_setting_default = "",
 )
-
-# A `config_setting` per known version. Toolchains carry these on
-# `target_settings` so Bazel's toolchain resolution picks the right one.
-[
-    config_setting(
-        name = "version_" + v.replace(".", "_"),
-        flag_values = {":version": v},
-    )
-    for v in TERRAFORM_VERSION_LIST
-]

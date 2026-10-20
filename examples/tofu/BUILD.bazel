@@ -1,0 +1,101 @@
+"""Example: textbook OpenTofu module wrapped in Bazel.
+
+The workflow rules mirror what an OpenTofu user runs at the CLI:
+
+    bazel run   //:tofu -- plan            ≈ tofu plan
+    bazel run   //:tofu -- apply           ≈ tofu apply
+    bazel test  //:validate                ≈ tofu validate
+    bazel test  //:fmt                     ≈ tofu fmt -check -recursive
+    bazel test  //:tftest                  ≈ tofu test
+    bazel test  //:providers_lock          ≈ CI check that the lock file covers every provider
+
+`tofu_module` and `tofu_provider` are
+literal aliases for their `terraform_*` counterparts — the file layout
+Terraform and OpenTofu consume is identical. Only the workflow rules
+(`tofu_binary`, `tofu_test`, `tofu_validate_test`,
+`tofu_fmt_test`) differ: they bind to `//tofu:toolchain_type`
+so Bazel resolves the `tofu` binary instead of `terraform`.
+"""
+
+load("@rules_terraform//tofu:tofu_binary.bzl", "tofu_binary")
+load("@rules_terraform//tofu:tofu_fmt_test.bzl", "tofu_fmt_test")
+load("@rules_terraform//tofu:tofu_module.bzl", "tofu_module")
+load("@rules_terraform//tofu:tofu_plan_test.bzl", "tofu_plan_test")
+load("@rules_terraform//tofu:tofu_providers_lock.bzl", "tofu_providers_lock")
+load("@rules_terraform//tofu:tofu_providers_lock_test.bzl", "tofu_providers_lock_test")
+load("@rules_terraform//tofu:tofu_test.bzl", "tofu_test")
+load("@rules_terraform//tofu:tofu_validate_test.bzl", "tofu_validate_test")
+
+# The root module: every .tf file in this directory and nothing deeper.
+# `//modules/greeter` sits under this package, so listing it in `deps` is
+# enough — it lands at `modules/greeter`, where
+# `module "greeter" { source = "./modules/greeter" }` looks for it.
+tofu_module(
+    name = "example",
+    srcs = glob(["*.tf"]),
+    # A demo with no backend block: its state is disposable, so `apply` and
+    # `destroy` are allowed against local state kept under bazel-out. A real
+    # deployment declares a backend instead and leaves this unset.
+    allow_ephemeral_state = True,
+    data = glob(["*.tftest.hcl"]),
+    # `@app` is the hub the `tofu.deps` tag in MODULE.bazel produces: every
+    # provider the lock pins, the lock itself, and the registry module the
+    # `label` block names. Adding a provider or a registry module needs no
+    # BUILD change.
+    deps = [
+        "//modules/greeter",
+        "@app",
+    ],
+)
+
+# `bazel run //:tofu -- <subcommand>` copies the aspect-built module
+# directory into a temp dir and runs the real tofu binary there.
+tofu_binary(
+    name = "tofu",
+    root = ":example",
+)
+
+tofu_validate_test(
+    name = "validate",
+    target = ":example",
+)
+
+tofu_fmt_test(
+    name = "fmt",
+    target = ":example",
+)
+
+# Runs every `run` block in `*.tftest.hcl` via `tofu test`.
+tofu_test(
+    name = "tftest",
+    root = ":example",
+)
+
+# Alias for `terraform_providers_lock_test`: same rule, same HCL text
+# comparison, no engine binary involved. Kept under an `tofu_*` name
+# so OpenTofu-only projects don't have to import a `terraform_*` symbol.
+tofu_providers_lock_test(
+    name = "providers_lock",
+    lock = ".terraform.lock.hcl",
+    target = ":example",
+)
+
+# `bazel run //:providers_lock.update` rewrites `.terraform.lock.hcl` for every
+# platform in the default set, using the toolchain-fetched engine — nothing
+# has to be installed on the host. Run it after changing `required_providers`.
+# This is the `tofu` updater, so the hashes it records are the ones
+# `registry.opentofu.org` serves; see MODULE.bazel.
+tofu_providers_lock(
+    name = "providers_lock.update",
+    output = ".terraform.lock.hcl",
+    target = ":example",
+)
+
+# `bazel test //:plan` runs a real `plan` and keeps it under
+# bazel-testlogs/plan/test.outputs/ as plan.txt and plan.json. Tagged
+# `requires-network` by the macro; the `null` provider needs none, but a cloud
+# provider would, along with credentials passed through `--test_env`.
+tofu_plan_test(
+    name = "plan",
+    root = ":example",
+)

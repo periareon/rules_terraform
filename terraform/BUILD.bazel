@@ -1,6 +1,6 @@
 load("@bazel_skylib//:bzl_library.bzl", "bzl_library")
 load("//terraform/private:format.bzl", "terraform_formatter")
-load("//terraform/private:toolchain.bzl", "current_terraform_binary", "current_terraform_toolchain")
+load("//terraform/private:toolchain.bzl", "current_terraform_toolchain")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -8,12 +8,14 @@ exports_files([
     "defs.bzl",
     "extensions.bzl",
     "terraform_binary.bzl",
+    "terraform_external_module.bzl",
     "terraform_fmt_aspect.bzl",
     "terraform_fmt_test.bzl",
     "terraform_module.bzl",
-    "terraform_modules_lock.bzl",
+    "terraform_plan_test.bzl",
     "terraform_provider.bzl",
-    "terraform_provider_group.bzl",
+    "terraform_providers_lock.bzl",
+    "terraform_providers_lock_test.bzl",
     "terraform_test.bzl",
     "terraform_validate_aspect.bzl",
     "terraform_validate_test.bzl",
@@ -27,10 +29,8 @@ current_terraform_toolchain(
     name = "current_terraform_toolchain",
 )
 
-current_terraform_binary(
-    name = "terraform",
-)
-
+# `bazel run //terraform:format` rewrites every module's .tf files with
+# `terraform fmt`, using the toolchain binary.
 terraform_formatter(
     name = "format",
 )
@@ -41,12 +41,14 @@ bzl_library(
     deps = [
         ":extensions_bzl",
         ":terraform_binary_bzl",
+        ":terraform_external_module_bzl",
         ":terraform_fmt_aspect_bzl",
         ":terraform_fmt_test_bzl",
         ":terraform_module_bzl",
-        ":terraform_modules_lock_bzl",
+        ":terraform_plan_test_bzl",
         ":terraform_provider_bzl",
-        ":terraform_provider_group_bzl",
+        ":terraform_providers_lock_bzl",
+        ":terraform_providers_lock_test_bzl",
         ":terraform_test_bzl",
         ":terraform_validate_aspect_bzl",
         ":terraform_validate_test_bzl",
@@ -62,6 +64,12 @@ bzl_library(
 bzl_library(
     name = "terraform_binary_bzl",
     srcs = ["terraform_binary.bzl"],
+    deps = ["//terraform/private:bzl_lib"],
+)
+
+bzl_library(
+    name = "terraform_external_module_bzl",
+    srcs = ["terraform_external_module.bzl"],
     deps = ["//terraform/private:bzl_lib"],
 )
 
@@ -84,20 +92,26 @@ bzl_library(
 )
 
 bzl_library(
-    name = "terraform_modules_lock_bzl",
-    srcs = ["terraform_modules_lock.bzl"],
+    name = "terraform_providers_lock_bzl",
+    srcs = ["terraform_providers_lock.bzl"],
+    deps = ["//terraform/private:bzl_lib"],
+)
+
+bzl_library(
+    name = "terraform_providers_lock_test_bzl",
+    srcs = ["terraform_providers_lock_test.bzl"],
+    deps = ["//terraform/private:bzl_lib"],
+)
+
+bzl_library(
+    name = "terraform_plan_test_bzl",
+    srcs = ["terraform_plan_test.bzl"],
     deps = ["//terraform/private:bzl_lib"],
 )
 
 bzl_library(
     name = "terraform_provider_bzl",
     srcs = ["terraform_provider.bzl"],
-    deps = ["//terraform/private:bzl_lib"],
-)
-
-bzl_library(
-    name = "terraform_provider_group_bzl",
-    srcs = ["terraform_provider_group.bzl"],
     deps = ["//terraform/private:bzl_lib"],
 )
 

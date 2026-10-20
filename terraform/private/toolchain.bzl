@@ -59,31 +59,3 @@ current_terraform_toolchain = rule(
     implementation = _current_terraform_toolchain_impl,
     toolchains = [TOOLCHAIN_TYPE],
 )
-
-def _current_terraform_binary_impl(ctx):
-    toolchain = ctx.toolchains[TOOLCHAIN_TYPE]
-
-    terraform = toolchain.terraform
-    is_windows = terraform.basename.endswith(".exe")
-    executable = ctx.actions.declare_file("{}{}".format(ctx.label.name, ".exe" if is_windows else ""))
-
-    ctx.actions.symlink(
-        output = executable,
-        target_file = terraform,
-        is_executable = True,
-    )
-
-    return [
-        DefaultInfo(
-            executable = executable,
-            files = depset([executable]),
-            runfiles = ctx.runfiles(transitive_files = toolchain.all_files),
-        ),
-    ]
-
-current_terraform_binary = rule(
-    doc = "Access the `terraform_toolchain.terraform` target for the current configuration.",
-    implementation = _current_terraform_binary_impl,
-    toolchains = [TOOLCHAIN_TYPE],
-    executable = True,
-)

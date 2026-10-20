@@ -1,10 +1,10 @@
 """Engine-parametric rule factory.
 
-Given an engine name (`"terraform"` / `"opentofu"`) and the corresponding
+Given an engine name (`"terraform"` / `"tofu"`) and the corresponding
 toolchain-type label, produces the full set of engine-bound rules and
 aspects that a `//<engine>` package exposes.
 
-Both `//terraform` and `//opentofu` top-level rule files load from a
+Both `//terraform` and `//tofu` top-level rule files load from a
 single-call-per-engine sibling module (e.g. `//terraform/private:engine_rules.bzl`
 holds `TERRAFORM_RULES = make_engine_rules(...)`) and just re-export
 fields from that struct. The rule bodies never diverge between engines —
@@ -15,25 +15,28 @@ load(":format.bzl", "build_fmt_aspect_impl", "build_fmt_test_impl")
 load(":init.bzl", "terraform_init_aspect")
 load(":lock.bzl", "PROVIDERS_LOCK_ATTRS", "build_providers_lock")
 load(":providers.bzl", "TerraformInfo")
-load(":terraform.bzl", "RUNNER_ATTRS", "build_runner")
+load(":terraform.bzl", "PLAN_TEST_ATTRS", "RUNNER_ATTRS", "build_runner")
 load(":validate.bzl", "build_validate_aspect_impl", "build_validate_test_impl")
 
-visibility(["//opentofu/...", "//terraform/..."])
+visibility(["//terraform/...", "//tofu/..."])
 
 def make_engine_rules(*, engine, toolchain_type):
     """Return a struct of rules and aspects bound to the given toolchain.
 
     Args:
         engine: (str) Human-readable engine name (`terraform`,
-            `opentofu`) used only in docstrings.
+            `tofu`) used only in docstrings.
         toolchain_type: (str) Fully-qualified label string of the
             toolchain type the generated rules should require. Rule
             implementations look up the resolved toolchain by this label
             via `ctx.toolchains[...]`.
 
     Returns:
-        (struct) Struct with fields: `binary`, `test`, `validate_aspect`,
-        `validate_test`, `fmt_aspect`, `fmt_test`, `providers_lock`.
+        (struct) Struct with fields: `binary`, `test`, `plan_test`,
+        `validate_aspect`, `validate_test`, `fmt_aspect`, `fmt_test`,
+        `providers_lock`. `plan_test` is the bare rule; the public
+        `<engine>_plan_test.bzl` wraps it in a macro that adds the
+        `requires-network` tag.
 
         `providers_lock` is a `bazel run` updater that runs real
         `<engine> providers lock -platform=<all>` under the resolved
@@ -42,10 +45,13 @@ def make_engine_rules(*, engine, toolchain_type):
     """
 
     def _binary_impl(ctx):
-        return build_runner(ctx, toolchain_type, test_mode = False)
+        return build_runner(ctx, toolchain_type, mode = "run")
 
     def _test_impl(ctx):
-        return build_runner(ctx, toolchain_type, test_mode = True)
+        return build_runner(ctx, toolchain_type, mode = "test")
+
+    def _plan_test_impl(ctx):
+        return build_runner(ctx, toolchain_type, mode = "plan")
 
     def _validate_aspect_impl(target, ctx):
         return build_validate_aspect_impl(target, ctx, toolchain_type, engine = engine)
@@ -86,11 +92,40 @@ module as a Bazel test. Test cases live in `.tftest.hcl` files. Fully
 hermetic — the .terraform directory is assembled by the init aspect from
 Bazel-managed deps.
 
+Each `run` block is reported as a JUnit test case through Bazel's
+`XML_OUTPUT_FILE` (Terraform writes the report itself; for OpenTofu the
+runner builds it from the `-json-into` event stream, which is also kept).
+The lock file and module manifest the test ran against are saved as
+undeclared test outputs.
+
 Bazel `--test_arg` values are intentionally ignored so the surface stays
 predictable — every run executes the module's `.tftest.hcl` files.
 """.format(engine = engine),
         implementation = _test_impl,
         attrs = RUNNER_ATTRS,
+        test = True,
+        toolchains = [toolchain_type],
+    )
+
+    plan_test = rule(
+        doc = """\
+Initializes the backend, runs `{engine} plan`, and keeps the plan as a
+reviewable test output. Passes when the plan succeeds; with
+`expect_no_changes`, only when it is empty.
+
+Undeclared test outputs (`bazel-testlogs/<pkg>/<name>/test.outputs/`):
+`plan.tfplan`, `plan.json` (`show -json`), `plan.txt` (`show`), plus the
+lock file and module manifest the plan ran against.
+
+A plan talks to the backend and, for most providers, to the provider's
+API, so this test needs the network and whatever credentials the provider
+reads from the environment (pass them with `--test_env`). The public
+`{engine}_plan_test` macro tags it `requires-network` for that reason;
+providers that run offline (`null`, `local`, `random`) work without any of
+it. The operator's CLI configuration is disabled, as for every test here.
+""".format(engine = engine),
+        implementation = _plan_test_impl,
+        attrs = PLAN_TEST_ATTRS,
         test = True,
         toolchains = [toolchain_type],
     )
@@ -179,6 +214,7 @@ resolve for the current build.
     return struct(
         binary = binary,
         test = test,
+        plan_test = plan_test,
         validate_aspect = validate_aspect,
         validate_test = validate_test,
         fmt_aspect = fmt_aspect,

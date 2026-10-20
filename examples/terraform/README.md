@@ -54,8 +54,8 @@ so no network access is required.
 - **Reproducible lock files.** Lock file `h1:` hashes are recomputed
   against the platform-specific provider binaries Bazel installed, so
   Terraform accepts the pre-built tree at run time.
-- **Same lock file works for OpenTofu.** See `examples/opentofu` — the
-  same provider entries are reused via the `opentofu_*` rule aliases.
+- **Same lock file works for OpenTofu.** See `examples/tofu` — the
+  same provider entries are reused via the `tofu_*` rule aliases.
 
 ## Pinning the Terraform version
 
@@ -64,13 +64,13 @@ each guarded by a `config_setting` on `//terraform/settings:version`.
 Pick a specific release with either:
 
 ```
-bazel build //... --@rules_terraform//terraform/settings:version=1.14.1
+bazel build //... --@rules_terraform//terraform/settings:version=1.9.8
 ```
 
 or a `.bazelrc` line:
 
 ```
-build --@rules_terraform//terraform/settings:version=1.14.1
+build --@rules_terraform//terraform/settings:version=1.9.8
 ```
 
 Defaults to the newest release baked into

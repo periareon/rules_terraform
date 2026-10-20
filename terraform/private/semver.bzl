@@ -4,12 +4,12 @@ Port of `//terraform/private/internal/semver/semver.go`. Same operator set,
 same prerelease semantics (SemVer 2.0 §11), same "stable-first, fall back
 to prerelease" version selection.
 
-Used by the `terraform.modules(...)` / `opentofu.modules(...)` bzlmod
+Used by the `terraform.modules(...)` / `tofu.modules(...)` bzlmod
 extensions to resolve a module block's version constraint against the
 list the registry returns.
 """
 
-visibility(["//opentofu/...", "//terraform/..."])
+visibility(["//terraform/...", "//tofu/..."])
 
 _OPS = [">=", "<=", "~>", "!=", ">", "<", "="]
 

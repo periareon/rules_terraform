@@ -21,18 +21,29 @@ terraform_module(
         # vs `registry.opentofu.org/...`), so validate would fail. This
         # fixture only exercises the terraform init path via
         # `terraform_init_test` below, not validate.
-        "no-opentofu-validate",
+        "no-tofu-validate",
         "no-terraform-validate",
     ],
     deps = [":custom_provider"],
 )
 
+# The provider is built in-repo, so `terraform_provider` reads the platform
+# off the target configuration rather than being told. The binary has to land
+# under the directory the engine will look in on *this* platform — a fixed
+# `linux_amd64` here passed on a Mac while the module was unusable there.
+_PROVIDER_DIR = ".terraform/providers/registry.terraform.io/example/custom/1.0.0/"
+
 terraform_init_test(
     name = "custom_provider_init_test",
     expected_files = [
         "main.tf",
-        ".terraform/providers/registry.terraform.io/example/custom/1.0.0/linux_amd64/terraform-provider-custom",
         ".terraform.lock.hcl",
-    ],
+    ] + select({
+        "//terraform/private/constraints:darwin_amd64": [_PROVIDER_DIR + "darwin_amd64/terraform-provider-custom"],
+        "//terraform/private/constraints:darwin_arm64": [_PROVIDER_DIR + "darwin_arm64/terraform-provider-custom"],
+        "//terraform/private/constraints:linux_amd64": [_PROVIDER_DIR + "linux_amd64/terraform-provider-custom"],
+        "//terraform/private/constraints:linux_arm64": [_PROVIDER_DIR + "linux_arm64/terraform-provider-custom"],
+        "//terraform/private/constraints:windows_amd64": [_PROVIDER_DIR + "windows_amd64/terraform-provider-custom.exe"],
+    }),
     target = ":with_custom_provider",
 )

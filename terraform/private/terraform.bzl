@@ -1,10 +1,11 @@
 """Bazel terraform rules.
 
-The `RUNNER_ATTRS` / `build_runner` helpers here are consumed by `//opentofu`
+The `RUNNER_ATTRS` / `build_runner` helpers here are consumed by `//tofu`
 so the same rule bodies power both engines.
 """
 
 load(":init.bzl", "terraform_init_aspect")
+load(":platforms.bzl", "PLATFORM_CONSTRAINT_LABELS", "detect_platform")
 load(
     ":providers.bzl",
     "TerraformExternalModuleInfo",
@@ -93,50 +94,66 @@ def _terraform_module_impl(ctx):
     root_dir = _module_root_dir(ctx.label, ctx.files.srcs, ctx.files.data)
 
     module_deps = []
-    providers_dict = {}
-    provider_files_depsets = []
+    provider_infos = []
+    provider_sources = {}
     provider_group = None
-    provider_group_lock = None
     standalone_providers = []
     external_modules = []
 
     for dep in ctx.attr.deps:
+        # A dependency hub carries both a provider group and a module group;
+        # the two halves are read independently.
+        grouped = False
         if TerraformProviderGroupInfo in dep:
             if provider_group != None:
-                fail("terraform_module '{}' has more than one terraform_provider_group in deps. Only one provider group is allowed.".format(ctx.label))
+                fail("terraform_module '{}' has more than one provider group in deps (a dependency hub counts as one). Only one is allowed.".format(ctx.label))
             provider_group = dep[TerraformProviderGroupInfo]
-            provider_group_lock = provider_group.lock
             for provider_info in provider_group.providers:
-                providers_dict[provider_info.source] = provider_info.repository_label
-                provider_files_depsets.append(provider_info.files)
-        elif TerraformProviderInfo in dep:
-            standalone_providers.append(dep[TerraformProviderInfo])
-        elif TerraformModuleGroupInfo in dep:
+                provider_infos.append(provider_info)
+                provider_sources[provider_info.source] = True
+            grouped = True
+        if TerraformModuleGroupInfo in dep:
             for mod_info in dep[TerraformModuleGroupInfo].modules:
                 external_modules.append(mod_info)
+            grouped = True
+        if grouped:
+            continue
+        if TerraformProviderInfo in dep:
+            standalone_providers.append(dep[TerraformProviderInfo])
         elif TerraformExternalModuleInfo in dep:
             external_modules.append(dep[TerraformExternalModuleInfo])
         elif TerraformInfo in dep:
             module_deps.append(dep[TerraformInfo])
 
-    if provider_group != None and standalone_providers:
-        group_provider_sources = [p.source for p in provider_group.providers]
-        for standalone_provider in standalone_providers:
-            provider_info = standalone_provider[TerraformProviderInfo]
-            if provider_info.source not in group_provider_sources:
-                fail("terraform_module '{}' has terraform_provider '{}' in deps that is not in the terraform_provider_group. All providers must be in the group when a group is present.".format(
-                    ctx.label,
-                    provider_info.source,
-                ))
-            if provider_info.source not in providers_dict:
-                providers_dict[provider_info.source] = provider_info.repository_label
-                provider_files_depsets.append(provider_info.files)
-    elif standalone_providers:
-        for provider_info in standalone_providers:
-            providers_dict[provider_info.source] = provider_info.repository_label
-            provider_files_depsets.append(provider_info.files)
+    for provider_info in standalone_providers:
+        if provider_group != None and provider_info.source not in provider_sources:
+            fail("terraform_module '{}' has terraform_provider '{}' in deps that is not in the terraform_provider_group. All providers must be in the group when a group is present.".format(
+                ctx.label,
+                provider_info.source,
+            ))
+        if provider_info.source not in provider_sources:
+            provider_infos.append(provider_info)
+            provider_sources[provider_info.source] = True
 
-    lock_file = provider_group_lock if provider_group_lock else ctx.file.lock
+    # A group carries the lock its providers were resolved from; it wins over
+    # `lock` so the two cannot disagree.
+    lock_file = provider_group.lock if provider_group != None and provider_group.lock else ctx.file.lock
+
+    # The init aspect installs providers only alongside a lock file: the engine
+    # refuses a provider directory it cannot check against one. Without this
+    # the providers would be quietly left out and the module would fail later,
+    # in validate, with advice to run `terraform init`.
+    if provider_infos and not lock_file:
+        fail(
+            ("terraform_module '{}' depends on providers ({}) but has no `lock`.\n" +
+             "Point `lock` at the module's .terraform.lock.hcl, or depend on a " +
+             "terraform_provider_group, which carries one.").format(
+                ctx.label,
+                ", ".join(provider_sources.keys()),
+            ),
+        )
+
+    provider_files_depsets = [p.files for p in provider_infos]
 
     all_module_files = [depset(ctx.files.srcs), depset(ctx.files.data)]
     if provider_files_depsets:
@@ -156,13 +173,14 @@ def _terraform_module_impl(ctx):
             srcs = depset(ctx.files.srcs),
             data = depset(ctx.files.data),
             root_dir = root_dir,
+            allow_ephemeral_state = ctx.attr.allow_ephemeral_state,
             # Transitive: a shared module library whose members reference each
             # other only reaches the init action if the whole closure comes
             # along. The root module names `compute`; `compute`'s own `module`
             # block names `network`, and nothing in the root's BUILD file
             # mentions it.
             deps = depset(module_deps, transitive = [d.deps for d in module_deps]),
-            providers = providers_dict,
+            providers = provider_infos,
             lock = lock_file,
             # Transitive for the same reason `deps` is, and the case is the
             # same one: the `module` block naming a registry module lives in
@@ -184,10 +202,14 @@ def _terraform_provider_impl(ctx):
             files_depsets.append(file_label[DefaultInfo].files)
     files_depset = depset(transitive = files_depsets) if files_depsets else depset()
 
-    # `terraform_provider` is instantiated inside the provider repository
-    # generated by `terraform_provider_repository`, so `ctx.label` already
-    # names that repo.
-    repository_label = ctx.label
+    # A registry provider knows its platform: the archive was fetched for one.
+    # A provider built in-repo is built for whatever platform this
+    # configuration targets, so read that rather than assume one. The engine
+    # looks the binary up under `<version>/<platform>/`, and a binary filed
+    # under the wrong platform is simply not there.
+    platform = ctx.attr.platform
+    if not platform:
+        platform = detect_platform(ctx, ctx.attr._platform_constraints)
 
     return [
         DefaultInfo(
@@ -197,9 +219,8 @@ def _terraform_provider_impl(ctx):
         TerraformProviderInfo(
             source = ctx.attr.source,
             version = ctx.attr.version,
-            platform = ctx.attr.platform,
+            platform = platform,
             files = files_depset,
-            repository_label = repository_label,
         ),
     ]
 
@@ -213,7 +234,10 @@ terraform_provider = rule(
             mandatory = True,
         ),
         "platform": attr.string(
-            doc = "Platform string (e.g., 'linux_amd64', 'darwin_arm64'). If omitted, auto-detected at build time.",
+            doc = """Platform string (e.g., 'linux_amd64', 'darwin_arm64').
+            Set by the generated repositories for registry providers. Leave it
+            empty for a provider built in this repo: it is then taken from the
+            target platform of the configuration the provider is built in.""",
         ),
         "source": attr.string(
             doc = "Provider source (e.g., 'hashicorp/null').",
@@ -222,6 +246,9 @@ terraform_provider = rule(
         "version": attr.string(
             doc = "Provider version (e.g., '3.2.4').",
             mandatory = True,
+        ),
+        "_platform_constraints": attr.label_list(
+            default = PLATFORM_CONSTRAINT_LABELS,
         ),
     },
     provides = [TerraformProviderInfo],
@@ -280,13 +307,31 @@ terraform_module = rule(
     doc = "Defines a Terraform module that can be used as a dependency in other Terraform targets.",
     implementation = _terraform_module_impl,
     attrs = {
+        "allow_ephemeral_state": attr.bool(
+            default = False,
+            doc = """Permit `bazel run` of `apply`, `destroy` and the other
+            state-writing commands against a module with no `backend` or
+            `cloud` block.
+
+            Without a backend the engine keeps state in its working directory,
+            which under Bazel is a staged copy that exists for one run. The
+            runner therefore refuses those commands by default, naming the fix.
+            With this set, state is kept under `bazel-out` between runs: private
+            to the machine, forked per build configuration, and deleted by
+            `bazel clean`. Set it only where losing the state is harmless: demos,
+            sandboxes, or bootstrapping the bucket that will hold real state.
+            Ignored when a backend is declared; `plan` and the read-only
+            commands are never gated.""",
+        ),
         "data": attr.label_list(
             doc = "Additional files or targets that should be available at runtime.",
             allow_files = True,
         ),
         "deps": attr.label_list(
-            doc = """Other terraform_module, terraform_provider, terraform_provider_group,
-            terraform_external_module, or terraform_module_group targets that this module depends on.
+            doc = """Other terraform_module targets, a dependency hub (`@<name>` from a
+            `deps` tag, or its `//:providers` / `//:modules` halves), individual
+            `@<name>//<namespace>_<name>` providers, `terraform_provider`, or
+            `terraform_external_module` targets this module depends on.
 
             A `terraform_module` dep is the Bazel half of a `module` block, the
             way a `py_library` dep is the Bazel half of an `import`: the `.tf`
@@ -307,34 +352,44 @@ terraform_module = rule(
             allow_single_file = [".terraform.lock.hcl"],
         ),
         "srcs": attr.label_list(
-            doc = """Terraform source files (.tf) that make up this module.
+            doc = """Terraform source files that make up this module: `.tf`,
+            `.tf.json`, and OpenTofu's `.tofu` / `.tofu.json`.
 
             All of them must live directly in this target's package — a Terraform
             module is a single directory. Put nested .tf files in their own
             `terraform_module` and reference it with a `module` block.""",
-            allow_files = [".tf"],
+            allow_files = [".tf", ".tf.json", ".tofu", ".tofu.json"],
         ),
     },
     provides = [TerraformInfo],
 )
 
-def build_runner(ctx, toolchain_type, *, test_mode):
-    """Shared implementation for `*_binary` and `*_test` runner rules.
+RUNNER_MODES = ["run", "test", "plan"]
+
+def build_runner(ctx, toolchain_type, *, mode):
+    """Shared implementation for the `*_binary`, `*_test` and `*_plan_test` rules.
 
     Args:
         ctx: (ctx) The rule context.
         toolchain_type: (str) Fully-qualified label string of the
             toolchain type the rule should resolve.
-        test_mode: (bool) True for the `_test` variant (returns
-            `testing.TestEnvironment` and hard-codes the `test`
-            subcommand via `RULES_TERRAFORM_MODE=test`), False for
-            `_binary`.
+        mode: (str) One of `RUNNER_MODES`. `run` passes argv through to
+            the engine (`terraform_binary`). `test` runs the engine's
+            native test framework and reports through Bazel's test
+            protocol (`terraform_test`). `plan` initializes, plans, and
+            keeps the plan as an undeclared test output
+            (`terraform_plan_test`). The runner reads it from
+            `RULES_TERRAFORM_MODE`.
 
     Returns:
         (list[Provider]) `DefaultInfo` (executable + runfiles) and
         either `RunEnvironmentInfo` or `testing.TestEnvironment`.
     """
+    if mode not in RUNNER_MODES:
+        fail("build_runner: unknown mode {}".format(repr(mode)))
+    test_mode = mode != "run"
     toolchain = ctx.toolchains[toolchain_type]
+    root_info = ctx.attr.root[TerraformInfo]
 
     # `terraform_init_aspect` already assembled the directory the engine runs
     # in — sources, local child modules, lock file and `.terraform/`. The
@@ -345,9 +400,21 @@ def build_runner(ctx, toolchain_type, *, test_mode):
         fail("{}: terraform_init_aspect produced no module directory for '{}'".format(ctx.label, ctx.attr.root.label))
 
     args_data = {
+        "allow_ephemeral_state": root_info.allow_ephemeral_state,
         "module_dir_rlocationpath": rlocationpath(module_directory, ctx.workspace_name),
+        # Where local state lives between runs when `allow_ephemeral_state`
+        # is set: a per-target directory under bazel-out, reached from
+        # `BUILD_WORKSPACE_DIRECTORY` through the convenience symlink. Under
+        # bazel-out on purpose — it should go when the build outputs go.
+        "state_dir": "{}/{}/{}.state".format(ctx.bin_dir.path, ctx.label.package, ctx.label.name) if ctx.label.package else "{}/{}.state".format(ctx.bin_dir.path, ctx.label.name),
         "terraform_rlocationpath": rlocationpath(toolchain.terraform, ctx.workspace_name),
     }
+    if mode == "plan":
+        args_data["plan"] = {
+            "args": ctx.attr.plan_args,
+            "expect_no_changes": ctx.attr.expect_no_changes,
+            "lock": ctx.attr.lock,
+        }
 
     args_file = ctx.actions.declare_file("{}.terraform_args.json".format(ctx.label.name))
     ctx.actions.write(
@@ -372,7 +439,7 @@ def build_runner(ctx, toolchain_type, *, test_mode):
         "RULES_TERRAFORM_ARGS_FILE": rlocationpath(args_file, ctx.workspace_name),
     }
     if test_mode:
-        env["RULES_TERRAFORM_MODE"] = "test"
+        env["RULES_TERRAFORM_MODE"] = mode
 
     providers = [
         DefaultInfo(
@@ -400,6 +467,28 @@ RUNNER_ATTRS = {
     ),
 }
 
+PLAN_TEST_ATTRS = dict(RUNNER_ATTRS, **{
+    "expect_no_changes": attr.bool(
+        default = False,
+        doc = """Fail when the plan proposes any change. Off by default:
+        a plan that applies cleanly is the usual thing to check, and
+        whether it is empty depends on what has been applied.""",
+    ),
+    "lock": attr.bool(
+        default = False,
+        doc = """Take the backend's state lock while planning. Off by
+        default so a test cannot block on, or be blocked by, an operator's
+        apply; a plan does not write state.""",
+    ),
+    "plan_args": attr.string_list(
+        doc = """Extra arguments for `plan`, after the ones the rule
+        sets (`-input=false`, `-detailed-exitcode`, `-out`, and
+        `-lock=false` unless `lock` is set). `-var` and `-target` go
+        here. Named `plan_args` because `args` is Bazel's own test
+        attribute, which this rule ignores.""",
+    ),
+})
+
 # The engine-bound `terraform_binary` / `terraform_test` rules are produced
 # by `//terraform/private:engine_factory.bzl` and re-exported through
 # `//terraform:terraform_binary.bzl` / `//terraform:terraform_test.bzl`.
@@ -416,33 +505,34 @@ def _terraform_external_module_impl(ctx):
             runfiles = ctx.runfiles(files = ctx.files.srcs),
         ),
         TerraformExternalModuleInfo(
-            key = ctx.attr.key,
             source = ctx.attr.source,
             version = ctx.attr.version,
-            subdir = ctx.attr.subdir,
             files = all_files,
         ),
     ]
 
 terraform_external_module = rule(
-    doc = "An external Terraform module downloaded from a registry. Created by terraform_module_repository.",
+    doc = """A module whose files come from outside the workspace.
+
+The `terraform.modules(...)` extension declares one of these per registry
+module it resolves. Declare one yourself, in the `build_file_content` of an
+`http_archive` or `git_repository`, to supply a module the extension cannot
+fetch: a module hosted somewhere other than a public registry, or a plain
+`git::` / `https://` source. Match `source` to the `module` block verbatim and
+list the target in the consuming `terraform_module`'s `deps`.""",
     implementation = _terraform_external_module_impl,
     attrs = {
-        "key": attr.string(
-            doc = "Module key matching the key in terraform_modules.lock.json.",
-            mandatory = True,
-        ),
         "source": attr.string(
-            doc = "Registry source (e.g., 'terraform-aws-modules/vpc/aws').",
+            doc = """The `source` string exactly as `module` blocks write it:
+            a registry address (`terraform-aws-modules/vpc/aws`, with any
+            `//subdir`), or any other address Terraform accepts, such as
+            `git::https://…?ref=v1.2.0`. The init aspect installs this
+            module under every `module` block whose `source` matches.""",
             mandatory = True,
         ),
         "srcs": attr.label_list(
             doc = "Module source files.",
             allow_files = True,
-        ),
-        "subdir": attr.string(
-            doc = "Subdirectory within the archive.",
-            default = "",
         ),
         "version": attr.string(
             doc = "Module version.",
@@ -486,6 +576,53 @@ terraform_module_group = rule(
             doc = "List of terraform_external_module targets.",
             providers = [TerraformExternalModuleInfo],
             mandatory = True,
+        ),
+    },
+    provides = [TerraformModuleGroupInfo],
+)
+
+def _terraform_dependency_group_impl(ctx):
+    providers_list = [p[TerraformProviderInfo] for p in ctx.attr.providers]
+    modules_list = [m[TerraformExternalModuleInfo] for m in ctx.attr.modules]
+    all_files = depset(transitive = [p.files for p in providers_list] + [m.files for m in modules_list])
+
+    result = [
+        DefaultInfo(
+            files = all_files,
+            runfiles = ctx.runfiles(
+                files = [ctx.file.lock] if ctx.file.lock else [],
+                transitive_files = all_files,
+            ),
+        ),
+        TerraformModuleGroupInfo(modules = modules_list),
+    ]
+
+    # Providers only mean something alongside the lock they were resolved
+    # from; a hub built from `roots` alone has neither.
+    if ctx.file.lock:
+        result.append(TerraformProviderGroupInfo(providers = providers_list, lock = ctx.file.lock))
+    elif providers_list:
+        fail("terraform_dependency_group '{}' has providers but no lock".format(ctx.label))
+    return result
+
+terraform_dependency_group = rule(
+    doc = """Everything one `deps` tag resolved: the providers its lock pins,
+that lock, and the registry modules its `roots` name. Generated at the root
+of every dependency hub; a `terraform_module` that depends on it needs no
+`lock` of its own.""",
+    implementation = _terraform_dependency_group_impl,
+    attrs = {
+        "lock": attr.label(
+            doc = "The `.terraform.lock.hcl` the providers were resolved from.",
+            allow_single_file = [".terraform.lock.hcl"],
+        ),
+        "modules": attr.label_list(
+            doc = "`terraform_external_module` targets.",
+            providers = [TerraformExternalModuleInfo],
+        ),
+        "providers": attr.label_list(
+            doc = "`terraform_provider` targets (or aliases to them).",
+            providers = [TerraformProviderInfo],
         ),
     },
     provides = [TerraformModuleGroupInfo],

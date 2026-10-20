@@ -1,10 +1,10 @@
-load("//opentofu:opentofu_binary.bzl", "opentofu_binary")
-load("//opentofu:opentofu_fmt_test.bzl", "opentofu_fmt_test")
-load("//opentofu:opentofu_validate_test.bzl", "opentofu_validate_test")
-load("//terraform:terraform_binary.bzl", "terraform_binary")
-load("//terraform:terraform_fmt_test.bzl", "terraform_fmt_test")
-load("//terraform:terraform_module.bzl", "terraform_module")
-load("//terraform:terraform_validate_test.bzl", "terraform_validate_test")
+load("//terraform:defs.bzl", "terraform_binary", "terraform_fmt_test", "terraform_module", "terraform_validate_test")
+
+# Loaded through the two public `defs.bzl` files on purpose. Every other
+# fixture loads the per-rule files, so this is the one place a symbol missing
+# from `defs.bzl` — the entry point most downstream users take — would fail
+# `bazel test //...` instead of a user's first build.
+load("//tofu:defs.bzl", "tofu_binary", "tofu_fmt_test", "tofu_validate_test")
 
 terraform_module(
     name = "simple",
@@ -26,17 +26,17 @@ terraform_fmt_test(
     target = ":simple",
 )
 
-opentofu_binary(
+tofu_binary(
     name = "tofu",
     root = ":simple",
 )
 
-opentofu_validate_test(
+tofu_validate_test(
     name = "simple_tofu_test",
     target = ":simple",
 )
 
-opentofu_fmt_test(
+tofu_fmt_test(
     name = "simple_tofu_fmt_test",
     target = ":simple",
 )

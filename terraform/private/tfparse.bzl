@@ -5,11 +5,11 @@ Port of the `module { }` extractor in
 counting per line, no HCL parser dependency, no string/comment escape
 awareness (matches the Go version's limits).
 
-Used by the `terraform.modules(...)` / `opentofu.modules(...)` bzlmod
+Used by the `terraform.modules(...)` / `tofu.modules(...)` bzlmod
 extensions to enumerate module block references without shelling out.
 """
 
-visibility(["//opentofu/...", "//terraform/..."])
+visibility(["//terraform/...", "//tofu/..."])
 
 def _matches_module_header(stripped):
     """Return the module-block key if `stripped` opens a `module "…" {` block."""
@@ -54,7 +54,7 @@ def parse_module_blocks(content):
     """Extract every `module "…" { … }` block declared in `content`.
 
     Args:
-        content: (str) Concatenated text of one or more `.tf` files.
+        content: (str) Concatenated text of one or more `.tf` / `.tofu` files.
 
     Returns:
         (list[struct]) List of `struct(key, source, version)`. `source`
