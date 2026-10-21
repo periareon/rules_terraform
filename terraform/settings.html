@@ -163,18 +163,20 @@ the setting's label so callers can reference it programmatically.</p>
 <p><a id="version"></a></p>
 <h2 id="version"><a class="header" href="#version">version</a></h2>
 <p>Picks which Terraform release the auto-registered toolchains resolve to.</p>
-<p>rules_terraform ships one toolchain per (version, platform) combination
-in <code>TERRAFORM_VERSIONS</code>, each guarded by a <code>config_setting</code> that
-matches this flag; Bazel's toolchain resolver picks the matching one.
-The corresponding <code>http_archive</code> is fetched lazily on first use, so
-declaring dozens of versions does not slow down builds that only use
-one.</p>
-<p>Flip the flag globally in <code>.bazelrc</code>, per-invocation via
-<code>--@rules_terraform//terraform/settings:version=1.10.5</code>, or per-target
-with a Starlark configuration transition.</p>
-<p>Defaults to the latest stable release listed in
-<code>//terraform/private:versions.bzl</code> (<code>TERRAFORM_DEFAULT_VERSION</code>),
-computed by <code>tools/update_versions</code> from the shipped versions table.</p>
+<p>The <code>terraform_toolchains</code> extension declares one toolchain per (version, platform)
+for the releases shipped in <code>//terraform/private:versions.bzl</code> — the
+newest three when the table was generated — and for any release a
+<code>terraform_toolchains.version(version = "…")</code> tag asks for. For a tagged release the
+extension fetches the release's <code>SHA256SUMS</code> once and records the
+checksums as facts in <code>MODULE.bazel.lock</code>, so an older pin costs no
+change to rules_terraform and no network on later evaluations.</p>
+<p>Empty, the default, selects the extension's default: the release the
+root module marked <code>version(…, default = True)</code>, else the newest
+shipped one. Any other value names one of the known releases. Set it
+globally in <code>.bazelrc</code>, per invocation via
+<code>--@rules_terraform//terraform/settings:version=1.9.8</code>, or per target
+with a Starlark configuration transition. The corresponding archive is
+fetched lazily on first use.</p>
 
                     </main>
 
@@ -184,7 +186,7 @@ computed by <code>tools/update_versions</code> from the shipped versions table.<
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
-                            <a rel="next prefetch" href="../opentofu_rules.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../tofu_rules.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <i class="fa fa-angle-right"></i>
                             </a>
 
@@ -198,7 +200,7 @@ computed by <code>tools/update_versions</code> from the shipped versions table.<
                         <i class="fa fa-angle-left"></i>
                     </a>
 
-                    <a rel="next prefetch" href="../opentofu_rules.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../tofu_rules.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <i class="fa fa-angle-right"></i>
                     </a>
             </nav>

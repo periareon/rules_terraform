@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>OpenTofu Rules - rules_terraform</title>
+        <title>terraform_external_module - rules_terraform</title>
 
 
         <!-- Custom HTML head -->
@@ -12,32 +12,32 @@
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="theme-color" content="#ffffff">
 
-        <link rel="icon" href="favicon.svg">
-        <link rel="shortcut icon" href="favicon.png">
-        <link rel="stylesheet" href="css/variables.css">
-        <link rel="stylesheet" href="css/general.css">
-        <link rel="stylesheet" href="css/chrome.css">
-        <link rel="stylesheet" href="css/print.css" media="print">
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
 
         <!-- Fonts -->
-        <link rel="stylesheet" href="FontAwesome/css/font-awesome.css">
-        <link rel="stylesheet" href="fonts/fonts.css">
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
 
         <!-- Highlight.js Stylesheets -->
-        <link rel="stylesheet" href="highlight.css">
-        <link rel="stylesheet" href="tomorrow-night.css">
-        <link rel="stylesheet" href="ayu-highlight.css">
+        <link rel="stylesheet" href="../highlight.css">
+        <link rel="stylesheet" href="../tomorrow-night.css">
+        <link rel="stylesheet" href="../ayu-highlight.css">
 
         <!-- Custom theme stylesheets -->
 
 
         <!-- Provide site root to javascript -->
         <script>
-            var path_to_root = "";
+            var path_to_root = "../";
             var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "light";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc.js"></script>
+        <script src="../toc.js"></script>
     </head>
     <body>
     <div id="body-container">
@@ -89,7 +89,7 @@
             <!-- populated by js -->
             <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
             <noscript>
-                <iframe class="sidebar-iframe-outer" src="toc.html"></iframe>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
             </noscript>
             <div id="sidebar-resize-handle" class="sidebar-resize-handle">
                 <div class="sidebar-resize-indicator"></div>
@@ -123,7 +123,7 @@
                     <h1 class="menu-title">rules_terraform</h1>
 
                     <div class="right-buttons">
-                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
                             <i id="print-button" class="fa fa-print"></i>
                         </a>
                         <a href="https://github.com/periareon/rules_terraform" title="Git repository" aria-label="Git repository">
@@ -155,38 +155,43 @@
 
                 <div id="content" class="content">
                     <main>
-                        <h1 id="opentofu-rules"><a class="header" href="#opentofu-rules">OpenTofu Rules</a></h1>
-<p>Everything under <code>//opentofu</code> mirrors <code>//terraform</code> but binds to
-<code>//opentofu:toolchain_type</code>. Rule bodies are identical — only the
-resolved toolchain differs — so behavior stays in lockstep between the
-two engines. Data-only rules (<code>opentofu_module</code>, <code>opentofu_provider</code>,
-<code>opentofu_provider_group</code>) are literal aliases for their <code>terraform_*</code>
-counterparts, provided so an OpenTofu-only project never has to import
-a <code>terraform_*</code> symbol.</p>
-<h2 id="public-rules"><a class="header" href="#public-rules">Public rules</a></h2>
+                        <!-- Generated with Stardoc: http://skydoc.bazel.build -->
+<p>terraform_external_module</p>
+<h2 id="rules"><a class="header" href="#rules">Rules</a></h2>
 <ul>
-<li><a href="./opentofu/opentofu_binary.html">opentofu_binary</a> — <code>bazel run</code> wrapper for any <code>tofu</code> subcommand.</li>
-<li><a href="./opentofu/opentofu_module.html">opentofu_module</a> — alias for <code>terraform_module</code>.</li>
-<li><a href="./opentofu/opentofu_provider.html">opentofu_provider</a> — alias for <code>terraform_provider</code>.</li>
-<li><a href="./opentofu/opentofu_provider_group.html">opentofu_provider_group</a> — alias for <code>terraform_provider_group</code>.</li>
-<li><a href="./opentofu/opentofu_test.html">opentofu_test</a> — runs OpenTofu's HCL native test framework.</li>
-<li><a href="./opentofu/opentofu_validate_test.html">opentofu_validate_test</a> — <code>tofu validate</code> as a Bazel test.</li>
-<li><a href="./opentofu/opentofu_fmt_test.html">opentofu_fmt_test</a> — <code>tofu fmt -check</code> as a Bazel test.</li>
+<li><a href="#terraform_external_module">terraform_external_module</a></li>
 </ul>
-<h2 id="module-extensions"><a class="header" href="#module-extensions">Module extensions</a></h2>
-<ul>
-<li><a href="./opentofu/extensions.html">extensions</a> — <code>opentofu_toolchains</code>.</li>
-</ul>
+<p><a id="terraform_external_module"></a></p>
+<h2 id="terraform_external_module"><a class="header" href="#terraform_external_module">terraform_external_module</a></h2>
+<pre>
+load("@rules_terraform//terraform:terraform_external_module.bzl", "terraform_external_module")
 
+terraform_external_module(<a href="#terraform_external_module-name">name</a>, <a href="#terraform_external_module-srcs">srcs</a>, <a href="#terraform_external_module-source">source</a>, <a href="#terraform_external_module-version">version</a>)
+</pre>
+<p>A module whose files come from outside the workspace.</p>
+<p>The <code>terraform.modules(...)</code> extension declares one of these per registry
+module it resolves. Declare one yourself, in the <code>build_file_content</code> of an
+<code>http_archive</code> or <code>git_repository</code>, to supply a module the extension cannot
+fetch: a module hosted somewhere other than a public registry, or a plain
+<code>git::</code> / <code>https://</code> source. Match <code>source</code> to the <code>module</code> block verbatim and
+list the target in the consuming <code>terraform_module</code>'s <code>deps</code>.</p>
+<p><strong>ATTRIBUTES</strong></p>
+<div class="table-wrapper"><table><thead><tr><th style="text-align: left">Name</th><th style="text-align: left">Description</th><th style="text-align: left">Type</th><th style="text-align: left">Mandatory</th><th style="text-align: left">Default</th></tr></thead><tbody>
+<tr><td style="text-align: left"><a id="terraform_external_module-name"></a>name</td><td style="text-align: left">A unique name for this target.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels#target-names">Name</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
+<tr><td style="text-align: left"><a id="terraform_external_module-srcs"></a>srcs</td><td style="text-align: left">Module source files.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">List of labels</a></td><td style="text-align: left">optional</td><td style="text-align: left"><code>[]</code></td></tr>
+<tr><td style="text-align: left"><a id="terraform_external_module-source"></a>source</td><td style="text-align: left">The <code>source</code> string exactly as <code>module</code> blocks write it: a registry address (<code>terraform-aws-modules/vpc/aws</code>, with any <code>//subdir</code>), or any other address Terraform accepts, such as <code>git::https://…?ref=v1.2.0</code>. The init aspect installs this module under every <code>module</code> block whose <code>source</code> matches.</td><td style="text-align: left">String</td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
+<tr><td style="text-align: left"><a id="terraform_external_module-version"></a>version</td><td style="text-align: left">Module version.</td><td style="text-align: left">String</td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
+</tbody></table>
+</div>
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="terraform/settings.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../terraform/terraform_binary.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
-                            <a rel="next prefetch" href="opentofu/opentofu_binary.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../terraform/terraform_fmt_aspect.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <i class="fa fa-angle-right"></i>
                             </a>
 
@@ -196,11 +201,11 @@ a <code>terraform_*</code> symbol.</p>
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="terraform/settings.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../terraform/terraform_binary.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <i class="fa fa-angle-left"></i>
                     </a>
 
-                    <a rel="next prefetch" href="opentofu/opentofu_binary.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../terraform/terraform_fmt_aspect.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <i class="fa fa-angle-right"></i>
                     </a>
             </nav>
@@ -215,13 +220,13 @@ a <code>terraform_*</code> symbol.</p>
         </script>
 
 
-        <script src="elasticlunr.min.js"></script>
-        <script src="mark.min.js"></script>
-        <script src="searcher.js"></script>
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
 
-        <script src="clipboard.min.js"></script>
-        <script src="highlight.js"></script>
-        <script src="book.js"></script>
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
 
         <!-- Custom JS scripts -->
 

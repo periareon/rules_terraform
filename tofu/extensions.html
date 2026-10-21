@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>opentofu_validate_test - rules_terraform</title>
+        <title>extensions - rules_terraform</title>
 
 
         <!-- Custom HTML head -->
@@ -155,50 +155,63 @@
 
                 <div id="content" class="content">
                     <main>
-                        <!-- Generated with Stardoc: http://skydoc.bazel.build -->
-<p>opentofu_validate_test</p>
-<h2 id="rules"><a class="header" href="#rules">Rules</a></h2>
-<ul>
-<li><a href="#opentofu_validate_test">opentofu_validate_test</a></li>
-</ul>
-<h2 id="aspects"><a class="header" href="#aspects">Aspects</a></h2>
-<ul>
-<li><a href="#opentofu_validate_aspect">opentofu_validate_aspect</a></li>
-</ul>
-<p><a id="opentofu_validate_test"></a></p>
-<h2 id="opentofu_validate_test"><a class="header" href="#opentofu_validate_test">opentofu_validate_test</a></h2>
-<pre>
-load("@rules_terraform//opentofu:opentofu_validate_test.bzl", "opentofu_validate_test")
+                        <h1 id="opentofu-extensions"><a class="header" href="#opentofu-extensions">OpenTofu Extensions</a></h1>
+<p>One module extension lives in <code>//tofu:extensions.bzl</code>:</p>
+<h2 id="tofu_toolchains"><a class="header" href="#tofu_toolchains"><code>tofu_toolchains</code></a></h2>
+<p>No user-facing configuration. Mirrors <code>//terraform:extensions.bzl%terraform_toolchains</code>
+but resolves against <code>//tofu:toolchain_type</code>. Materializes
+<code>@tofu_toolchains</code> covering every supported OpenTofu version, each
+toolchain for the releases shipped in <code>//tofu/private:versions.bzl</code> and any
+a <code>version</code> tag requests, each guarded by a <code>config_setting</code> on
+<a href="./settings.html"><code>//tofu/settings:version</code></a> that the hub itself declares.
+rules_terraform's own
+<code>MODULE.bazel</code> registers the hub so downstream users get toolchain
+resolution for free.</p>
+<pre><code class="language-python"># Nothing to do beyond `bazel_dep` to use the newest shipped release.
+bazel_dep(name = "rules_terraform", version = "...")
 
-opentofu_validate_test(<a href="#opentofu_validate_test-name">name</a>, <a href="#opentofu_validate_test-target">target</a>)
-</pre>
-<p>A rule for running <code>opentofu validate</code> on a Terraform target.</p>
-<p><strong>ATTRIBUTES</strong></p>
-<div class="table-wrapper"><table><thead><tr><th style="text-align: left">Name</th><th style="text-align: left">Description</th><th style="text-align: left">Type</th><th style="text-align: left">Mandatory</th><th style="text-align: left">Default</th></tr></thead><tbody>
-<tr><td style="text-align: left"><a id="opentofu_validate_test-name"></a>name</td><td style="text-align: left">A unique name for this target.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels#target-names">Name</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
-<tr><td style="text-align: left"><a id="opentofu_validate_test-target"></a>target</td><td style="text-align: left">The target to validate.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">Label</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
-</tbody></table>
-</div>
-<p><a id="opentofu_validate_aspect"></a></p>
-<h2 id="opentofu_validate_aspect"><a class="header" href="#opentofu_validate_aspect">opentofu_validate_aspect</a></h2>
-<pre>
-load("@rules_terraform//opentofu:opentofu_validate_test.bzl", "opentofu_validate_aspect")
-
-opentofu_validate_aspect()
-</pre>
-<p>An aspect for running <code>opentofu validate</code> on targets with Terraform sources.</p>
-<p><strong>ASPECT ATTRIBUTES</strong></p>
-<p><strong>ATTRIBUTES</strong></p>
+# To use another release:
+tofu_toolchains = use_extension("@rules_terraform//tofu:extensions.bzl", "tofu_toolchains")
+tofu_toolchains.version(version = "1.9.1", default = True)
+</code></pre>
+<p><code>tofu_toolchains.version</code> takes the same <code>version</code> and <code>default</code>
+attributes as the Terraform extension's tag; see
+<a href="../terraform/extensions.html">the Terraform page</a>. For a tagged release the
+extension fetches that release's <code>SHA256SUMS</code> once and records the
+checksums as facts in <code>MODULE.bazel.lock</code>.</p>
+<h2 id="providers-and-modules"><a class="header" href="#providers-and-modules">Providers and modules</a></h2>
+<p>The <code>tofu</code> extension carries the same <code>deps</code> tag class as the <code>terraform</code>
+extension, defaulting to <code>registry.opentofu.org</code>. An OpenTofu-only
+repository uses it for everything and never loads
+<code>//terraform:extensions.bzl</code>:</p>
+<pre><code class="language-python">tofu = use_extension("@rules_terraform//tofu:extensions.bzl", "tofu")
+tofu.deps(
+    name = "app",
+    lock = "//path/to/module:.terraform.lock.hcl",   # written by tofu
+    roots = ["//path/to/module:main.tf"],
+)
+use_repo(tofu, "app")
+</code></pre>
+<p>The attributes are those documented for the
+<a href="../terraform/extensions.html"><code>terraform</code> extension</a>; only the default
+<code>registry</code> differs. That default matters: <code>registry.opentofu.org</code> serves
+OpenTofu's own builds of the <code>hashicorp/*</code> providers, whose archive hashes
+differ from HashiCorp's, so a lock file written by <code>tofu</code> has to be
+resolved against it. Write the lock with the module's
+<code>tofu_providers_lock</code> updater and it will be.</p>
+<p>Each extension pools its own archives. A repository using both engines
+against the same dependencies should declare them through one extension
+rather than both, or the same archive is fetched twice.</p>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../opentofu/opentofu_test.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../tofu/tofu_validate_test.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
-                            <a rel="next prefetch" href="../opentofu/extensions.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../tofu/settings.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <i class="fa fa-angle-right"></i>
                             </a>
 
@@ -208,11 +221,11 @@ opentofu_validate_aspect()
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../opentofu/opentofu_test.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../tofu/tofu_validate_test.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <i class="fa fa-angle-left"></i>
                     </a>
 
-                    <a rel="next prefetch" href="../opentofu/extensions.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../tofu/settings.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <i class="fa fa-angle-right"></i>
                     </a>
             </nav>

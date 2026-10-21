@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>opentofu_provider_group - rules_terraform</title>
+        <title>OpenTofu Rules - rules_terraform</title>
 
 
         <!-- Custom HTML head -->
@@ -12,32 +12,32 @@
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="theme-color" content="#ffffff">
 
-        <link rel="icon" href="../favicon.svg">
-        <link rel="shortcut icon" href="../favicon.png">
-        <link rel="stylesheet" href="../css/variables.css">
-        <link rel="stylesheet" href="../css/general.css">
-        <link rel="stylesheet" href="../css/chrome.css">
-        <link rel="stylesheet" href="../css/print.css" media="print">
+        <link rel="icon" href="favicon.svg">
+        <link rel="shortcut icon" href="favicon.png">
+        <link rel="stylesheet" href="css/variables.css">
+        <link rel="stylesheet" href="css/general.css">
+        <link rel="stylesheet" href="css/chrome.css">
+        <link rel="stylesheet" href="css/print.css" media="print">
 
         <!-- Fonts -->
-        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
-        <link rel="stylesheet" href="../fonts/fonts.css">
+        <link rel="stylesheet" href="FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="fonts/fonts.css">
 
         <!-- Highlight.js Stylesheets -->
-        <link rel="stylesheet" href="../highlight.css">
-        <link rel="stylesheet" href="../tomorrow-night.css">
-        <link rel="stylesheet" href="../ayu-highlight.css">
+        <link rel="stylesheet" href="highlight.css">
+        <link rel="stylesheet" href="tomorrow-night.css">
+        <link rel="stylesheet" href="ayu-highlight.css">
 
         <!-- Custom theme stylesheets -->
 
 
         <!-- Provide site root to javascript -->
         <script>
-            var path_to_root = "../";
+            var path_to_root = "";
             var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "light";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc.js"></script>
+        <script src="toc.js"></script>
     </head>
     <body>
     <div id="body-container">
@@ -89,7 +89,7 @@
             <!-- populated by js -->
             <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
             <noscript>
-                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+                <iframe class="sidebar-iframe-outer" src="toc.html"></iframe>
             </noscript>
             <div id="sidebar-resize-handle" class="sidebar-resize-handle">
                 <div class="sidebar-resize-indicator"></div>
@@ -123,7 +123,7 @@
                     <h1 class="menu-title">rules_terraform</h1>
 
                     <div class="right-buttons">
-                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                        <a href="print.html" title="Print this book" aria-label="Print this book">
                             <i id="print-button" class="fa fa-print"></i>
                         </a>
                         <a href="https://github.com/periareon/rules_terraform" title="Git repository" aria-label="Git repository">
@@ -155,37 +155,41 @@
 
                 <div id="content" class="content">
                     <main>
-                        <!-- Generated with Stardoc: http://skydoc.bazel.build -->
-<p>opentofu_provider_group — alias for <code>terraform_provider_group</code>.</p>
-<p>Same rule under both names.</p>
-<h2 id="rules"><a class="header" href="#rules">Rules</a></h2>
+                        <h1 id="opentofu-rules"><a class="header" href="#opentofu-rules">OpenTofu Rules</a></h1>
+<p>Everything under <code>//tofu</code> mirrors <code>//terraform</code> but binds to
+<code>//tofu:toolchain_type</code>. Rule bodies are identical — only the
+resolved toolchain differs — so behavior stays in lockstep between the
+two engines. Data-only rules (<code>tofu_module</code>, <code>tofu_external_module</code>,
+<code>tofu_provider</code>, <code>tofu_provider_group</code>) are literal aliases for their <code>terraform_*</code>
+counterparts, provided so an OpenTofu-only project never has to import
+a <code>terraform_*</code> symbol.</p>
+<h2 id="public-rules"><a class="header" href="#public-rules">Public rules</a></h2>
 <ul>
-<li><a href="#opentofu_provider_group">opentofu_provider_group</a></li>
+<li><a href="./tofu/tofu_binary.html">tofu_binary</a> — <code>bazel run</code> wrapper for any <code>tofu</code> subcommand.</li>
+<li><a href="./tofu/tofu_module.html">tofu_module</a> — alias for <code>terraform_module</code>.</li>
+<li><a href="./tofu/tofu_external_module.html">tofu_external_module</a> — alias for <code>terraform_external_module</code>.</li>
+<li><a href="./tofu/tofu_provider.html">tofu_provider</a> — alias for <code>terraform_provider</code>.</li>
+<li><a href="./tofu/tofu_test.html">tofu_test</a> — runs OpenTofu's HCL native test framework, reporting each <code>run</code> block as a JUnit test case.</li>
+<li><a href="./tofu/tofu_plan_test.html">tofu_plan_test</a> — runs a real <code>plan</code> and keeps it as a reviewable test output; needs network.</li>
+<li><a href="./tofu/tofu_validate_test.html">tofu_validate_test</a> — <code>tofu validate</code> as a Bazel test.</li>
+<li><a href="./tofu/tofu_fmt_test.html">tofu_fmt_test</a> — <code>tofu fmt -check</code> as a Bazel test.</li>
+<li><a href="./tofu/tofu_providers_lock.html">tofu_providers_lock</a> — <code>bazel run</code> updater that writes <code>.terraform.lock.hcl</code> with the toolchain <code>tofu</code>.</li>
+<li><a href="./tofu/tofu_providers_lock_test.html">tofu_providers_lock_test</a> — alias for the terraform drift test.</li>
 </ul>
-<p><a id="opentofu_provider_group"></a></p>
-<h2 id="opentofu_provider_group"><a class="header" href="#opentofu_provider_group">opentofu_provider_group</a></h2>
-<pre>
-load("@rules_terraform//opentofu:opentofu_provider_group.bzl", "opentofu_provider_group")
+<h2 id="module-extensions"><a class="header" href="#module-extensions">Module extensions</a></h2>
+<ul>
+<li><a href="./tofu/extensions.html">extensions</a> — <code>tofu_toolchains</code>.</li>
+</ul>
 
-opentofu_provider_group(<a href="#opentofu_provider_group-name">name</a>, <a href="#opentofu_provider_group-deps">deps</a>, <a href="#opentofu_provider_group-lock">lock</a>)
-</pre>
-<p>Defines a group of Terraform providers with their lock file. This ensures all providers are from the same lock file.</p>
-<p><strong>ATTRIBUTES</strong></p>
-<div class="table-wrapper"><table><thead><tr><th style="text-align: left">Name</th><th style="text-align: left">Description</th><th style="text-align: left">Type</th><th style="text-align: left">Mandatory</th><th style="text-align: left">Default</th></tr></thead><tbody>
-<tr><td style="text-align: left"><a id="opentofu_provider_group-name"></a>name</td><td style="text-align: left">A unique name for this target.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels#target-names">Name</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
-<tr><td style="text-align: left"><a id="opentofu_provider_group-deps"></a>deps</td><td style="text-align: left">List of terraform_provider targets that belong to this group.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">List of labels</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
-<tr><td style="text-align: left"><a id="opentofu_provider_group-lock"></a>lock</td><td style="text-align: left">The .terraform.lock.hcl file for this provider group.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">Label</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
-</tbody></table>
-</div>
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../opentofu/opentofu_provider.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="terraform/settings.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
-                            <a rel="next prefetch" href="../opentofu/opentofu_test.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="tofu/tofu_binary.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <i class="fa fa-angle-right"></i>
                             </a>
 
@@ -195,11 +199,11 @@ opentofu_provider_group(<a href="#opentofu_provider_group-name">name</a>, <a hre
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../opentofu/opentofu_provider.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="terraform/settings.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <i class="fa fa-angle-left"></i>
                     </a>
 
-                    <a rel="next prefetch" href="../opentofu/opentofu_test.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="tofu/tofu_binary.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <i class="fa fa-angle-right"></i>
                     </a>
             </nav>
@@ -214,13 +218,13 @@ opentofu_provider_group(<a href="#opentofu_provider_group-name">name</a>, <a hre
         </script>
 
 
-        <script src="../elasticlunr.min.js"></script>
-        <script src="../mark.min.js"></script>
-        <script src="../searcher.js"></script>
+        <script src="elasticlunr.min.js"></script>
+        <script src="mark.min.js"></script>
+        <script src="searcher.js"></script>
 
-        <script src="../clipboard.min.js"></script>
-        <script src="../highlight.js"></script>
-        <script src="../book.js"></script>
+        <script src="clipboard.min.js"></script>
+        <script src="highlight.js"></script>
+        <script src="book.js"></script>
 
         <!-- Custom JS scripts -->
 

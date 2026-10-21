@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>opentofu_provider - rules_terraform</title>
+        <title>terraform_plan_test - rules_terraform</title>
 
 
         <!-- Custom HTML head -->
@@ -156,40 +156,42 @@
                 <div id="content" class="content">
                     <main>
                         <!-- Generated with Stardoc: http://skydoc.bazel.build -->
-<p>opentofu_provider — alias for <code>terraform_provider</code>.</p>
-<p>Same rule under both names: a checked-in provider binary declaration is
-engine-neutral, so <code>opentofu_provider</code> is just a naming alias so
-OpenTofu-only projects don't have to import a <code>terraform_*</code> symbol.</p>
-<h2 id="rules"><a class="header" href="#rules">Rules</a></h2>
+<p>terraform_plan_test</p>
+<h2 id="functions"><a class="header" href="#functions">Functions</a></h2>
 <ul>
-<li><a href="#opentofu_provider">opentofu_provider</a></li>
+<li><a href="#terraform_plan_test">terraform_plan_test</a></li>
 </ul>
-<p><a id="opentofu_provider"></a></p>
-<h2 id="opentofu_provider"><a class="header" href="#opentofu_provider">opentofu_provider</a></h2>
+<p><a id="terraform_plan_test"></a></p>
+<h2 id="terraform_plan_test"><a class="header" href="#terraform_plan_test">terraform_plan_test</a></h2>
 <pre>
-load("@rules_terraform//opentofu:opentofu_provider.bzl", "opentofu_provider")
+load("@rules_terraform//terraform:terraform_plan_test.bzl", "terraform_plan_test")
 
-opentofu_provider(<a href="#opentofu_provider-name">name</a>, <a href="#opentofu_provider-files">files</a>, <a href="#opentofu_provider-platform">platform</a>, <a href="#opentofu_provider-source">source</a>, <a href="#opentofu_provider-version">version</a>)
+terraform_plan_test(<a href="#terraform_plan_test-name">name</a>, <a href="#terraform_plan_test-tags">tags</a>, <a href="#terraform_plan_test-kwargs">**kwargs</a>)
 </pre>
-<p>Defines a Terraform provider that can be used as a dependency in terraform_module targets.</p>
-<p><strong>ATTRIBUTES</strong></p>
-<div class="table-wrapper"><table><thead><tr><th style="text-align: left">Name</th><th style="text-align: left">Description</th><th style="text-align: left">Type</th><th style="text-align: left">Mandatory</th><th style="text-align: left">Default</th></tr></thead><tbody>
-<tr><td style="text-align: left"><a id="opentofu_provider-name"></a>name</td><td style="text-align: left">A unique name for this target.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels#target-names">Name</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
-<tr><td style="text-align: left"><a id="opentofu_provider-files"></a>files</td><td style="text-align: left">The provider binary files.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">List of labels</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
-<tr><td style="text-align: left"><a id="opentofu_provider-platform"></a>platform</td><td style="text-align: left">Platform string (e.g., 'linux_amd64', 'darwin_arm64'). If omitted, auto-detected at build time.</td><td style="text-align: left">String</td><td style="text-align: left">optional</td><td style="text-align: left"><code>""</code></td></tr>
-<tr><td style="text-align: left"><a id="opentofu_provider-source"></a>source</td><td style="text-align: left">Provider source (e.g., 'hashicorp/null').</td><td style="text-align: left">String</td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
-<tr><td style="text-align: left"><a id="opentofu_provider-version"></a>version</td><td style="text-align: left">Provider version (e.g., '3.2.4').</td><td style="text-align: left">String</td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
+<p>Runs a real <code>terraform plan</code> as a test and keeps the plan for review.</p>
+<p>A thin wrapper over the rule of the same name that adds the
+<code>requires-network</code> tag: a plan reaches the state backend and, for most
+providers, the provider's API. Credentials come from the environment, so
+pass them with <code>--test_env</code>. Providers that work offline (<code>null</code>,
+<code>local</code>, <code>random</code>) need neither.</p>
+<p>See the rule's documentation for the attributes and the artefacts left in
+the undeclared test outputs directory.</p>
+<p><strong>PARAMETERS</strong></p>
+<div class="table-wrapper"><table><thead><tr><th style="text-align: left">Name</th><th style="text-align: left">Description</th><th style="text-align: left">Default Value</th></tr></thead><tbody>
+<tr><td style="text-align: left"><a id="terraform_plan_test-name"></a>name</td><td style="text-align: left">(str) Target name.</td><td style="text-align: left">none</td></tr>
+<tr><td style="text-align: left"><a id="terraform_plan_test-tags"></a>tags</td><td style="text-align: left">(list[str]) Extra tags. <code>requires-network</code> is always added.</td><td style="text-align: left"><code>[]</code></td></tr>
+<tr><td style="text-align: left"><a id="terraform_plan_test-kwargs"></a>kwargs</td><td style="text-align: left">Forwarded to the rule: <code>root</code>, <code>plan_args</code>, <code>expect_no_changes</code>, <code>lock</code>, and the usual test attributes.</td><td style="text-align: left">none</td></tr>
 </tbody></table>
 </div>
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../opentofu/opentofu_module.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../terraform/terraform_module.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
-                            <a rel="next prefetch" href="../opentofu/opentofu_provider_group.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../terraform/terraform_providers_lock.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <i class="fa fa-angle-right"></i>
                             </a>
 
@@ -199,11 +201,11 @@ opentofu_provider(<a href="#opentofu_provider-name">name</a>, <a href="#opentofu
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../opentofu/opentofu_module.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../terraform/terraform_module.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <i class="fa fa-angle-left"></i>
                     </a>
 
-                    <a rel="next prefetch" href="../opentofu/opentofu_provider_group.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../terraform/terraform_providers_lock.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <i class="fa fa-angle-right"></i>
                     </a>
             </nav>

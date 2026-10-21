@@ -172,6 +172,11 @@ terraform_test(<a href="#terraform_test-name">name</a>, <a href="#terraform_test
 module as a Bazel test. Test cases live in <code>.tftest.hcl</code> files. Fully
 hermetic — the .terraform directory is assembled by the init aspect from
 Bazel-managed deps.</p>
+<p>Each <code>run</code> block is reported as a JUnit test case through Bazel's
+<code>XML_OUTPUT_FILE</code> (Terraform writes the report itself; for OpenTofu the
+runner builds it from the <code>-json-into</code> event stream, which is also kept).
+The lock file and module manifest the test ran against are saved as
+undeclared test outputs.</p>
 <p>Bazel <code>--test_arg</code> values are intentionally ignored so the surface stays
 predictable — every run executes the module's <code>.tftest.hcl</code> files.</p>
 <p><strong>ATTRIBUTES</strong></p>
@@ -184,7 +189,7 @@ predictable — every run executes the module's <code>.tftest.hcl</code> files.<
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../terraform/terraform_provider_group.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../terraform/terraform_provider.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
@@ -198,7 +203,7 @@ predictable — every run executes the module's <code>.tftest.hcl</code> files.<
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../terraform/terraform_provider_group.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../terraform/terraform_provider.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <i class="fa fa-angle-left"></i>
                     </a>
 

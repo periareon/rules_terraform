@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>opentofu_module - rules_terraform</title>
+        <title>OpenTofu Settings - rules_terraform</title>
 
 
         <!-- Custom HTML head -->
@@ -156,42 +156,36 @@
                 <div id="content" class="content">
                     <main>
                         <!-- Generated with Stardoc: http://skydoc.bazel.build -->
-<p>opentofu_module — alias for <code>terraform_module</code>.</p>
-<p>Same rule under both names: a bundle of <code>.tf</code> files + <code>deps</code> + optional
-lock is engine-neutral, so <code>opentofu_module</code> is just a naming alias so
-OpenTofu-only projects don't have to import a <code>terraform_*</code> symbol.</p>
-<h2 id="rules"><a class="header" href="#rules">Rules</a></h2>
-<ul>
-<li><a href="#opentofu_module">opentofu_module</a></li>
-</ul>
-<p><a id="opentofu_module"></a></p>
-<h2 id="opentofu_module"><a class="header" href="#opentofu_module">opentofu_module</a></h2>
-<pre>
-load("@rules_terraform//opentofu:opentofu_module.bzl", "opentofu_module")
+<p>Public build settings for <code>//tofu</code>.</p>
+<p>Each exported function is named after a build setting in this package and
+its docstring describes what the setting does. The function body returns
+the setting's label so callers can reference it programmatically.</p>
+<p><a id="version"></a></p>
+<h2 id="version"><a class="header" href="#version">version</a></h2>
+<p>Picks which OpenTofu release the auto-registered toolchains resolve to.</p>
+<p>The <code>tofu_toolchains</code> extension declares one toolchain per (version, platform)
+for the releases shipped in <code>//tofu/private:versions.bzl</code> — the
+newest three when the table was generated — and for any release a
+<code>tofu_toolchains.version(version = "…")</code> tag asks for. For a tagged release the
+extension fetches the release's <code>SHA256SUMS</code> once and records the
+checksums as facts in <code>MODULE.bazel.lock</code>, so an older pin costs no
+change to rules_terraform and no network on later evaluations.</p>
+<p>Empty, the default, selects the extension's default: the release the
+root module marked <code>version(…, default = True)</code>, else the newest
+shipped one. Any other value names one of the known releases. Set it
+globally in <code>.bazelrc</code>, per invocation via
+<code>--@rules_terraform//tofu/settings:version=1.9.1</code>, or per target
+with a Starlark configuration transition. The corresponding archive is
+fetched lazily on first use.</p>
 
-opentofu_module(<a href="#opentofu_module-name">name</a>, <a href="#opentofu_module-deps">deps</a>, <a href="#opentofu_module-srcs">srcs</a>, <a href="#opentofu_module-data">data</a>, <a href="#opentofu_module-lock">lock</a>)
-</pre>
-<p>Defines a Terraform module that can be used as a dependency in other Terraform targets.</p>
-<p><strong>ATTRIBUTES</strong></p>
-<div class="table-wrapper"><table><thead><tr><th style="text-align: left">Name</th><th style="text-align: left">Description</th><th style="text-align: left">Type</th><th style="text-align: left">Mandatory</th><th style="text-align: left">Default</th></tr></thead><tbody>
-<tr><td style="text-align: left"><a id="opentofu_module-name"></a>name</td><td style="text-align: left">A unique name for this target.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels#target-names">Name</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
-<tr><td style="text-align: left"><a id="opentofu_module-deps"></a>deps</td><td style="text-align: left">Other terraform_module, terraform_provider, terraform_provider_group, terraform_external_module, or terraform_module_group targets that this module depends on.<br><br>A <code>terraform_module</code> dep is the Bazel half of a <code>module</code> block, the way a <code>py_library</code> dep is the Bazel half of an <code>import</code>: the <code>.tf</code> file names the path, <code>deps</code> says which target supplies it. A dep whose package already nests under this module's directory lands at that relative path; anything else is matched to a <code>module</code> block whose <code>source</code> ends with the dep's package name.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">List of labels</a></td><td style="text-align: left">optional</td><td style="text-align: left"><code>[]</code></td></tr>
-<tr><td style="text-align: left"><a id="opentofu_module-srcs"></a>srcs</td><td style="text-align: left">Terraform source files (.tf) that make up this module.<br><br>All of them must live directly in this target's package — a Terraform module is a single directory. Put nested .tf files in their own <code>terraform_module</code> and reference it with a <code>module</code> block.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">List of labels</a></td><td style="text-align: left">optional</td><td style="text-align: left"><code>[]</code></td></tr>
-<tr><td style="text-align: left"><a id="opentofu_module-data"></a>data</td><td style="text-align: left">Additional files or targets that should be available at runtime.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">List of labels</a></td><td style="text-align: left">optional</td><td style="text-align: left"><code>[]</code></td></tr>
-<tr><td style="text-align: left"><a id="opentofu_module-lock"></a>lock</td><td style="text-align: left">An optional <code>.terraform.lock.hcl</code> file.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">Label</a></td><td style="text-align: left">optional</td><td style="text-align: left"><code>None</code></td></tr>
-</tbody></table>
-</div>
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../opentofu/opentofu_fmt_test.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../tofu/extensions.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
-                            <a rel="next prefetch" href="../opentofu/opentofu_provider.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
-                                <i class="fa fa-angle-right"></i>
-                            </a>
 
                         <div style="clear: both"></div>
                     </nav>
@@ -199,13 +193,10 @@ opentofu_module(<a href="#opentofu_module-name">name</a>, <a href="#opentofu_mod
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../opentofu/opentofu_fmt_test.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../tofu/extensions.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <i class="fa fa-angle-left"></i>
                     </a>
 
-                    <a rel="next prefetch" href="../opentofu/opentofu_provider.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
-                        <i class="fa fa-angle-right"></i>
-                    </a>
             </nav>
 
         </div>

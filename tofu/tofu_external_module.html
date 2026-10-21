@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>opentofu_fmt_test - rules_terraform</title>
+        <title>tofu_external_module - rules_terraform</title>
 
 
         <!-- Custom HTML head -->
@@ -156,49 +156,45 @@
                 <div id="content" class="content">
                     <main>
                         <!-- Generated with Stardoc: http://skydoc.bazel.build -->
-<p>opentofu_fmt_test</p>
+<p>tofu_external_module — alias for <code>terraform_external_module</code>.</p>
+<p>Same rule under both names: a module fetched from outside the workspace is
+engine-neutral, so <code>tofu_external_module</code> is just a naming alias so
+OpenTofu-only projects don't have to import a <code>terraform_*</code> symbol.</p>
 <h2 id="rules"><a class="header" href="#rules">Rules</a></h2>
 <ul>
-<li><a href="#opentofu_fmt_test">opentofu_fmt_test</a></li>
+<li><a href="#tofu_external_module">tofu_external_module</a></li>
 </ul>
-<h2 id="aspects"><a class="header" href="#aspects">Aspects</a></h2>
-<ul>
-<li><a href="#opentofu_fmt_aspect">opentofu_fmt_aspect</a></li>
-</ul>
-<p><a id="opentofu_fmt_test"></a></p>
-<h2 id="opentofu_fmt_test"><a class="header" href="#opentofu_fmt_test">opentofu_fmt_test</a></h2>
+<p><a id="tofu_external_module"></a></p>
+<h2 id="tofu_external_module"><a class="header" href="#tofu_external_module">tofu_external_module</a></h2>
 <pre>
-load("@rules_terraform//opentofu:opentofu_fmt_test.bzl", "opentofu_fmt_test")
+load("@rules_terraform//tofu:tofu_external_module.bzl", "tofu_external_module")
 
-opentofu_fmt_test(<a href="#opentofu_fmt_test-name">name</a>, <a href="#opentofu_fmt_test-target">target</a>)
+tofu_external_module(<a href="#tofu_external_module-name">name</a>, <a href="#tofu_external_module-srcs">srcs</a>, <a href="#tofu_external_module-source">source</a>, <a href="#tofu_external_module-version">version</a>)
 </pre>
-<p>A rule for running <code>opentofu fmt</code> on a Terraform target.</p>
+<p>A module whose files come from outside the workspace.</p>
+<p>The <code>terraform.modules(...)</code> extension declares one of these per registry
+module it resolves. Declare one yourself, in the <code>build_file_content</code> of an
+<code>http_archive</code> or <code>git_repository</code>, to supply a module the extension cannot
+fetch: a module hosted somewhere other than a public registry, or a plain
+<code>git::</code> / <code>https://</code> source. Match <code>source</code> to the <code>module</code> block verbatim and
+list the target in the consuming <code>terraform_module</code>'s <code>deps</code>.</p>
 <p><strong>ATTRIBUTES</strong></p>
 <div class="table-wrapper"><table><thead><tr><th style="text-align: left">Name</th><th style="text-align: left">Description</th><th style="text-align: left">Type</th><th style="text-align: left">Mandatory</th><th style="text-align: left">Default</th></tr></thead><tbody>
-<tr><td style="text-align: left"><a id="opentofu_fmt_test-name"></a>name</td><td style="text-align: left">A unique name for this target.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels#target-names">Name</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
-<tr><td style="text-align: left"><a id="opentofu_fmt_test-target"></a>target</td><td style="text-align: left">-</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">Label</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
+<tr><td style="text-align: left"><a id="tofu_external_module-name"></a>name</td><td style="text-align: left">A unique name for this target.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels#target-names">Name</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
+<tr><td style="text-align: left"><a id="tofu_external_module-srcs"></a>srcs</td><td style="text-align: left">Module source files.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">List of labels</a></td><td style="text-align: left">optional</td><td style="text-align: left"><code>[]</code></td></tr>
+<tr><td style="text-align: left"><a id="tofu_external_module-source"></a>source</td><td style="text-align: left">The <code>source</code> string exactly as <code>module</code> blocks write it: a registry address (<code>terraform-aws-modules/vpc/aws</code>, with any <code>//subdir</code>), or any other address Terraform accepts, such as <code>git::https://…?ref=v1.2.0</code>. The init aspect installs this module under every <code>module</code> block whose <code>source</code> matches.</td><td style="text-align: left">String</td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
+<tr><td style="text-align: left"><a id="tofu_external_module-version"></a>version</td><td style="text-align: left">Module version.</td><td style="text-align: left">String</td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
 </tbody></table>
 </div>
-<p><a id="opentofu_fmt_aspect"></a></p>
-<h2 id="opentofu_fmt_aspect"><a class="header" href="#opentofu_fmt_aspect">opentofu_fmt_aspect</a></h2>
-<pre>
-load("@rules_terraform//opentofu:opentofu_fmt_test.bzl", "opentofu_fmt_aspect")
-
-opentofu_fmt_aspect()
-</pre>
-<p>An aspect for running <code>opentofu fmt</code> on targets with Terraform sources.</p>
-<p><strong>ASPECT ATTRIBUTES</strong></p>
-<p><strong>ATTRIBUTES</strong></p>
-
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../opentofu/opentofu_binary.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../tofu/tofu_binary.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
-                            <a rel="next prefetch" href="../opentofu/opentofu_module.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../tofu/tofu_fmt_test.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <i class="fa fa-angle-right"></i>
                             </a>
 
@@ -208,11 +204,11 @@ opentofu_fmt_aspect()
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../opentofu/opentofu_binary.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../tofu/tofu_binary.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <i class="fa fa-angle-left"></i>
                     </a>
 
-                    <a rel="next prefetch" href="../opentofu/opentofu_module.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../tofu/tofu_fmt_test.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <i class="fa fa-angle-right"></i>
                     </a>
             </nav>

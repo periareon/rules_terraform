@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>opentofu_binary - rules_terraform</title>
+        <title>terraform_providers_lock - rules_terraform</title>
 
 
         <!-- Custom HTML head -->
@@ -156,40 +156,44 @@
                 <div id="content" class="content">
                     <main>
                         <!-- Generated with Stardoc: http://skydoc.bazel.build -->
-<p>opentofu_binary</p>
+<p>terraform_providers_lock — <code>bazel run</code> updater for <code>.terraform.lock.hcl</code>.</p>
+<p>Runs <code>terraform providers lock -platform=&lt;all&gt;</code> under the toolchain-fetched
+<code>terraform</code> binary and writes the multi-platform lock file back to source.
+No engine needs to be installed on the host. This is the one path that
+produces hashes for platforms Bazel didn't resolve for the current build.</p>
 <h2 id="rules"><a class="header" href="#rules">Rules</a></h2>
 <ul>
-<li><a href="#opentofu_binary">opentofu_binary</a></li>
+<li><a href="#terraform_providers_lock">terraform_providers_lock</a></li>
 </ul>
-<p><a id="opentofu_binary"></a></p>
-<h2 id="opentofu_binary"><a class="header" href="#opentofu_binary">opentofu_binary</a></h2>
+<p><a id="terraform_providers_lock"></a></p>
+<h2 id="terraform_providers_lock"><a class="header" href="#terraform_providers_lock">terraform_providers_lock</a></h2>
 <pre>
-load("@rules_terraform//opentofu:opentofu_binary.bzl", "opentofu_binary")
+load("@rules_terraform//terraform:terraform_providers_lock.bzl", "terraform_providers_lock")
 
-opentofu_binary(<a href="#opentofu_binary-name">name</a>, <a href="#opentofu_binary-root">root</a>)
+terraform_providers_lock(<a href="#terraform_providers_lock-name">name</a>, <a href="#terraform_providers_lock-output">output</a>, <a href="#terraform_providers_lock-platforms">platforms</a>, <a href="#terraform_providers_lock-target">target</a>)
 </pre>
-<p>Wraps the opentofu binary for a <code>terraform_module</code> root. Invoke via
-<code>bazel run</code> — any subcommand and args are passed straight through, so
-<code>bazel run //x:opentofu -- plan</code>, <code>... -- apply</code>, <code>... -- state list</code>, etc.
-mirror the nominal CLI.</p>
-<p>The <code>.terraform</code> directory is assembled hermetically by
-<code>terraform_init_aspect</code>; providers and modules come from Bazel-managed
-dependencies rather than the network.</p>
+<p>Regenerates <code>.terraform.lock.hcl</code> for a <code>terraform_module</code> by running
+real <code>terraform providers lock -platform=&lt;all&gt;</code> under the toolchain-fetched
+terraform binary. <code>bazel run</code> writes the multi-platform result back to
+source — the one path that produces hashes for platforms Bazel didn't
+resolve for the current build.</p>
 <p><strong>ATTRIBUTES</strong></p>
 <div class="table-wrapper"><table><thead><tr><th style="text-align: left">Name</th><th style="text-align: left">Description</th><th style="text-align: left">Type</th><th style="text-align: left">Mandatory</th><th style="text-align: left">Default</th></tr></thead><tbody>
-<tr><td style="text-align: left"><a id="opentofu_binary-name"></a>name</td><td style="text-align: left">A unique name for this target.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels#target-names">Name</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
-<tr><td style="text-align: left"><a id="opentofu_binary-root"></a>root</td><td style="text-align: left">The terraform_module target that serves as the root module.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">Label</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
+<tr><td style="text-align: left"><a id="terraform_providers_lock-name"></a>name</td><td style="text-align: left">A unique name for this target.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels#target-names">Name</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
+<tr><td style="text-align: left"><a id="terraform_providers_lock-output"></a>output</td><td style="text-align: left">Where to write the multi-platform <code>.terraform.lock.hcl</code>, relative to this BUILD file's package. Diff-test companions should point <code>golden = "&lt;same-path&gt;"</code>.</td><td style="text-align: left">String</td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
+<tr><td style="text-align: left"><a id="terraform_providers_lock-platforms"></a>platforms</td><td style="text-align: left">os_arch platforms to record hashes for. Defaults to the common set.</td><td style="text-align: left">List of strings</td><td style="text-align: left">optional</td><td style="text-align: left"><code>[]</code></td></tr>
+<tr><td style="text-align: left"><a id="terraform_providers_lock-target"></a>target</td><td style="text-align: left">The terraform_module whose .tf sources drive the lock resolution. Its local child modules come along, so <code>required_providers</code> blocks anywhere in the tree count.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">Label</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
 </tbody></table>
 </div>
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../opentofu_rules.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../terraform/terraform_plan_test.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
-                            <a rel="next prefetch" href="../opentofu/opentofu_fmt_test.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../terraform/terraform_providers_lock_test.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <i class="fa fa-angle-right"></i>
                             </a>
 
@@ -199,11 +203,11 @@ dependencies rather than the network.</p>
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../opentofu_rules.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../terraform/terraform_plan_test.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <i class="fa fa-angle-left"></i>
                     </a>
 
-                    <a rel="next prefetch" href="../opentofu/opentofu_fmt_test.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../terraform/terraform_providers_lock_test.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <i class="fa fa-angle-right"></i>
                     </a>
             </nav>

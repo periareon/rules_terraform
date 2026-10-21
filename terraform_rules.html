@@ -160,12 +160,14 @@
 <ul>
 <li><a href="./terraform/terraform_binary.html">terraform_binary</a> — <code>bazel run</code> wrapper for any <code>terraform</code> subcommand.</li>
 <li><a href="./terraform/terraform_module.html">terraform_module</a> — declares a <code>.tf</code> module with providers and deps.</li>
-<li><a href="./terraform/terraform_provider.html">terraform_provider</a> — declares a checked-in provider binary.</li>
-<li><a href="./terraform/terraform_provider_group.html">terraform_provider_group</a> — bundles providers with a shared lock file.</li>
-<li><a href="./terraform/terraform_test.html">terraform_test</a> — runs Terraform's HCL native test framework.</li>
+<li><a href="./terraform/terraform_external_module.html">terraform_external_module</a> — supplies a module fetched from outside the workspace (git, private hosts) to <code>deps</code>.</li>
+<li><a href="./terraform/terraform_provider.html">terraform_provider</a> — declares a provider built in the repo. Registry providers come from a <code>deps</code> tag's hub instead.</li>
+<li><a href="./terraform/terraform_test.html">terraform_test</a> — runs Terraform's HCL native test framework, reporting each <code>run</code> block as a JUnit test case.</li>
+<li><a href="./terraform/terraform_plan_test.html">terraform_plan_test</a> — runs a real <code>plan</code> and keeps it as a reviewable test output; needs network.</li>
 <li><a href="./terraform/terraform_validate_test.html">terraform_validate_test</a> / <a href="./terraform/terraform_validate_aspect.html">aspect</a> — <code>terraform validate</code> as a Bazel test/aspect.</li>
 <li><a href="./terraform/terraform_fmt_test.html">terraform_fmt_test</a> / <a href="./terraform/terraform_fmt_aspect.html">aspect</a> — <code>terraform fmt -check</code> as a Bazel test/aspect.</li>
-<li><a href="./terraform/terraform_modules_lock.html">terraform_modules_lock and drift/diff tests</a> — keep lock files in sync with sources.</li>
+<li><a href="./terraform/terraform_providers_lock.html">terraform_providers_lock</a> — <code>bazel run</code> updater that writes <code>.terraform.lock.hcl</code> with the toolchain engine; nothing needs installing on the host.</li>
+<li><a href="./terraform/terraform_providers_lock_test.html">terraform_providers_lock_test</a> — fails when the lock file and the <code>required_providers</code> blocks disagree.</li>
 </ul>
 <h2 id="module-extensions"><a class="header" href="#module-extensions">Module extensions</a></h2>
 <ul>

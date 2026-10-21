@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>OpenTofu Settings - rules_terraform</title>
+        <title>tofu_fmt_test - rules_terraform</title>
 
 
         <!-- Custom HTML head -->
@@ -156,32 +156,51 @@
                 <div id="content" class="content">
                     <main>
                         <!-- Generated with Stardoc: http://skydoc.bazel.build -->
-<p>Public build settings for <code>//opentofu</code>.</p>
-<p>Each exported function is named after a build setting in this package and
-its docstring describes what the setting does. The function body returns
-the setting's label so callers can reference it programmatically.</p>
-<p><a id="version"></a></p>
-<h2 id="version"><a class="header" href="#version">version</a></h2>
-<p>Picks which OpenTofu release the auto-registered toolchains resolve to.</p>
-<p>rules_terraform ships one toolchain per (version, platform) combination
-in <code>TOFU_VERSIONS</code>, each guarded by a <code>config_setting</code> that matches
-this flag; Bazel's toolchain resolver picks the matching one. The
-corresponding <code>http_archive</code> is fetched lazily on first use.</p>
-<p>Flip the flag globally in <code>.bazelrc</code>, per-invocation via
-<code>--@rules_terraform//opentofu/settings:version=1.10.6</code>, or per-target
-with a Starlark configuration transition.</p>
-<p>Defaults to the latest stable release listed in
-<code>//opentofu/private:versions.bzl</code> (<code>TOFU_DEFAULT_VERSION</code>), computed
-by <code>tools/update_versions</code> from the shipped versions table.</p>
+<p>tofu_fmt_test</p>
+<h2 id="rules"><a class="header" href="#rules">Rules</a></h2>
+<ul>
+<li><a href="#tofu_fmt_test">tofu_fmt_test</a></li>
+</ul>
+<h2 id="aspects"><a class="header" href="#aspects">Aspects</a></h2>
+<ul>
+<li><a href="#tofu_fmt_aspect">tofu_fmt_aspect</a></li>
+</ul>
+<p><a id="tofu_fmt_test"></a></p>
+<h2 id="tofu_fmt_test"><a class="header" href="#tofu_fmt_test">tofu_fmt_test</a></h2>
+<pre>
+load("@rules_terraform//tofu:tofu_fmt_test.bzl", "tofu_fmt_test")
+
+tofu_fmt_test(<a href="#tofu_fmt_test-name">name</a>, <a href="#tofu_fmt_test-target">target</a>)
+</pre>
+<p>A rule for running <code>tofu fmt</code> on a Terraform target.</p>
+<p><strong>ATTRIBUTES</strong></p>
+<div class="table-wrapper"><table><thead><tr><th style="text-align: left">Name</th><th style="text-align: left">Description</th><th style="text-align: left">Type</th><th style="text-align: left">Mandatory</th><th style="text-align: left">Default</th></tr></thead><tbody>
+<tr><td style="text-align: left"><a id="tofu_fmt_test-name"></a>name</td><td style="text-align: left">A unique name for this target.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels#target-names">Name</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
+<tr><td style="text-align: left"><a id="tofu_fmt_test-target"></a>target</td><td style="text-align: left">-</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">Label</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
+</tbody></table>
+</div>
+<p><a id="tofu_fmt_aspect"></a></p>
+<h2 id="tofu_fmt_aspect"><a class="header" href="#tofu_fmt_aspect">tofu_fmt_aspect</a></h2>
+<pre>
+load("@rules_terraform//tofu:tofu_fmt_test.bzl", "tofu_fmt_aspect")
+
+tofu_fmt_aspect()
+</pre>
+<p>An aspect for running <code>tofu fmt</code> on targets with Terraform sources.</p>
+<p><strong>ASPECT ATTRIBUTES</strong></p>
+<p><strong>ATTRIBUTES</strong></p>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../opentofu/extensions.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../tofu/tofu_external_module.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
+                            <a rel="next prefetch" href="../tofu/tofu_providers_lock.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
 
                         <div style="clear: both"></div>
                     </nav>
@@ -189,10 +208,13 @@ by <code>tools/update_versions</code> from the shipped versions table.</p>
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../opentofu/extensions.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../tofu/tofu_external_module.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <i class="fa fa-angle-left"></i>
                     </a>
 
+                    <a rel="next prefetch" href="../tofu/tofu_providers_lock.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
             </nav>
 
         </div>
