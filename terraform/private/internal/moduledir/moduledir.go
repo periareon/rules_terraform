@@ -140,17 +140,86 @@ func Stage(src, tempPrefix string) (string, func(), error) {
 	return workDir, cleanup, nil
 }
 
-// hasConfigFile reports whether the directory holds anything Terraform would
-// load as configuration.
+// hasConfigFile reports whether the directory holds anything Terraform or
+// OpenTofu would load as configuration.
 func hasConfigFile(entries []os.DirEntry) bool {
 	for _, e := range entries {
 		if e.IsDir() {
 			continue
 		}
 		name := e.Name()
-		if strings.HasSuffix(name, ".tf") || strings.HasSuffix(name, ".tf.json") {
-			return true
+		for _, suffix := range []string{".tf", ".tf.json", ".tofu", ".tofu.json"} {
+			if strings.HasSuffix(name, suffix) {
+				return true
+			}
 		}
 	}
 	return false
+}
+
+// HermeticEnv returns a copy of environ in which the engine's machine-wide
+// configuration is switched off, for the checks that run under Bazel's
+// sandbox: validate actions and `terraform test`.
+//
+// Without this, a developer's `~/.terraformrc` (or whatever
+// `TF_CLI_CONFIG_FILE` names) still applies inside the sandbox. A
+// `provider_installation` or `plugin_cache_dir` stanza there changes what the
+// engine does with the providers the init aspect installed, so the same
+// target can pass on one machine and fail on another. The engine is pointed at
+// an empty configuration file instead, and told not to call home.
+//
+// `bazel run` deliberately does not go through here: that is where credential
+// helpers and other operator configuration are supposed to apply.
+//
+// The returned cleanup removes the empty configuration file.
+func HermeticEnv(environ []string) ([]string, func(), error) {
+	rc, err := os.CreateTemp("", "rules_terraform-*.tfrc")
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to create empty CLI config: %w", err)
+	}
+	rcPath := rc.Name()
+	rc.Close()
+	cleanup := func() { os.Remove(rcPath) }
+
+	dropped := map[string]bool{
+		"TF_CLI_CONFIG_FILE":                             true,
+		"TERRAFORM_CONFIG":                               true,
+		"TF_PLUGIN_CACHE_DIR":                            true,
+		"TF_PLUGIN_CACHE_MAY_BREAK_DEPENDENCY_LOCK_FILE": true,
+		"CHECKPOINT_DISABLE":                             true,
+		"TF_IN_AUTOMATION":                               true,
+	}
+	out := make([]string, 0, len(environ)+3)
+	for _, kv := range environ {
+		key := kv
+		if i := strings.IndexByte(kv, '='); i >= 0 {
+			key = kv[:i]
+		}
+		if dropped[key] {
+			continue
+		}
+		out = append(out, kv)
+	}
+	out = append(out,
+		"TF_CLI_CONFIG_FILE="+rcPath,
+		"CHECKPOINT_DISABLE=1",
+		"TF_IN_AUTOMATION=1",
+	)
+	return out, cleanup, nil
+}
+
+// LocalStateFiles returns the local-backend state files present directly in
+// workDir: `terraform.tfstate` and the `terraform.tfstate.d/` workspace
+// directory. Both only exist when the engine was run against a configuration
+// with no `backend` or `cloud` block, which in a staged copy of the module
+// means the state lives nowhere durable.
+func LocalStateFiles(workDir string) []string {
+	var out []string
+	for _, name := range []string{"terraform.tfstate", "terraform.tfstate.d"} {
+		p := filepath.Join(workDir, name)
+		if _, err := os.Stat(p); err == nil {
+			out = append(out, p)
+		}
+	}
+	return out
 }

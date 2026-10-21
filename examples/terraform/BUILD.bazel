@@ -13,7 +13,9 @@ The workflow rules mirror what a Terraform user runs at the CLI:
 load("@rules_terraform//terraform:terraform_binary.bzl", "terraform_binary")
 load("@rules_terraform//terraform:terraform_fmt_test.bzl", "terraform_fmt_test")
 load("@rules_terraform//terraform:terraform_module.bzl", "terraform_module")
-load("@rules_terraform//terraform:terraform_modules_lock.bzl", "terraform_providers_lock_test")
+load("@rules_terraform//terraform:terraform_plan_test.bzl", "terraform_plan_test")
+load("@rules_terraform//terraform:terraform_providers_lock.bzl", "terraform_providers_lock")
+load("@rules_terraform//terraform:terraform_providers_lock_test.bzl", "terraform_providers_lock_test")
 load("@rules_terraform//terraform:terraform_test.bzl", "terraform_test")
 load("@rules_terraform//terraform:terraform_validate_test.bzl", "terraform_validate_test")
 
@@ -24,11 +26,20 @@ load("@rules_terraform//terraform:terraform_validate_test.bzl", "terraform_valid
 terraform_module(
     name = "example",
     srcs = glob(["*.tf"]),
+    # A demo with no backend block: its state is disposable, so `apply` and
+    # `destroy` are allowed against local state kept under bazel-out. A real
+    # deployment declares a backend instead and leaves this unset.
+    allow_ephemeral_state = True,
     data = glob(["*.tftest.hcl"]),
-    lock = ".terraform.lock.hcl",
+    # `@app` is the hub the `deps` tag in MODULE.bazel produces: every
+    # provider the lock pins, and the lock itself. Adding a provider to
+    # `required_providers` and rerunning `providers_lock.update` is then a
+    # change to .tf files and the lock only; no BUILD file moves. Depend on
+    # `@app//hashicorp_null` plus `lock = ".terraform.lock.hcl"` instead to
+    # pick a subset.
     deps = [
         "//modules/greeter",
-        "@example_providers//hashicorp_null",
+        "@app",
     ],
 )
 
@@ -66,4 +77,22 @@ terraform_providers_lock_test(
     name = "providers_lock",
     lock = ".terraform.lock.hcl",
     target = ":example",
+)
+
+# `bazel run //:providers_lock.update` rewrites `.terraform.lock.hcl` for every
+# platform in the default set, using the toolchain-fetched engine — nothing
+# has to be installed on the host. Run it after changing `required_providers`.
+terraform_providers_lock(
+    name = "providers_lock.update",
+    output = ".terraform.lock.hcl",
+    target = ":example",
+)
+
+# `bazel test //:plan` runs a real `plan` and keeps it under
+# bazel-testlogs/plan/test.outputs/ as plan.txt and plan.json. Tagged
+# `requires-network` by the macro; the `null` provider needs none, but a cloud
+# provider would, along with credentials passed through `--test_env`.
+terraform_plan_test(
+    name = "plan",
+    root = ":example",
 )

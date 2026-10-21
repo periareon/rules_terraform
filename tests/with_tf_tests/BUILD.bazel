@@ -1,12 +1,12 @@
-load("//opentofu:opentofu_binary.bzl", "opentofu_binary")
-load("//opentofu:opentofu_fmt_test.bzl", "opentofu_fmt_test")
-load("//opentofu:opentofu_test.bzl", "opentofu_test")
-load("//opentofu:opentofu_validate_test.bzl", "opentofu_validate_test")
 load("//terraform:terraform_binary.bzl", "terraform_binary")
 load("//terraform:terraform_fmt_test.bzl", "terraform_fmt_test")
 load("//terraform:terraform_module.bzl", "terraform_module")
 load("//terraform:terraform_test.bzl", "terraform_test")
 load("//terraform:terraform_validate_test.bzl", "terraform_validate_test")
+load("//tofu:tofu_binary.bzl", "tofu_binary")
+load("//tofu:tofu_fmt_test.bzl", "tofu_fmt_test")
+load("//tofu:tofu_test.bzl", "tofu_test")
+load("//tofu:tofu_validate_test.bzl", "tofu_validate_test")
 
 # Diff-test coverage skipped: the `.tftest.hcl` file causes each engine to
 # discover extra implicit provider references (OpenTofu adds an empty
@@ -14,13 +14,15 @@ load("//terraform:terraform_validate_test.bzl", "terraform_validate_test")
 # implicit resolution), which makes a clean diff finicky. Simpler-provider
 # fixtures cover the lock-generation logic under test.
 
+# Depends on the providers hub as a whole rather than on one provider, so the
+# lock comes from the group: the other path `terraform_module` accepts, and the
+# one the examples use.
 terraform_module(
     name = "with_tf_tests",
     srcs = glob(["*.tf"]),
     data = glob(["*.tftest.hcl"]),
-    lock = ".terraform.lock.hcl",
     deps = [
-        "@test_providers_with_provider//hashicorp_null",
+        "@test_providers_with_provider",
     ],
 )
 
@@ -44,22 +46,22 @@ terraform_test(
     root = ":with_tf_tests",
 )
 
-opentofu_binary(
+tofu_binary(
     name = "tofu",
     root = ":with_tf_tests",
 )
 
-opentofu_validate_test(
+tofu_validate_test(
     name = "with_tf_tests_tofu_validate",
     target = ":with_tf_tests",
 )
 
-opentofu_fmt_test(
+tofu_fmt_test(
     name = "with_tf_tests_tofu_fmt",
     target = ":with_tf_tests",
 )
 
-opentofu_test(
+tofu_test(
     name = "with_tf_tests_tofu_tftest",
     root = ":with_tf_tests",
 )

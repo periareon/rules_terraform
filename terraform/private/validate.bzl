@@ -1,6 +1,6 @@
 """Bazel rules for `terraform validate`.
 
-The `build_validate_*_impl` helpers are consumed by `//opentofu` so both
+The `build_validate_*_impl` helpers are consumed by `//tofu` so both
 engines share the same validate machinery — engine-specific file names,
 output-group names, and ignore tags come from the `engine` parameter.
 """
@@ -8,7 +8,7 @@ output-group names, and ignore tags come from the `engine` parameter.
 load(":providers.bzl", "TerraformInfo")
 load(":util.bzl", "module_dir", "rlocationpath")
 
-visibility(["//opentofu/...", "//terraform/...", "//tests/..."])
+visibility(["//terraform/...", "//tests/...", "//tofu/..."])
 
 # Tags that skip validation regardless of engine.
 _GENERIC_IGNORE_TAGS = [
@@ -19,20 +19,20 @@ _GENERIC_IGNORE_TAGS = [
 ]
 
 # Engine-scoped tags — `no_terraform_validate` skips ONLY the terraform
-# aspect, `no_opentofu_validate` skips ONLY the opentofu aspect. Lets a
+# aspect, `no_tofu_validate` skips ONLY the tofu aspect. Lets a
 # mixed-engine repo opt one engine's aspect out without silencing both.
 _ENGINE_IGNORE_TAGS = {
-    "opentofu": [
-        "no_opentofu_validate",
-        "no_opentofu_validation",
-        "no_opentofuvalidate",
-        "noopentofuvalidate",
-    ],
     "terraform": [
         "no_terraform_validate",
         "no_terraform_validation",
         "no_terraformvalidate",
         "noterraformvalidate",
+    ],
+    "tofu": [
+        "no_tofu_validate",
+        "no_tofu_validation",
+        "no_tofuvalidate",
+        "notofuvalidate",
     ],
 }
 
@@ -52,7 +52,7 @@ def build_validate_aspect_impl(target, ctx, toolchain_type, *, engine):
         ctx: (ctx) The aspect context.
         toolchain_type: (str) Fully-qualified label string of the
             toolchain type the aspect should resolve.
-        engine: (str) `"terraform"` or `"opentofu"`. Used for file names,
+        engine: (str) `"terraform"` or `"tofu"`. Used for file names,
             the emitted output-group name (`<engine>_validate_checks`),
             the action mnemonic, and engine-scoped ignore-tag matching.
 
@@ -110,8 +110,8 @@ def build_validate_test_impl(ctx, toolchain_type, *, engine):
         ctx: (ctx) The rule context.
         toolchain_type: (str) Fully-qualified label string of the
             toolchain type the rule should resolve.
-        engine: (str) `"terraform"` or `"opentofu"`. Used to name the args
-            file so terraform and opentofu variants on the same underlying
+        engine: (str) `"terraform"` or `"tofu"`. Used to name the args
+            file so terraform and tofu variants on the same underlying
             target never collide.
 
     Returns:

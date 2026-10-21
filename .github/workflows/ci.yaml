@@ -58,14 +58,14 @@ jobs:
       matrix:
         os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest, windows-latest]
         bazel: ["7.x", "8.x", "9.x"]
-        example: [terraform, opentofu, monorepo]
+        example: [terraform, tofu, monorepo]
         # The engine binary each example exposes. `bazel test //...` never
-        # builds these — a `terraform_binary` / `opentofu_binary` can break
+        # builds these — a `terraform_binary` / `tofu_binary` can break
         # while every test still passes — so each one gets run below.
         include:
           - example: terraform
             binary: "//:terraform"
-          - example: opentofu
+          - example: tofu
             binary: "//:tofu"
           - example: monorepo
             binary: "//envs/prod/app:terraform"

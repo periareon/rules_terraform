@@ -25,5 +25,13 @@ module "compute" {
 module "storage" {
   source = "../../../modules/storage"
 
-  bucket_name = "${var.environment}-app-assets"
+  bucket_name = "${module.naming.id}-assets"
+}
+
+# The library that reaches the registry. Nothing here says so: the registry
+# module is the library's dependency, declared in its BUILD file.
+module "naming" {
+  source = "../../../modules/naming"
+
+  environment = var.environment
 }

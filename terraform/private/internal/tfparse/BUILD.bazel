@@ -1,8 +1,17 @@
-load("@rules_go//go:def.bzl", "go_library")
+load("@rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "tfparse",
-    srcs = ["tfparse.go"],
+    srcs = [
+        "backend.go",
+        "tfparse.go",
+    ],
     importpath = "rules_terraform/terraform/private/internal/tfparse",
     visibility = ["//terraform/private:__subpackages__"],
+)
+
+go_test(
+    name = "tfparse_test",
+    srcs = ["backend_test.go"],
+    embed = [":tfparse"],
 )

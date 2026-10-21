@@ -5,6 +5,10 @@ load(
     _terraform_binary = "terraform_binary",
 )
 load(
+    ":terraform_external_module.bzl",
+    _terraform_external_module = "terraform_external_module",
+)
+load(
     ":terraform_fmt_aspect.bzl",
     _terraform_fmt_aspect = "terraform_fmt_aspect",
 )
@@ -17,19 +21,20 @@ load(
     _terraform_module = "terraform_module",
 )
 load(
-    ":terraform_modules_lock.bzl",
-    _terraform_lock_diff_test = "terraform_lock_diff_test",
-    _terraform_modules_lock = "terraform_modules_lock",
-    _terraform_modules_lock_test = "terraform_modules_lock_test",
-    _terraform_providers_lock_test = "terraform_providers_lock_test",
+    ":terraform_plan_test.bzl",
+    _terraform_plan_test = "terraform_plan_test",
 )
 load(
     ":terraform_provider.bzl",
     _terraform_provider = "terraform_provider",
 )
 load(
-    ":terraform_provider_group.bzl",
-    _terraform_provider_group = "terraform_provider_group",
+    ":terraform_providers_lock.bzl",
+    _terraform_providers_lock = "terraform_providers_lock",
+)
+load(
+    ":terraform_providers_lock_test.bzl",
+    _terraform_providers_lock_test = "terraform_providers_lock_test",
 )
 load(
     ":terraform_test.bzl",
@@ -45,12 +50,11 @@ load(
 )
 
 terraform_binary = _terraform_binary
+terraform_external_module = _terraform_external_module
 terraform_module = _terraform_module
-terraform_lock_diff_test = _terraform_lock_diff_test
-terraform_modules_lock = _terraform_modules_lock
-terraform_modules_lock_test = _terraform_modules_lock_test
+terraform_plan_test = _terraform_plan_test
 terraform_provider = _terraform_provider
-terraform_provider_group = _terraform_provider_group
+terraform_providers_lock = _terraform_providers_lock
 terraform_providers_lock_test = _terraform_providers_lock_test
 terraform_test = _terraform_test
 terraform_fmt_aspect = _terraform_fmt_aspect

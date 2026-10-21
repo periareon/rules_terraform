@@ -2,173 +2,71 @@
 
 Two extensions live here:
 
-* `terraform_toolchains` — no user-facing configuration. On evaluation it
-  materializes ONE hub repo (`@terraform_toolchains`) that declares a
-  toolchain per (version, platform), each guarded by a `target_settings`
-  matching `//terraform/settings:version_<v>`. rules_terraform's own
-  `MODULE.bazel` `use_repo`s the hub and `register_toolchains`s it, so
-  downstream users get toolchain resolution for free — no ceremony beyond
-  flipping `//terraform/settings:version` to pick which Terraform release
-  to actually download. Per-(version, platform) `http_archive`s are lazy;
-  only the selected combination is fetched.
-* `terraform` — carries `providers` and `modules` tag classes for users
-  who want to pin providers/registry-modules via Bazel-managed fetching.
+* `terraform_toolchains` — materializes ONE hub repo (`@terraform_toolchains`)
+  declaring a toolchain per (version, platform) for the releases shipped in
+  `//terraform/private:versions.bzl` and any a `version` tag asks for.
+  rules_terraform's own `MODULE.bazel` `use_repo`s the hub and
+  `register_toolchains`s it, so downstream users get toolchain resolution
+  for free. `//terraform/settings:version` picks the release; empty means
+  the default. See `//terraform/private:toolchain_extension.bzl`.
+* `terraform` — carries the `deps` tag class: the providers a lock file
+  pins and the registry modules some directories' `module` blocks name,
+  as one hub per tag.
+  Fetched archives go into one pool shared by every hub, keyed by what the
+  archive is rather than who asked for it; each hub is an alias layer over
+  that pool. The body lives in `//terraform/private:extension_impl.bzl`,
+  shared with the `tofu` extension.
 """
 
 load("//terraform/private:cli.bzl", "terraform_cli_hub")
-load("//terraform/private:modules_extension.bzl", "resolve_all_modules")
-load("//terraform/private:provider_repo.bzl", "DEFAULT_REGISTRY", "terraform_provider_hub", "terraform_providers_from_lock_file")
-load(
-    "//terraform/private:toolchain_repo.bzl",
-    "PLATFORM_TO_CONSTRAINTS",
-    "TERRAFORM_VERSIONS",
-    "terraform_toolchain_repository",
-    "terraform_toolchain_repository_hub",
-)
+load("//terraform/private:extension_impl.bzl", "deps_tag_class", "run_extension")
+load("//terraform/private:toolchain_extension.bzl", "toolchains_extension_impl", "version_tag_class")
+load("//terraform/private:versions.bzl", "TERRAFORM_DEFAULT_VERSION", "TERRAFORM_VERSIONS")
 
 _TERRAFORM_REGISTRY = "registry.terraform.io"
 
-# Fixed hub name — since this extension takes no user config, we can bake
-# it in. The corresponding `use_repo`/`register_toolchains` calls in
-# rules_terraform's `MODULE.bazel` reference this exact name.
+# Fixed hub name — since this extension takes no user config beyond
+# `version` tags, we can bake it in. The corresponding `use_repo` /
+# `register_toolchains` calls in rules_terraform's `MODULE.bazel` reference
+# this exact name.
 _HUB_NAME = "terraform_toolchains"
 
 def _terraform_toolchains_impl(module_ctx):
-    toolchain_names = []
-    toolchain_labels = {}
-    exec_compatible_with = {}
-    target_settings = {}
-
-    for version, platforms in TERRAFORM_VERSIONS.items():
-        version_setting = "@rules_terraform//terraform/settings:version_" + version.replace(".", "_")
-        for platform, info in platforms.items():
-            if platform not in PLATFORM_TO_CONSTRAINTS:
-                continue
-
-            # Repo name includes both version and platform so declarations are
-            # unique. Only the resolved (version, platform) actually fetches.
-            repo_name = "{}_{}_{}".format(
-                _HUB_NAME,
-                version.replace(".", "_"),
-                platform.replace("-", "_"),
-            )
-            terraform_toolchain_repository(
-                name = repo_name,
-                version = version,
-                platform = platform,
-                url = info["url"],
-                integrity = info["integrity"],
-            )
-            toolchain_names.append(repo_name)
-            toolchain_labels[repo_name] = "@" + repo_name
-            exec_compatible_with[repo_name] = PLATFORM_TO_CONSTRAINTS[platform]
-            target_settings[repo_name] = [version_setting]
-
-    terraform_toolchain_repository_hub(
-        name = _HUB_NAME,
-        toolchain_labels = toolchain_labels,
-        toolchain_names = toolchain_names,
-        exec_compatible_with = exec_compatible_with,
-        target_compatible_with = {},
-        target_settings = target_settings,
+    return toolchains_extension_impl(
+        module_ctx,
+        engine = "terraform",
+        hub_name = _HUB_NAME,
+        toolchain_type = "@rules_terraform//terraform:toolchain_type",
+        version_flag = "@rules_terraform//terraform/settings:version",
+        versions = TERRAFORM_VERSIONS,
+        default_version = TERRAFORM_DEFAULT_VERSION,
+        binary_name = "terraform",
+        archive_prefix = "terraform",
+        sha256sums_url = lambda v: "https://releases.hashicorp.com/terraform/{v}/terraform_{v}_SHA256SUMS".format(v = v),
+        download_url = lambda v, p: "https://releases.hashicorp.com/terraform/{v}/terraform_{v}_{p}.zip".format(v = v, p = p),
+        # `@terraform` — a one-target hub whose `bazel run @terraform -- <cmd>`
+        # chdirs to $BUILD_WORKING_DIRECTORY and execs the resolved toolchain
+        # `terraform` binary with the user's argv.
+        declare_cli_hub = lambda: terraform_cli_hub(name = "terraform"),
     )
 
-    # `@terraform` — a one-target hub whose `bazel run @terraform -- <cmd>`
-    # chdirs to $BUILD_WORKING_DIRECTORY and execs the resolved toolchain
-    # `terraform` binary with the user's argv. Downstream users add
-    # `use_repo(terraform_toolchains, "terraform")` to reference it.
-    terraform_cli_hub(name = "terraform")
-
-    # Reproducible: every URL + integrity hash is vendored in
-    # //terraform/private:versions.bzl. No network at eval time; identical
-    # inputs → identical repo declarations.
-    return module_ctx.extension_metadata(reproducible = True)
-
 terraform_toolchains = module_extension(
-    doc = "Materializes the `@terraform_toolchains` hub covering every supported version.",
+    doc = """Materializes the `@terraform_toolchains` hub: the releases shipped
+    in `//terraform/private:versions.bzl` plus any a `version` tag asks for,
+    and the `@terraform` CLI hub.""",
     implementation = _terraform_toolchains_impl,
+    tag_classes = {"version": version_tag_class("terraform")},
 )
 
 def _terraform_impl(module_ctx):
-    for mod in module_ctx.modules:
-        for attrs in mod.tags.providers:
-            provider_repos = terraform_providers_from_lock_file(
-                module_ctx = module_ctx,
-                lock_file_path = attrs.lock,
-                hub_name = attrs.name,
-                registry = attrs.registry,
-            )
-
-            provider_repos_str = {
-                "{}:{}".format(source, platform): repo_name
-                for (source, platform), repo_name in provider_repos.items()
-            }
-
-            terraform_provider_hub(
-                name = attrs.name,
-                provider_repos = provider_repos_str,
-                lock_file_label = attrs.lock,
-            )
-
-    return resolve_all_modules(module_ctx, registry_default = _TERRAFORM_REGISTRY)
-
-_PROVIDERS_TAG = tag_class(
-    doc = "An extension for fetching external providers.",
-    attrs = {
-        "lock": attr.label(
-            doc = "A lock file to use for fetching providers.",
-            mandatory = True,
-            allow_files = True,
-        ),
-        "name": attr.string(
-            doc = "The name of the providers hub.",
-            mandatory = True,
-        ),
-        "registry": attr.string(
-            doc = "Registry hostname to query. Use `registry.opentofu.org` for OpenTofu.",
-            default = DEFAULT_REGISTRY,
-        ),
-    },
-)
-
-_MODULES_TAG = tag_class(
-    doc = """Live-resolves external Terraform registry modules from the
-    `module { }` blocks in your root `.tf` files. Not reproducible across
-    time when your blocks use version constraints (`~> 5.0`); pin exact
-    versions for deterministic resolution.""",
-    attrs = {
-        "name": attr.string(
-            doc = "The name of the modules hub repo.",
-            mandatory = True,
-        ),
-        "registry": attr.string(
-            doc = """Registry hostname to query. Empty (the default)
-            picks `registry.terraform.io` when the extension is loaded
-            from `//terraform:extensions.bzl`.""",
-            default = "",
-        ),
-        "root": attr.label(
-            doc = """Any `.tf` file in the root module directory, used
-            purely to name that directory. The extension enumerates
-            `module { source = "…" }` blocks across every `*.tf` in the
-            package; this file gets no special treatment and its own
-            contents carry no weight — a sibling would behave identically.
-
-            The file needs no `exports_files`. Only the label's package is
-            read, so nothing resolves it as a target and a
-            `terraform_module` in that package keeps whatever `visibility`
-            it declares.""",
-            mandatory = True,
-            allow_single_file = [".tf"],
-        ),
-    },
-)
+    return run_extension(module_ctx, registry_default = _TERRAFORM_REGISTRY)
 
 terraform = module_extension(
-    doc = "Bzlmod extension for Terraform providers and external modules.",
+    doc = """Bzlmod extension for a Terraform module's external dependencies:
+    the providers its lock pins and the registry modules it names, one `deps`
+    tag per hub. Defaults to `registry.terraform.io`; the `tofu` extension in
+    `//tofu:extensions.bzl` is the same extension defaulting to
+    `registry.opentofu.org`.""",
     implementation = _terraform_impl,
-    tag_classes = {
-        "modules": _MODULES_TAG,
-        "providers": _PROVIDERS_TAG,
-    },
+    tag_classes = {"deps": deps_tag_class(_TERRAFORM_REGISTRY)},
 )

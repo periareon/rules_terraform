@@ -5,9 +5,9 @@ bzl_library(
     srcs = glob(["*.bzl"]),
     visibility = [
         "//docs:__pkg__",
-        "//opentofu:__subpackages__",
         "//terraform:__subpackages__",
         "//tests:__subpackages__",
+        "//tofu:__subpackages__",
     ],
     deps = [],
 )

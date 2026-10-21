@@ -1,7 +1,7 @@
 # rules_terraform
 
 Bazel rules for [Terraform](https://developer.hashicorp.com/terraform) and
-[OpenTofu](https://opentofu.org/).
+[OpenTofu](https://tofu.org/).
 
 ## Documentation
 

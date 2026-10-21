@@ -1,12 +1,15 @@
 """Utlities for parsing `.terraform_lock.hcl` files"""
 
-visibility(["//opentofu/...", "//terraform/...", "//tests/..."])
+visibility(["//terraform/...", "//tests/...", "//tofu/..."])
 
-def _tf_provider(*, source, version, constraints, hashes):
+def _tf_provider(*, source, host, version, constraints, hashes):
     """A starlark representation of a Terraform provider lock entry.
 
     Args:
-        source: (str) The provider source.
+        source: (str) The provider source as `namespace/name`.
+        host: (str) The registry hostname the lock wrote in front of the
+            source, or `""` when it was one of the public defaults
+            (`registry.terraform.io`, `registry.opentofu.org`).
         version: (str) The version of the provider.
         constraints: (str) The constraint used to match the provider.
         hashes: (list[str]) A list of hashes.
@@ -16,6 +19,7 @@ def _tf_provider(*, source, version, constraints, hashes):
     """
     return struct(
         source = source,
+        host = host,
         version = version,
         constraints = constraints,
         hashes = hashes,
@@ -49,17 +53,23 @@ def parse_lock_file(lock_content):
             if len(parts) >= 2:
                 source = parts[1]
 
-                # Strip the default registry hostname prefix (either engine's)
-                # so `provider.source` is always the canonical `namespace/name`
-                # form the download-URL template expects.
-                for host_prefix in ("registry.terraform.io/", "registry.opentofu.org/"):
-                    if source.startswith(host_prefix):
-                        source = source[len(host_prefix):]
-                        break
+                # The lock always writes the registry host in front of the
+                # source. Split it off so `source` is the `namespace/name`
+                # the download-URL template expects, and keep it when it is
+                # not one of the public defaults: a private registry is where
+                # that provider has to be fetched from.
+                host = ""
+                parts_by_slash = source.split("/")
+                if len(parts_by_slash) == 3:
+                    host = parts_by_slash[0]
+                    source = "/".join(parts_by_slash[1:])
+                    if host in ("registry.terraform.io", "registry.opentofu.org"):
+                        host = ""
 
                 current_provider = {
                     "constraints": "",
                     "hashes": [],
+                    "host": host,
                     "source": source,
                     "version": "",
                 }

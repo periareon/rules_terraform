@@ -8,25 +8,30 @@ load("@stardoc//stardoc:stardoc.bzl", "stardoc")
 # bzl_library discovery); those pages are hand-written under `src/`.
 _TERRAFORM_RULE_DOCS = [
     "terraform_binary",
+    "terraform_external_module",
     "terraform_fmt_aspect",
     "terraform_fmt_test",
     "terraform_module",
-    "terraform_modules_lock",
+    "terraform_plan_test",
     "terraform_provider",
-    "terraform_provider_group",
+    "terraform_providers_lock",
+    "terraform_providers_lock_test",
     "terraform_test",
     "terraform_validate_aspect",
     "terraform_validate_test",
 ]
 
-_OPENTOFU_RULE_DOCS = [
-    "opentofu_binary",
-    "opentofu_fmt_test",
-    "opentofu_module",
-    "opentofu_provider",
-    "opentofu_provider_group",
-    "opentofu_test",
-    "opentofu_validate_test",
+_TOFU_RULE_DOCS = [
+    "tofu_binary",
+    "tofu_external_module",
+    "tofu_fmt_test",
+    "tofu_module",
+    "tofu_plan_test",
+    "tofu_provider",
+    "tofu_providers_lock",
+    "tofu_providers_lock_test",
+    "tofu_test",
+    "tofu_validate_test",
 ]
 
 [
@@ -43,14 +48,14 @@ _OPENTOFU_RULE_DOCS = [
 
 [
     stardoc(
-        name = "opentofu_{}".format(name),
-        out = "src/opentofu/{}.md".format(name),
-        input = "//opentofu:{}.bzl".format(name),
+        name = "tofu_{}".format(name),
+        out = "src/tofu/{}.md".format(name),
+        input = "//tofu:{}.bzl".format(name),
         table_of_contents_template = "@stardoc//stardoc:templates/markdown_tables/table_of_contents.vm",
         tags = ["manual"],
-        deps = ["@rules_terraform//opentofu:defs_bzl"],
+        deps = ["@rules_terraform//tofu:defs_bzl"],
     )
-    for name in _OPENTOFU_RULE_DOCS
+    for name in _TOFU_RULE_DOCS
 ]
 
 # Settings pages: render each engine's `settings.bzl` using a custom
@@ -63,9 +68,9 @@ bzl_library(
 )
 
 bzl_library(
-    name = "opentofu_settings_bzl",
-    srcs = ["//opentofu/settings:settings.bzl"],
-    deps = ["//opentofu/private:bzl_lib"],
+    name = "tofu_settings_bzl",
+    srcs = ["//tofu/settings:settings.bzl"],
+    deps = ["//tofu/private:bzl_lib"],
 )
 
 stardoc(
@@ -78,12 +83,12 @@ stardoc(
 )
 
 stardoc(
-    name = "opentofu_settings",
-    out = "src/opentofu/settings.md",
+    name = "tofu_settings",
+    out = "src/tofu/settings.md",
     func_template = "templates/settings_func.vm",
-    input = "//opentofu/settings:settings.bzl",
+    input = "//tofu/settings:settings.bzl",
     tags = ["manual"],
-    deps = [":opentofu_settings_bzl"],
+    deps = [":tofu_settings_bzl"],
 )
 
 mdbook(
@@ -92,11 +97,11 @@ mdbook(
         ":terraform_{}".format(name)
         for name in _TERRAFORM_RULE_DOCS
     ] + [
-        ":opentofu_{}".format(name)
-        for name in _OPENTOFU_RULE_DOCS
+        ":tofu_{}".format(name)
+        for name in _TOFU_RULE_DOCS
     ] + [
-        ":opentofu_settings",
         ":terraform_settings",
+        ":tofu_settings",
     ],
     book = "book.toml",
     target_compatible_with = select({

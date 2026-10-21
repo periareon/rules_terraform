@@ -1,6 +1,6 @@
 """Bazel rules for `terraform fmt`.
 
-`build_fmt_*_impl` helpers are consumed by `//opentofu` for the tofu-side
+`build_fmt_*_impl` helpers are consumed by `//tofu` for the tofu-side
 rules — engine-specific file names, output-group names, and ignore tags
 come from the `engine` parameter.
 """
@@ -9,7 +9,7 @@ load(":providers.bzl", "TerraformInfo")
 load(":toolchain.bzl", "TOOLCHAIN_TYPE")
 load(":util.bzl", "rlocationpath")
 
-visibility(["//opentofu/...", "//terraform/...", "//tests/..."])
+visibility(["//terraform/...", "//tests/...", "//tofu/..."])
 
 # Tags that skip fmt regardless of engine.
 _GENERIC_IGNORE_TAGS = [
@@ -20,19 +20,19 @@ _GENERIC_IGNORE_TAGS = [
 ]
 
 # Engine-scoped tags — `no_terraform_format` skips ONLY the terraform
-# aspect, `no_opentofu_format` skips ONLY the opentofu aspect.
+# aspect, `no_tofu_format` skips ONLY the tofu aspect.
 _ENGINE_IGNORE_TAGS = {
-    "opentofu": [
-        "no_opentofu_format",
-        "no_opentofu_fmt",
-        "no_opentofufmt",
-        "noopentofufmt",
-    ],
     "terraform": [
         "no_terraform_format",
         "no_terraform_fmt",
         "no_terraformfmt",
         "noterraformfmt",
+    ],
+    "tofu": [
+        "no_tofu_format",
+        "no_tofu_fmt",
+        "no_tofufmt",
+        "notofufmt",
     ],
 }
 
@@ -52,7 +52,7 @@ def build_fmt_aspect_impl(target, ctx, toolchain_type, *, engine):
         ctx: (ctx) The aspect context.
         toolchain_type: (str) Fully-qualified label string of the
             toolchain type the aspect should resolve.
-        engine: (str) `"terraform"` or `"opentofu"`. Used for file names,
+        engine: (str) `"terraform"` or `"tofu"`. Used for file names,
             the emitted output-group name (`<engine>_fmt_checks`), the
             action mnemonic, and engine-scoped ignore-tag matching.
 
@@ -100,8 +100,8 @@ def build_fmt_test_impl(ctx, toolchain_type, *, engine):
         ctx: (ctx) The rule context.
         toolchain_type: (str) Fully-qualified label string of the
             toolchain type the rule should resolve.
-        engine: (str) `"terraform"` or `"opentofu"`. Used to name the args
-            file so terraform and opentofu variants on the same underlying
+        engine: (str) `"terraform"` or `"tofu"`. Used to name the args
+            file so terraform and tofu variants on the same underlying
             target never collide.
 
     Returns:
@@ -152,12 +152,14 @@ def build_fmt_test_impl(ctx, toolchain_type, *, engine):
 # The engine-bound `terraform_fmt_aspect` / `terraform_fmt_test` are
 # produced by `//terraform/private:engine_factory.bzl` and re-exported
 # from `//terraform:terraform_fmt_aspect.bzl` /
-# `//terraform:terraform_fmt_test.bzl`. `terraform_formatter` below is a
-# separate developer-facing rule (a `bazel run` wrapper around `terraform fmt -write`)
-# — it stays here.
+# `//terraform:terraform_fmt_test.bzl`. The formatter rules below are
+# separate developer-facing targets: `bazel run //terraform:format` (or
+# `//tofu:format`) rewrites the `.tf` sources of every module in the
+# workspace with the toolchain engine's `fmt`, so nothing needs installing
+# on the host.
 
-def _terraform_formatter_impl(ctx):
-    toolchain = ctx.toolchains[TOOLCHAIN_TYPE]
+def _formatter_impl(ctx):
+    toolchain = ctx.toolchains[ctx.attr._toolchain_type]
 
     is_windows = ctx.executable._formatter.basename.endswith(".exe")
     executable = ctx.actions.declare_file("{}{}".format(ctx.label.name, ".exe" if is_windows else ""))
@@ -180,16 +182,23 @@ def _terraform_formatter_impl(ctx):
         ),
     ]
 
-terraform_formatter = rule(
-    doc = "A tool for formatting Terraform files.",
-    implementation = _terraform_formatter_impl,
-    attrs = {
-        "_formatter": attr.label(
-            cfg = "exec",
-            executable = True,
-            default = Label("//terraform/private/format:formatter"),
-        ),
-    },
-    executable = True,
-    toolchains = [TOOLCHAIN_TYPE],
-)
+def _make_formatter(toolchain_type, engine):
+    return rule(
+        doc = """`bazel run` target that rewrites the `.tf` sources of every
+module in the workspace (or of the targets given as arguments) with
+`{} fmt`, using the toolchain binary.""".format(engine),
+        implementation = _formatter_impl,
+        attrs = {
+            "_formatter": attr.label(
+                cfg = "exec",
+                executable = True,
+                default = Label("//terraform/private/format:formatter"),
+            ),
+            "_toolchain_type": attr.string(default = toolchain_type),
+        },
+        executable = True,
+        toolchains = [toolchain_type],
+    )
+
+terraform_formatter = _make_formatter(TOOLCHAIN_TYPE, "terraform")
+tofu_formatter = _make_formatter(str(Label("//tofu:toolchain_type")), "tofu")

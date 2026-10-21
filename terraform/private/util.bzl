@@ -1,6 +1,6 @@
 """Shared utilities for Terraform Bazel rules."""
 
-visibility(["//opentofu/...", "//terraform/...", "//tests/..."])
+visibility(["//terraform/...", "//tests/...", "//tofu/..."])
 
 def staged_path(file):
     """Return the path a module staging tree places `file` at, relative to its root.
@@ -82,3 +82,43 @@ def module_dir(target):
         return None
     entries = output_groups.terraform_init.to_list()
     return entries[0] if entries else None
+
+def common_ancestor(dirs):
+    """Return the deepest directory that prefixes every entry of `dirs`.
+
+    Args:
+        dirs: (list[str]) Slash-separated staged directories. `""` means the
+            staging root.
+
+    Returns:
+        (str) The common prefix on a segment boundary, `""` if there is none.
+    """
+    common = None
+    for d in dirs:
+        segments = d.split("/") if d else []
+        if common == None:
+            common = segments
+            continue
+        shared = 0
+        for i in range(min(len(common), len(segments))):
+            if common[i] != segments[i]:
+                break
+            shared += 1
+        common = common[:shared]
+    return "/".join(common) if common else ""
+
+def tree_relative(dir, tree_root):
+    """Return `dir` expressed relative to `tree_root`.
+
+    Args:
+        dir: (str) A staged directory at or below `tree_root`.
+        tree_root: (str) The directory the tree artifact is rooted at.
+
+    Returns:
+        (str) The relative path, `""` when `dir` is `tree_root` itself.
+    """
+    if not tree_root:
+        return dir
+    if dir == tree_root:
+        return ""
+    return dir[len(tree_root) + 1:]

@@ -5,39 +5,26 @@ its docstring describes what the setting does. The function body returns
 the setting's label so callers can reference it programmatically.
 """
 
-load(
-    "//terraform/private:versions.bzl",
-    "TERRAFORM_DEFAULT_VERSION",
-    "TERRAFORM_VERSIONS",
-)
-
 visibility(["//terraform/..."])
-
-# Sorted list of known Terraform versions, consumed by the sibling
-# `BUILD.bazel` to generate one `config_setting` per version.
-TERRAFORM_VERSION_LIST = sorted(TERRAFORM_VERSIONS.keys())
-
-# Baked default (latest version — computed by the update_versions tool from
-# the full versions table and written into `versions.bzl`).
-TERRAFORM_DEFAULT_VERSION_VALUE = TERRAFORM_DEFAULT_VERSION
 
 def version():
     """Picks which Terraform release the auto-registered toolchains resolve to.
 
-    rules_terraform ships one toolchain per (version, platform) combination
-    in `TERRAFORM_VERSIONS`, each guarded by a `config_setting` that
-    matches this flag; Bazel's toolchain resolver picks the matching one.
-    The corresponding `http_archive` is fetched lazily on first use, so
-    declaring dozens of versions does not slow down builds that only use
-    one.
+    The `terraform_toolchains` extension declares one toolchain per (version, platform)
+    for the releases shipped in `//terraform/private:versions.bzl` — the
+    newest three when the table was generated — and for any release a
+    `terraform_toolchains.version(version = "…")` tag asks for. For a tagged release the
+    extension fetches the release's `SHA256SUMS` once and records the
+    checksums as facts in `MODULE.bazel.lock`, so an older pin costs no
+    change to rules_terraform and no network on later evaluations.
 
-    Flip the flag globally in `.bazelrc`, per-invocation via
-    `--@rules_terraform//terraform/settings:version=1.10.5`, or per-target
-    with a Starlark configuration transition.
-
-    Defaults to the latest stable release listed in
-    `//terraform/private:versions.bzl` (`TERRAFORM_DEFAULT_VERSION`),
-    computed by `tools/update_versions` from the shipped versions table.
+    Empty, the default, selects the extension's default: the release the
+    root module marked `version(…, default = True)`, else the newest
+    shipped one. Any other value names one of the known releases. Set it
+    globally in `.bazelrc`, per invocation via
+    `--@rules_terraform//terraform/settings:version=1.9.8`, or per target
+    with a Starlark configuration transition. The corresponding archive is
+    fetched lazily on first use.
 
     Returns:
         (str) The fully-qualified label of the string flag.

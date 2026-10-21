@@ -1,99 +1,89 @@
-"""Repository rules for external Terraform modules."""
+"""Repository rules for external Terraform modules.
+
+Archives live in a pool shared by every `deps` hub: one repository per
+(registry, module address, version), extracted once, with a target per
+`//subdir` any hub referenced. The hub itself is `deps_hub.bzl`.
+"""
 
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
-load(":util.bzl", "strip_canonical_repo_prefix")
 
-_MODULE_REPO_BUILD_FILE = """\
+_MODULE_REPO_BUILD_HEADER = """\
 load("@rules_terraform//terraform/private:terraform.bzl", "terraform_external_module")
+"""
 
+_MODULE_REPO_TARGET = """
 terraform_external_module(
-    name = "module",
-    key = "{key}",
+    name = "{target}",
     source = "{source}",
     version = "{version}",
-    subdir = "{subdir}",
     srcs = glob(
-        ["**/*.tf", "**/*.tf.json"],
+        [{globs}],
         allow_empty = True,
     ),
     visibility = ["//visibility:public"],
 )
 """
 
-_MODULE_HUB_BUILD_FILE = """\
-load("@rules_terraform//terraform/private:terraform.bzl", "terraform_module_group")
+def module_target_name(subdir):
+    """Name of the target inside a pool repository that serves `subdir`.
 
-terraform_module_group(
-    name = "{name}",
-    deps = [
-{deps}
-    ],
-    visibility = ["//visibility:public"],
-)
-"""
+    Args:
+        subdir: (str) A `//subdir` suffix without the slashes, or `""` for
+            the module at the archive root.
 
-def terraform_module_repository(*, name, key, source, version, url, integrity, strip_prefix = "", subdir = ""):
-    """Download an external Terraform module and create a repository.
+    Returns:
+        (str) `module` for the root, otherwise `module_<subdir>` with path
+        separators and dashes folded to underscores.
+    """
+    if not subdir:
+        return "module"
+    return "module_" + subdir.replace("/", "_").replace("-", "_").replace(".", "_")
+
+def _module_repo_build_file(source, version, subdirs):
+    targets = []
+    for subdir in subdirs:
+        full_source = "{}//{}".format(source, subdir) if subdir else source
+        prefix = subdir + "/" if subdir else ""
+        globs = ", ".join([
+            '"{}**/*.{}"'.format(prefix, ext)
+            for ext in ("tf", "tf.json", "tofu", "tofu.json")
+        ])
+        targets.append(_MODULE_REPO_TARGET.format(
+            target = module_target_name(subdir),
+            source = full_source,
+            version = version,
+            globs = globs,
+        ))
+    return _MODULE_REPO_BUILD_HEADER + "".join(targets)
+
+def terraform_module_repository(*, name, source, version, url, integrity, strip_prefix = "", subdirs = [""]):
+    """Download one module archive and expose every module inside it a hub asked for.
 
     Args:
         name: (str) Repository name.
-        key: (str) Module key from the lock file.
-        source: (str) Registry source (e.g., `terraform-aws-modules/vpc/aws`).
+        source: (str) Registry source without any `//subdir`
+            (e.g., `terraform-aws-modules/eks/aws`).
         version: (str) Module version.
         url: (str) Download URL for the module archive.
         integrity: (str) Subresource Integrity hash.
-        strip_prefix: (str) Prefix to strip from the extracted archive
-            (e.g., GitHub tarballs come wrapped in `<repo>-<sha>/`).
-        subdir: (str) Optional subdirectory *within* the module source
-            that holds the module root (recorded from Terraform's
-            `//subdir` "get" suffix).
+        strip_prefix: (str) Archive wrapper to strip (GitHub tarballs come
+            wrapped in `<repo>-<tag>/`). The archive is extracted whole
+            below that; subdirectories are selected per target, not by
+            stripping, so one extraction serves every `//subdir`.
+        subdirs: (list[str]) The module roots inside the archive to expose,
+            `""` for the archive root itself. One
+            `terraform_external_module` target is rendered per entry; see
+            `module_target_name`.
 
     Returns:
         (str) The provided `name` (for chaining convenience).
     """
-    effective_strip = strip_prefix
-    if subdir:
-        # subdir names the module root inside the source; combine it with any
-        # archive-wrapper strip so http_archive lands directly at the module root.
-        effective_strip = "{}/{}".format(strip_prefix, subdir) if strip_prefix else subdir
-
     http_archive(
         name = name,
         urls = [url],
         integrity = integrity,
-        strip_prefix = effective_strip,
-        build_file_content = _MODULE_REPO_BUILD_FILE.format(
-            key = key,
-            source = source,
-            version = version,
-            subdir = subdir,
-        ),
+        strip_prefix = strip_prefix,
+        build_file_content = _module_repo_build_file(source, version, subdirs),
     )
 
     return name
-
-def _terraform_module_hub_impl(repository_ctx):
-    """Repository rule implementation for module hub."""
-    repository_ctx.file("WORKSPACE.bazel", 'workspace(name = "{}")'.format(
-        repository_ctx.name,
-    ))
-
-    deps = []
-    for module_repo in repository_ctx.attr.module_repos:
-        deps.append('        "@{}//:module",'.format(module_repo))
-
-    repository_ctx.file("BUILD.bazel", _MODULE_HUB_BUILD_FILE.format(
-        name = strip_canonical_repo_prefix(repository_ctx.name),
-        deps = "\n".join(deps),
-    ))
-
-terraform_module_hub = repository_rule(
-    doc = "Aggregates external module repositories into a single hub.",
-    attrs = {
-        "module_repos": attr.string_list(
-            doc = "List of module repository names.",
-            mandatory = True,
-        ),
-    },
-    implementation = _terraform_module_hub_impl,
-)

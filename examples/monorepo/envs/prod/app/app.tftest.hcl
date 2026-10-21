@@ -26,8 +26,16 @@ run "names_the_bucket_after_the_environment" {
     environment = "staging"
   }
 
+  # The name comes out of the `naming` library, which wraps a registry module,
+  # so this run also proves the registry module was installed where the engine
+  # looks for it (`.terraform/modules/naming.label`).
   assert {
-    condition     = module.storage.bucket_name == "staging-app-assets"
-    error_message = "Environment name did not flow through to the shared storage module."
+    condition     = module.naming.id == "acme-staging-app"
+    error_message = "The naming library did not compose the environment into the id."
+  }
+
+  assert {
+    condition     = module.storage.bucket_name == "acme-staging-app-assets"
+    error_message = "The naming library's id did not flow through to the shared storage module."
   }
 }

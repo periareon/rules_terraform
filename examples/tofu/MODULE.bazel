@@ -1,0 +1,45 @@
+"""rules_terraform OpenTofu example.
+
+Textbook OpenTofu module wrapped in Bazel. rules_terraform is resolved via
+`local_path_override`; a real consumer would drop the override and pin a
+version from the Bazel Central Registry:
+
+    bazel_dep(name = "rules_terraform", version = "x.y.z")
+"""
+
+module(
+    name = "rules_terraform_example_tofu",
+    version = "0.0.0",
+)
+
+bazel_dep(name = "rules_terraform", version = "0.0.0")
+local_path_override(
+    module_name = "rules_terraform",
+    path = "../..",
+)
+
+# Toolchains for both terraform and tofu are auto-registered by
+# rules_terraform's own MODULE.bazel. Pick an OpenTofu release with:
+#
+#   tofu_toolchains = use_extension("@rules_terraform//tofu:extensions.bzl", "tofu_toolchains")
+#   tofu_toolchains.version(version = "1.9.1", default = True)
+#
+# or select among the known releases per invocation with
+#   --@rules_terraform//tofu/settings:version=1.9.1
+#
+# Providers and registry modules come through the `tofu` extension, which is
+# the `terraform` extension with `registry.opentofu.org` as its default. That
+# default is load-bearing: OpenTofu 1.10+ rewrites `hashicorp/*` providers to
+# opentofu.org, which serves its own builds with their own hashes, so the lock
+# file has to be written by `tofu` (`bazel run //:providers_lock.update`) and
+# resolved against the same registry.
+tofu = use_extension("@rules_terraform//tofu:extensions.bzl", "tofu")
+
+# One tag, both halves: the providers the lock pins and the registry module
+# `main.tf` names. `@app` carries all of it.
+tofu.deps(
+    name = "app",
+    lock = "//:.terraform.lock.hcl",
+    roots = ["//:main.tf"],
+)
+use_repo(tofu, "app")

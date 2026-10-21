@@ -19,13 +19,23 @@ local_path_override(
     path = "../..",
 )
 
-# One provider lock for the whole repo, shared by every environment. A repo
-# that lets environments drift onto different provider versions would instead
-# keep a lock next to each root module and make one `terraform.providers()`
-# call per lock.
+# One `deps` tag per lock file. Each names the providers its lock pins and the
+# directories whose `module` blocks reach the registry; the hub carries both.
+#
+# `shared` is the lock dev and prod use, plus the registry module the `naming`
+# library wraps. `staging` is staging's own lock (it uses a provider the
+# others do not) plus the registry module staging names itself.
+# Archives are pooled across hubs by identity: the `null` provider both locks
+# pin, and the `label` module both tags name, are each fetched once.
 terraform = use_extension("@rules_terraform//terraform:extensions.bzl", "terraform")
-terraform.providers(
-    name = "example_providers",
+terraform.deps(
+    name = "shared",
     lock = "//:.terraform.lock.hcl",
+    roots = ["//modules/naming:main.tf"],
 )
-use_repo(terraform, "example_providers")
+terraform.deps(
+    name = "staging",
+    lock = "//envs/staging/app:.terraform.lock.hcl",
+    roots = ["//envs/staging/app:main.tf"],
+)
+use_repo(terraform, "shared", "staging")

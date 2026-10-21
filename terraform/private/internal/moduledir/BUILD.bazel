@@ -1,4 +1,4 @@
-load("@rules_go//go:def.bzl", "go_library")
+load("@rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "moduledir",
@@ -6,4 +6,10 @@ go_library(
     importpath = "rules_terraform/terraform/private/internal/moduledir",
     visibility = ["//terraform/private:__subpackages__"],
     deps = ["//terraform/private/internal/fsutil"],
+)
+
+go_test(
+    name = "moduledir_test",
+    srcs = ["moduledir_test.go"],
+    embed = [":moduledir"],
 )

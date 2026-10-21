@@ -1,12 +1,12 @@
-load("//opentofu:opentofu_binary.bzl", "opentofu_binary")
-load("//opentofu:opentofu_fmt_test.bzl", "opentofu_fmt_test")
-load("//opentofu:opentofu_test.bzl", "opentofu_test")
-load("//opentofu:opentofu_validate_test.bzl", "opentofu_validate_test")
 load("//terraform:terraform_binary.bzl", "terraform_binary")
 load("//terraform:terraform_fmt_test.bzl", "terraform_fmt_test")
 load("//terraform:terraform_module.bzl", "terraform_module")
 load("//terraform:terraform_test.bzl", "terraform_test")
 load("//terraform:terraform_validate_test.bzl", "terraform_validate_test")
+load("//tofu:tofu_binary.bzl", "tofu_binary")
+load("//tofu:tofu_fmt_test.bzl", "tofu_fmt_test")
+load("//tofu:tofu_test.bzl", "tofu_test")
+load("//tofu:tofu_validate_test.bzl", "tofu_validate_test")
 
 # A module with an unreachable remote backend. Every other fixture omits the
 # `backend` block, which means the engine configures the local backend and asks
@@ -31,7 +31,7 @@ terraform_test(
     root = ":with_remote_backend",
 )
 
-opentofu_test(
+tofu_test(
     name = "with_remote_backend_tofu_tftest",
     root = ":with_remote_backend",
 )
@@ -41,7 +41,7 @@ terraform_validate_test(
     target = ":with_remote_backend",
 )
 
-opentofu_validate_test(
+tofu_validate_test(
     name = "with_remote_backend_tofu_validate",
     target = ":with_remote_backend",
 )
@@ -51,7 +51,7 @@ terraform_fmt_test(
     target = ":with_remote_backend",
 )
 
-opentofu_fmt_test(
+tofu_fmt_test(
     name = "with_remote_backend_tofu_fmt",
     target = ":with_remote_backend",
 )
@@ -64,7 +64,7 @@ terraform_binary(
     root = ":with_remote_backend",
 )
 
-opentofu_binary(
+tofu_binary(
     name = "tofu",
     root = ":with_remote_backend",
 )

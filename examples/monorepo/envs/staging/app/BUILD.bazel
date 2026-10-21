@@ -1,0 +1,73 @@
+"""Staging environment root module.
+
+Differs from dev and prod in two ways worth showing:
+
+* It uses a provider the others do not (`random`), so it has its own
+  `.terraform.lock.hcl` in this directory and its own `deps` tag,
+  `@staging`, rather than the repo-wide `@shared`. Archives are pooled
+  across hubs, so the `null` provider both locks pin is fetched once.
+* It names a registry module directly, as well as inheriting one through
+  `//modules/naming`; its own hub carries the former, the library's the
+  latter, and the pool holds the archive once.
+"""
+
+load("@rules_terraform//terraform:terraform_binary.bzl", "terraform_binary")
+load("@rules_terraform//terraform:terraform_fmt_test.bzl", "terraform_fmt_test")
+load("@rules_terraform//terraform:terraform_module.bzl", "terraform_module")
+load("@rules_terraform//terraform:terraform_plan_test.bzl", "terraform_plan_test")
+load("@rules_terraform//terraform:terraform_providers_lock.bzl", "terraform_providers_lock")
+load("@rules_terraform//terraform:terraform_providers_lock_test.bzl", "terraform_providers_lock_test")
+load("@rules_terraform//terraform:terraform_validate_test.bzl", "terraform_validate_test")
+
+terraform_module(
+    name = "app",
+    srcs = glob(["*.tf"]),
+    # Example environment with no backend; see examples/terraform.
+    allow_ephemeral_state = True,
+    deps = [
+        "//modules/compute",
+        "//modules/naming",
+        "//modules/storage",
+        # Staging's own hub: both providers, this directory's lock, and the
+        # registry module named below.
+        "@staging",
+    ],
+)
+
+# `bazel run //envs/staging/app:terraform -- plan`
+terraform_binary(
+    name = "terraform",
+    root = ":app",
+)
+
+terraform_validate_test(
+    name = "validate",
+    target = ":app",
+)
+
+terraform_fmt_test(
+    name = "fmt",
+    target = ":app",
+)
+
+terraform_providers_lock_test(
+    name = "providers_lock",
+    lock = ".terraform.lock.hcl",
+    target = ":app",
+)
+
+# `bazel run //envs/staging/app:providers_lock.update` rewrites this
+# environment's own lock with the toolchain engine.
+terraform_providers_lock(
+    name = "providers_lock.update",
+    output = ".terraform.lock.hcl",
+    target = ":app",
+)
+
+# A real plan, kept under bazel-testlogs/envs/staging/app/plan/test.outputs/.
+# Both providers here work offline, so the `requires-network` tag the macro
+# adds costs nothing; a cloud provider would need credentials via --test_env.
+terraform_plan_test(
+    name = "plan",
+    root = ":app",
+)

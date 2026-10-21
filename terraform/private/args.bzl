@@ -76,7 +76,7 @@ depset (through their normal transitive-files channels), but
 shouldn't second-guess the caller's input graph.
 """
 
-visibility(["//opentofu/...", "//terraform/...", "//tests/..."])
+visibility(["//terraform/...", "//tests/...", "//tofu/..."])
 
 _PLACEHOLDER_FMT = "<<RTF_PATH_{}>>"
 

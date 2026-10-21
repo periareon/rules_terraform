@@ -1,0 +1,132 @@
+load("@bazel_skylib//:bzl_library.bzl", "bzl_library")
+
+# buildifier: disable=bzl-visibility
+load("//terraform/private:format.bzl", "tofu_formatter")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files([
+    "defs.bzl",
+    "extensions.bzl",
+    "tofu_binary.bzl",
+    "tofu_external_module.bzl",
+    "tofu_fmt_aspect.bzl",
+    "tofu_fmt_test.bzl",
+    "tofu_module.bzl",
+    "tofu_plan_test.bzl",
+    "tofu_provider.bzl",
+    "tofu_providers_lock.bzl",
+    "tofu_providers_lock_test.bzl",
+    "tofu_test.bzl",
+    "tofu_validate_aspect.bzl",
+    "tofu_validate_test.bzl",
+])
+
+# Distinct from //terraform:toolchain_type so users can register OpenTofu
+# side-by-side with Terraform and pick per-target which engine runs.
+toolchain_type(
+    name = "toolchain_type",
+)
+
+# `bazel run //tofu:format` rewrites every module's .tf files with `tofu fmt`.
+tofu_formatter(
+    name = "format",
+)
+
+bzl_library(
+    name = "defs_bzl",
+    srcs = ["defs.bzl"],
+    deps = [
+        ":extensions_bzl",
+        ":tofu_binary_bzl",
+        ":tofu_external_module_bzl",
+        ":tofu_fmt_aspect_bzl",
+        ":tofu_fmt_test_bzl",
+        ":tofu_module_bzl",
+        ":tofu_plan_test_bzl",
+        ":tofu_provider_bzl",
+        ":tofu_providers_lock_bzl",
+        ":tofu_providers_lock_test_bzl",
+        ":tofu_test_bzl",
+        ":tofu_validate_aspect_bzl",
+        ":tofu_validate_test_bzl",
+    ],
+)
+
+bzl_library(
+    name = "extensions_bzl",
+    srcs = ["extensions.bzl"],
+    deps = ["//tofu/private:bzl_lib"],
+)
+
+bzl_library(
+    name = "tofu_binary_bzl",
+    srcs = ["tofu_binary.bzl"],
+    deps = ["//tofu/private:bzl_lib"],
+)
+
+bzl_library(
+    name = "tofu_external_module_bzl",
+    srcs = ["tofu_external_module.bzl"],
+    deps = ["//terraform/private:bzl_lib"],
+)
+
+bzl_library(
+    name = "tofu_fmt_aspect_bzl",
+    srcs = ["tofu_fmt_aspect.bzl"],
+    deps = ["//tofu/private:bzl_lib"],
+)
+
+bzl_library(
+    name = "tofu_fmt_test_bzl",
+    srcs = ["tofu_fmt_test.bzl"],
+    deps = ["//tofu/private:bzl_lib"],
+)
+
+bzl_library(
+    name = "tofu_module_bzl",
+    srcs = ["tofu_module.bzl"],
+    deps = ["//tofu/private:bzl_lib"],
+)
+
+bzl_library(
+    name = "tofu_plan_test_bzl",
+    srcs = ["tofu_plan_test.bzl"],
+    deps = ["//tofu/private:bzl_lib"],
+)
+
+bzl_library(
+    name = "tofu_provider_bzl",
+    srcs = ["tofu_provider.bzl"],
+    deps = ["//tofu/private:bzl_lib"],
+)
+
+bzl_library(
+    name = "tofu_providers_lock_bzl",
+    srcs = ["tofu_providers_lock.bzl"],
+    deps = ["//tofu/private:bzl_lib"],
+)
+
+bzl_library(
+    name = "tofu_providers_lock_test_bzl",
+    srcs = ["tofu_providers_lock_test.bzl"],
+    deps = ["//tofu/private:bzl_lib"],
+)
+
+bzl_library(
+    name = "tofu_test_bzl",
+    srcs = ["tofu_test.bzl"],
+    deps = ["//tofu/private:bzl_lib"],
+)
+
+bzl_library(
+    name = "tofu_validate_aspect_bzl",
+    srcs = ["tofu_validate_aspect.bzl"],
+    deps = ["//tofu/private:bzl_lib"],
+)
+
+bzl_library(
+    name = "tofu_validate_test_bzl",
+    srcs = ["tofu_validate_test.bzl"],
+    deps = ["//tofu/private:bzl_lib"],
+)

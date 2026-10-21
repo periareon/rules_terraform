@@ -9,17 +9,22 @@ environment that uses it editing a BUILD file.
 load("@rules_terraform//terraform:terraform_binary.bzl", "terraform_binary")
 load("@rules_terraform//terraform:terraform_fmt_test.bzl", "terraform_fmt_test")
 load("@rules_terraform//terraform:terraform_module.bzl", "terraform_module")
-load("@rules_terraform//terraform:terraform_modules_lock.bzl", "terraform_providers_lock_test")
+load("@rules_terraform//terraform:terraform_providers_lock_test.bzl", "terraform_providers_lock_test")
 load("@rules_terraform//terraform:terraform_validate_test.bzl", "terraform_validate_test")
 
 terraform_module(
     name = "app",
     srcs = glob(["*.tf"]),
-    lock = "//:.terraform.lock.hcl",
+    # Example environments have no backend; see examples/terraform.
+    allow_ephemeral_state = True,
+    # `@shared` is the hub for the shared lock: every provider it pins, plus the
+    # lock itself. A Terraform maintainer who adds a provider edits .tf files
+    # and reruns the lock updater; no BUILD file changes.
     deps = [
         "//modules/compute",
+        "//modules/naming",
         "//modules/storage",
-        "@example_providers//hashicorp_null",
+        "@shared",
     ],
 )
 

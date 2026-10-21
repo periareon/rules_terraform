@@ -1,14 +1,11 @@
-// lockref generates a "golden" .terraform.lock.hcl for a Bazel-managed
-// terraform_module by running the real `terraform providers lock` (or
-// `tofu providers lock`) against the module's .tf source files and copying
-// the resulting lock file back to the source tree.
+// lockref writes a module's .terraform.lock.hcl by running the real
+// `terraform providers lock` (or `tofu providers lock`) against the module's
+// .tf source files and copying the resulting lock file back to the source
+// tree. It backs the `terraform_providers_lock` / `tofu_providers_lock`
+// updaters: the one path that writes a lock covering every platform at once,
+// without an engine installed on the host.
 //
-// It's the write-half of the diff-test workflow: `terraform_lock_diff_test`
-// asserts our init-aspect output matches this golden, and this tool
-// refreshes the golden when providers change.
-//
-// Invoked exclusively via the `terraform_lock_reference` /
-// `opentofu_lock_reference` `bazel run` rules — reads its inputs from a
+// Invoked exclusively via those `bazel run` rules — reads its inputs from a
 // multiline args file whose rlocationpath is delivered via
 // `RULES_TERRAFORM_LOCKREF_ARGS_FILE`.
 package main
@@ -54,7 +51,8 @@ func main() {
 
 	engine := flag.String("engine", "", "rlocationpath of the terraform/tofu binary from the toolchain")
 	out := flag.String("out", "", "absolute path where the golden lock file should be written")
-	root := flag.String("root", "", "absolute path to the target's root module directory; each -src's path is placed in the temp dir at its position relative to this root")
+	root := flag.String("root", "", "absolute path to the root of the local module tree; each -src's path is placed in the temp dir at its position relative to this root")
+	workdir := flag.String("workdir", "", "slash-relative path of the root module within -root; the engine runs there. Empty when the root module is the tree root")
 	var srcs srcFlag
 	var platforms platformFlag
 	flag.Var(&srcs, "src", "absolute path to a .tf file to seed the temp dir. Placed at its relative-to-root position so `module \"foo\" { source = \"./sub\" }` references resolve. Repeatable.")
@@ -107,12 +105,16 @@ func main() {
 		}
 	}
 
+	// The engine runs in the root module, which sits inside the seeded tree
+	// wherever it sits in the source tree.
+	moduleDir := filepath.Join(tmp, filepath.FromSlash(*workdir))
+
 	// `terraform providers lock` requires local modules to be installed
 	// first; init handles both local modules and an initial provider
 	// download (which the subsequent `providers lock -platform=<all>`
 	// extends with the other platforms' hashes).
 	initCmd := exec.Command(enginePath, "init", "-backend=false", "-input=false")
-	initCmd.Dir = tmp
+	initCmd.Dir = moduleDir
 	initCmd.Stdout = os.Stdout
 	initCmd.Stderr = os.Stderr
 	if err := initCmd.Run(); err != nil {
@@ -125,7 +127,7 @@ func main() {
 		cmdArgs = append(cmdArgs, "-platform="+p)
 	}
 	cmd := exec.Command(enginePath, cmdArgs...)
-	cmd.Dir = tmp
+	cmd.Dir = moduleDir
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
@@ -133,7 +135,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	generated := filepath.Join(tmp, ".terraform.lock.hcl")
+	generated := filepath.Join(moduleDir, ".terraform.lock.hcl")
 	data, err := os.ReadFile(generated)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: engine produced no lock file at %s: %v\n", generated, err)

@@ -4,7 +4,7 @@
 
 This repository implements Bazel rules for
 [Terraform](https://developer.hashicorp.com/terraform) and
-[OpenTofu](https://opentofu.org/).
+[OpenTofu](https://tofu.org/).
 
 ## Setup
 
@@ -15,33 +15,135 @@ bazel_dep(name = "rules_terraform", version = "{version}")
 ```
 
 Toolchains for both engines are auto-registered — no `use_extension` or
-`register_toolchains` call is required. Pick a specific version by flipping
-the corresponding string flag:
-
-```
---@rules_terraform//terraform/settings:version=1.14.1
---@rules_terraform//opentofu/settings:version=1.10.6
-```
-
-Both default to the latest release shipped in
+`register_toolchains` call is required. By default a build uses the newest
+release shipped in
 [`//terraform/private:versions.bzl`](../../terraform/private/versions.bzl) /
-[`//opentofu/private:versions.bzl`](../../opentofu/private/versions.bzl).
+[`//tofu/private:versions.bzl`](../../tofu/private/versions.bzl); those
+tables carry the three newest releases of each engine.
 
-To fetch external providers or registry modules, opt into the `terraform`
-extension explicitly:
+Any other release is one tag away. The extension fetches that release's
+`SHA256SUMS` once and records the checksums as facts in
+`MODULE.bazel.lock`, so pinning an older engine needs no change to
+rules_terraform:
+
+```python
+terraform_toolchains = use_extension("@rules_terraform//terraform:extensions.bzl", "terraform_toolchains")
+terraform_toolchains.version(version = "1.9.8", default = True)   # default = True: use it unless the flag says otherwise
+
+tofu_toolchains = use_extension("@rules_terraform//tofu:extensions.bzl", "tofu_toolchains")
+tofu_toolchains.version(version = "1.9.1")                        # available, selected by flag
+```
+
+The flags select among the releases the hub knows, shipped or tagged:
+
+```
+--@rules_terraform//terraform/settings:version=1.9.8
+--@rules_terraform//tofu/settings:version=1.9.1
+```
+
+Left empty they mean "the default": the root module's `default = True`
+tag, else the newest shipped release.
+
+Nothing has to be installed on the host: the engine binary, provider
+archives and registry modules are all fetched by Bazel, and every
+`bazel run` / `bazel test` below uses the toolchain-fetched engine.
+
+## Getting started
+
+A root module that is new to Bazel usually has `.tf` files and nothing
+else. The provider lock file is the one artifact the rules need and the
+source tree may not have yet, so the first steps produce it.
+
+1. **Declare the module.** A `terraform_module` is one directory of
+   `.tf` files. No lock, no deps yet:
+
+   ```python
+   load("@rules_terraform//terraform:defs.bzl", "terraform_module", "terraform_providers_lock")
+
+   terraform_module(
+       name = "app",
+       srcs = glob(["*.tf"]),
+   )
+
+   # Writes .terraform.lock.hcl next to this BUILD file, for every platform
+   # in the default set, using the toolchain's terraform. Needs network.
+   terraform_providers_lock(
+       name = "providers_lock.update",
+       output = ".terraform.lock.hcl",
+       target = ":app",
+   )
+   ```
+
+2. **Generate the lock** and commit it:
+
+   ```bash
+   bazel run //path/to/app:providers_lock.update
+   ```
+
+   Rerun it whenever a `required_providers` block changes. There is no
+   step that runs `terraform` from your `PATH`.
+
+3. **Declare the module's dependencies** in `MODULE.bazel`, one `deps`
+   tag per lock file:
+
+   ```python
+   terraform = use_extension("@rules_terraform//terraform:extensions.bzl", "terraform")
+   terraform.deps(
+       name = "app_deps",
+       lock = "//path/to/app:.terraform.lock.hcl",
+       roots = ["//path/to/app:main.tf"],   # only if main.tf names registry modules
+   )
+   use_repo(terraform, "app_deps")
+   ```
+
+4. **Wire the module up** and add the workflow targets:
+
+   ```python
+   load("@rules_terraform//terraform:defs.bzl", "terraform_binary", "terraform_providers_lock_test", "terraform_validate_test")
+
+   terraform_module(
+       name = "app",
+       srcs = glob(["*.tf"]),
+       deps = ["@app_deps"],   # the providers, the lock, and the registry modules
+   )
+
+   terraform_binary(name = "terraform", root = ":app")       # bazel run //path/to/app:terraform -- plan
+   terraform_validate_test(name = "validate", target = ":app")
+   terraform_providers_lock_test(                            # fails when the lock drifts from the sources
+       name = "providers_lock",
+       lock = ".terraform.lock.hcl",
+       target = ":app",
+   )
+   ```
+
+5. **Add what the module calls.** A local child module is its own
+   `terraform_module` listed in `deps`; a registry module comes through
+   the directory being in a `deps` tag's `roots`, which the hub above
+   already covers. Both are
+   described under [External dependencies and lock files](#external-dependencies-and-lock-files).
+
+A repo with several root modules repeats steps 1 to 4 per root, or
+shares one lock file across roots as the [monorepo example](https://github.com/periareon/rules_terraform/tree/main/examples/monorepo)
+does. Add `.terraform/` to `.gitignore`; the rules never write it into
+the source tree, but a stray native `init` would.
+
+To fetch providers and registry modules, declare a `deps` tag on the
+`terraform` extension (or `tofu`, for OpenTofu): the lock file for
+providers, the directories with `module` blocks for registry modules.
 
 ```python
 terraform = use_extension("@rules_terraform//terraform:extensions.bzl", "terraform")
-terraform.providers(
-    name = "my_providers",
-    lock = "//path/to:.terraform.lock.hcl",
+terraform.deps(
+    name = "app",
+    lock = "//path/to:.terraform.lock.hcl",   # providers the lock pins
+    roots = ["//path/to:main.tf"],             # registry modules named here
 )
-use_repo(terraform, "my_providers")
+use_repo(terraform, "app")
 ```
 
-## Running the engine CLI directly (`@terraform` / `@opentofu`)
+## Running the engine CLI directly (`@terraform` / `@tofu`)
 
-rules_terraform ships two hub repositories — `@terraform` and `@opentofu`
+rules_terraform ships two hub repositories — `@terraform` and `@tofu`
 — that let a user invoke the toolchain-resolved engine binary from any
 subdirectory of their workspace:
 
@@ -49,16 +151,29 @@ subdirectory of their workspace:
 cd path/to/my/tf/module
 bazel run @terraform -- plan             # ≈ terraform plan
 bazel run @terraform -- init             # ≈ terraform init
-bazel run @opentofu -- state list        # ≈ tofu state list
+bazel run @tofu -- state list        # ≈ tofu state list
 ```
 
 The wrapper `chdir`s to `$BUILD_WORKING_DIRECTORY` (the shell cwd where
 `bazel run` was invoked) before exec-ing the engine, so relative paths
 and any `terraform.tfstate` land in the directory you're standing in —
 just like the native CLI. Version resolution follows the same
-`//terraform/settings:version` / `//opentofu/settings:version` flags as
+`//terraform/settings:version` / `//tofu/settings:version` flags as
 the rest of the ruleset, so you get one hermetic Terraform release
 across all invocations.
+
+It is also how a Terraform maintainer manages dependencies without
+touching Bazel: `bazel run @terraform -- init -upgrade` or
+`bazel run @terraform -- providers lock` in a module directory writes
+the lock the rules consume, and a module that depends on its providers
+hub as a whole (`deps = ["@my_deps"]`) picks the change up with no
+BUILD edit.
+
+To reformat sources, `bazel run @rules_terraform//terraform:format`
+(or `//tofu:format`) rewrites the `.tf` files of every module in the
+workspace with the toolchain engine's `fmt`; pass target patterns to
+narrow it. Modules tagged `no_format` or `no_terraform_format` are
+skipped, matching the fmt aspect.
 
 **This is NOT the Bazel-managed workflow.** `@terraform` does no init
 aspect, no lock-file rewriting, no `.terraform` construction —
@@ -67,20 +182,20 @@ and writes state. Reach for it when you want a one-off CLI invocation
 (state manipulation, ad-hoc plan against an unrelated module) without
 wiring up a `terraform_binary` target for the module.
 
-To use `@terraform` / `@opentofu` from downstream, add them to your
+To use `@terraform` / `@tofu` from downstream, add them to your
 `MODULE.bazel`:
 
 ```python
 terraform_toolchains = use_extension("@rules_terraform//terraform:extensions.bzl", "terraform_toolchains")
 use_repo(terraform_toolchains, "terraform")
 
-opentofu_toolchains = use_extension("@rules_terraform//opentofu:extensions.bzl", "opentofu_toolchains")
-use_repo(opentofu_toolchains, "opentofu")
+tofu_toolchains = use_extension("@rules_terraform//tofu:extensions.bzl", "tofu_toolchains")
+use_repo(tofu_toolchains, "tofu")
 ```
 
 The extensions themselves are already invoked by rules_terraform's own
 `MODULE.bazel` (they register toolchains); the `use_repo` line only
-binds the repo name in your namespace so `@terraform` / `@opentofu`
+binds the repo name in your namespace so `@terraform` / `@tofu`
 resolve.
 
 ## Bazel-managed Terraform
@@ -140,6 +255,22 @@ The `terraform_binary` rule creates an executable that copies the
 aspect-built module directory into a writable temp dir and runs the
 real `terraform` binary there.
 
+That temp dir is removed when the command finishes, which means **a
+Bazel-run module needs a remote backend**. Without a `backend` or
+`cloud` block, the runner refuses `apply`, `destroy`, `import`,
+`refresh`, `taint`, `untaint` and the writing `state` subcommands, and
+the message names the fix. `plan` and the read-only commands are never
+refused.
+
+Where disposable state is the point (demos, sandboxes, bootstrapping the
+bucket that will hold real state), set `allow_ephemeral_state = True` on
+the `terraform_module`. State is then kept between runs under
+`bazel-out/<config>/bin/<pkg>/<name>.state/`: private to the machine,
+forked per build configuration, and deleted by `bazel clean`. The runner
+prints the path after each run. Relative file arguments (`-out=tfplan`,
+`-var-file=x.tfvars`) resolve against the temp dir, so pass absolute
+paths.
+
 Because the aspect already installed the providers and the module
 manifest, the only thing a run-time `terraform init` still contributes is
 backend setup — so it runs only for subcommands that need one. `version`,
@@ -149,6 +280,35 @@ the backend as before. The practical consequences: a `terraform_test` on
 a module with a remote backend needs no credentials, and a configuration
 error in one of those subcommands is reported as itself rather than as a
 backend failure.
+
+`terraform_validate_test`, the validate aspect and `terraform_test` run
+the engine with the operator's CLI configuration disabled
+(`TF_CLI_CONFIG_FILE` pointed at an empty file, `CHECKPOINT_DISABLE=1`,
+`TF_IN_AUTOMATION=1`), so a `~/.terraformrc` on one machine cannot change
+what a check reports. `bazel run` keeps the full environment, since that
+is where credential helpers live.
+
+### Tests and review artefacts
+
+[`terraform_test`](./terraform/terraform_test.md) runs the engine's native
+test framework. Each `run` block is reported as a JUnit test case
+through `XML_OUTPUT_FILE`, so `bazel test` summaries and CI dashboards
+show which run failed rather than one opaque target. Terraform writes
+the report itself with `-junit-xml`; for OpenTofu, which has no such
+flag, the runner builds it from the `-json-into` event stream and keeps
+that stream too. The lock file and module manifest the test ran against
+land in the undeclared outputs directory
+(`bazel-testlogs/<pkg>/<name>/test.outputs/`).
+
+[`terraform_plan_test`](./terraform/terraform_plan_test.md) runs a real
+`plan` and keeps `plan.tfplan`, `plan.json` and `plan.txt` as
+undeclared outputs, so a plan can be reviewed from CI artefacts. It
+passes when the plan succeeds, or with `expect_no_changes` only when
+the plan is empty. A plan reaches the backend and the provider APIs, so
+the macro tags the target `requires-network`; credentials go through
+`--test_env`. Providers that work offline (`null`, `local`, `random`)
+need neither. Plans and state hold sensitive values, so treat those
+artefacts as you would the state itself.
 
 For validation and formatting, use the corresponding test rules:
 
@@ -176,26 +336,41 @@ is a fully-populated module directory.
 
 | Dependency type          | Fetched from                     | Lock file                       | Refresh via                                              |
 |--------------------------|----------------------------------|---------------------------------|----------------------------------------------------------|
-| Providers                | Terraform Registry v1 API        | `.terraform.lock.hcl`           | `bazel run //path:providers_lock` (a [`terraform_providers_lock`](./terraform/terraform_modules_lock.md) target) — see below |
-| Registry modules         | Terraform Registry v1 API        | none — live-resolved by the `terraform.modules(...)` / `opentofu.modules(...)` extension | Automatic on `bazel fetch`. See "External registry modules" below for the tradeoff. |
+| Providers                | Terraform Registry v1 API        | `.terraform.lock.hcl`           | `bazel run //path:providers_lock.update` (a [`terraform_providers_lock`](./terraform/terraform_providers_lock.md) target) — see below |
+| Registry modules         | Terraform Registry v1 API        | none — live-resolved from the `roots` of a `deps` tag | Automatic on `bazel fetch`. See "External registry modules" below for the tradeoff. |
 | Local / in-repo modules  | Bazel target graph               | none                            | Edit `deps` on the parent `terraform_module` |
 
-### Providers
+### The `deps` tag
+
+Both halves of a root module's external dependencies are declared on one
+tag, because that is how the engine treats them: `terraform init` installs
+the providers the lock pins and the registry modules the `module` blocks
+name in one step. The hub it produces, `@<name>`, is a
+`terraform_dependency_group` carrying both, and a `terraform_module` that
+depends on it needs no `lock` attribute.
 
 ```python
 terraform = use_extension("@rules_terraform//terraform:extensions.bzl", "terraform")
-terraform.providers(
-    name = "my_providers",
-    lock = "//path/to:.terraform.lock.hcl",
-    # Optional; default is `registry.terraform.io`. Use
-    # `registry.opentofu.org` if you're fetching from the OpenTofu registry.
-    # registry = "registry.opentofu.org",
+terraform.deps(
+    name = "my_deps",
+    lock = "//path/to:.terraform.lock.hcl",       # optional: providers
+    roots = ["//path/to:main.tf"],                 # optional: registry modules
+    # registry = "registry.opentofu.org",          # default follows the extension
 )
-use_repo(terraform, "my_providers")
+use_repo(terraform, "my_deps")
 ```
 
-The lock file is Terraform's native `.terraform.lock.hcl` — rules_terraform
-consumes it, it doesn't author it.
+Either half may be omitted: a shared library that names a registry module
+but no provider gets a tag with `roots` only. The parts are addressable
+too: `@my_deps//:providers`, `@my_deps//:modules`, and
+`@my_deps//<namespace>_<name>` for one provider.
+
+### Providers
+
+The lock file is Terraform's native `.terraform.lock.hcl`. Write it with
+the [`terraform_providers_lock`](./terraform/terraform_providers_lock.md)
+updater (see [Getting started](#getting-started)); it runs the toolchain
+engine, so no `terraform` install is involved.
 
 **At repo-rule time** the extension:
 
@@ -203,13 +378,26 @@ consumes it, it doesn't author it.
 2. For every `(provider, platform)` pair, calls
    `https://<registry>/v1/providers/<namespace>/<name>/<version>/download/<os>/<arch>`
    via `module_ctx.download(...)` and reads the returned JSON to obtain
-   the archive `download_url` + `shasum`.
-3. Declares an `http_archive` per pair. These are lazy — Bazel only
-   fetches the archive for the platform your build actually resolves.
-4. Emits a hub repo `@my_providers` whose per-provider aliases pick the
-   right platform archive via `select()`. Depend on
-   `@my_providers//<namespace>_<name>` (e.g. `@my_providers//hashicorp_null`)
-   from your `terraform_module.deps`.
+   the archive `download_url` + `shasum`. The `shasum` must be one of the
+   lock entry's `zh:` hashes — those are the archive checksums recorded
+   when the lock was written — so the registry can tell Bazel *where* the
+   archive is but not *what* it should contain. A provider that resolves
+   for none of the platforms is an error, not a silently thinner hub.
+   Answers are cached in `module_ctx.facts`, so with `MODULE.bazel.lock`
+   enabled a re-evaluation makes no provider requests at all.
+3. Declares an `http_archive` per distinct archive, in a **pool shared by
+   every `providers` hub**. The repository is named from the archive's
+   identity (`rt_prov_<registry>_<namespace>_<name>_<version>_<platform>`),
+   so two lock files that agree on a provider version fetch and extract it
+   once. Archives are lazy — Bazel only fetches the platform your build
+   actually resolves.
+4. Emits the hub: `@my_deps` carries every provider in the lock plus the
+   lock itself, and `@my_deps//<namespace>_<name>` is a per-provider alias
+   that picks the right pool archive via `select()`. Depend on `@my_deps`
+   and the module needs no `lock` attribute: a Terraform maintainer who
+   adds a provider edits `required_providers` and regenerates the lock,
+   and no BUILD file changes. Depend on individual aliases plus `lock` to
+   install a subset.
 
 **At build time** [`terraform_init_aspect`](./terraform/terraform_module.md)
 extracts each provider's files into
@@ -219,13 +407,13 @@ and recomputes the `h1:` hash in a copy of the lock file it writes inside
 accept the Bazel-installed binaries.
 
 **Regenerating.** Wire up a
-[`terraform_providers_lock`](./terraform/terraform_modules_lock.md) target
-(or [`opentofu_providers_lock`](./opentofu/opentofu_providers_lock.md) for
+[`terraform_providers_lock`](./terraform/terraform_providers_lock.md) target
+(or [`tofu_providers_lock`](./tofu/tofu_providers_lock.md) for
 the OpenTofu variant):
 
 ```python
 load(
-    "@rules_terraform//terraform:terraform_modules_lock.bzl",
+    "@rules_terraform//terraform:terraform_providers_lock.bzl",
     "terraform_providers_lock",
 )
 
@@ -240,21 +428,59 @@ terraform_providers_lock(
 ```
 
 `bazel run //:providers_lock` seeds a temp directory with your `.tf`
-sources, runs real `terraform providers lock -platform=<all>` under the
+sources, runs `terraform providers lock -platform=<all>` under the
 toolchain-fetched engine binary, and writes the multi-platform result
 back into `$BUILD_WORKSPACE_DIRECTORY`. This is the only path that
-produces hashes for platforms Bazel didn't resolve for the current
-build — plain `terraform init` on your laptop locks the current
-platform only.
+produces hashes for every platform at once — the engine's own `init`
+locks the platform it runs on only.
 
-**Drift check.** [`terraform_providers_lock_test`](./terraform/terraform_modules_lock.md)
+**Drift check.** [`terraform_providers_lock_test`](./terraform/terraform_providers_lock_test.md)
 fails if any provider declared in a `required_providers { … }` block
 isn't in the lock file (or vice-versa). Pure text comparison — no
-network. [`terraform_lock_diff_test`](./terraform/terraform_modules_lock.md)
-goes further: it structurally compares the init-aspect-generated
-`.terraform.lock.hcl` against a checked-in golden produced by real
-`terraform init`, catching cases where the aspect's rewrite doesn't
-match what the engine would produce.
+network. The lock's own hashes are enforced elsewhere: the extension
+refuses an archive whose checksum is not among the lock's `zh:` entries,
+and the engine verifies each installed provider directory against the
+`h1:` the init aspect wrote.
+
+### Providers built in the repo
+
+A provider that is not on any registry — one you build from source in the
+same workspace — is a [`terraform_provider`](./terraform/terraform_provider.md)
+whose `files` is the built binary. It is used exactly like a hub-provided
+provider:
+
+```python
+load("@rules_go//go:def.bzl", "go_binary")
+load("@rules_terraform//terraform:defs.bzl", "terraform_module", "terraform_provider")
+
+go_binary(
+    name = "terraform-provider-custom",   # the engine requires this prefix
+    srcs = ["main.go"],
+)
+
+terraform_provider(
+    name = "custom",
+    files = [":terraform-provider-custom"],
+    source = "example/custom",             # matches `required_providers`
+    version = "1.0.0",
+)
+
+terraform_module(
+    name = "app",
+    srcs = glob(["*.tf"]),
+    lock = ".terraform.lock.hcl",
+    deps = [":custom"],
+)
+```
+
+Leave `platform` unset: it is read from the configuration the provider is
+built in, so the same target works on a Linux CI runner and an Apple
+Silicon laptop. The `.terraform.lock.hcl` still needs an entry for the
+provider — write one by hand with the `version` and a placeholder `h1:`
+hash; the init aspect replaces the `h1:` with the hash of the binary it
+actually installed. A module that depends on providers but has no `lock`
+is an analysis error, since the engine will not use a provider directory
+it cannot check against one.
 
 ### External registry modules
 
@@ -263,28 +489,41 @@ them live against the Registry API on every fresh evaluation. Terraform
 users load the extension from the terraform side:
 
 ```python
-terraform = use_extension("@rules_terraform//terraform:extensions.bzl", "terraform")
-terraform.modules(
-    name = "my_modules",
-    root = "//path/to:main.tf",   # any .tf file in the root module directory
+terraform.deps(
+    name = "shared",
+    lock = "//:.terraform.lock.hcl",
+    # Every directory whose `module` blocks name a registry module, root
+    # modules and shared libraries alike, given as any .tf file inside it.
+    roots = [
+        "//envs/prod/app:main.tf",
+        "//modules/naming:main.tf",
+    ],
 )
-use_repo(terraform, "my_modules")
 ```
 
-OpenTofu users load the parallel extension — same tag class shape, but
-the registry defaults to `registry.opentofu.org`:
+Then every `terraform_module` whose blocks name a registry module depends
+on `@shared` (or `@shared//:modules` for a library that should not install
+providers). Archives are pooled, and a module depending on the hub depends
+on a candidate pool from which only what its own `module` blocks name is
+installed, so a tag may list many directories. The
+[monorepo example](https://github.com/periareon/rules_terraform/tree/main/examples/monorepo)
+does this across three environments and a shared library.
+
+OpenTofu users load the parallel extension — same tag class, but the
+registry defaults to `registry.opentofu.org`:
 
 ```python
-opentofu = use_extension("@rules_terraform//opentofu:extensions.bzl", "opentofu")
-opentofu.modules(
-    name = "my_modules",
-    root = "//path/to:main.tf",
+tofu = use_extension("@rules_terraform//tofu:extensions.bzl", "tofu")
+tofu.deps(
+    name = "app",
+    lock = "//:.terraform.lock.hcl",
+    roots = ["//:main.tf"],
 )
-use_repo(opentofu, "my_modules")
+use_repo(tofu, "app")
 ```
 
-**At extension eval time** the impl reads every `*.tf` file in the same
-directory as `root` (matching Terraform's own "root module is a
+**At extension eval time** the impl reads every `*.tf` file in each
+directory listed in `roots` (matching Terraform's own "root module is a
 directory" model), parses `module { source = "…" }` blocks, and for
 every registry-shaped source:
 
@@ -296,11 +535,50 @@ every registry-shaped source:
    tarball URL (`<source>/archive/refs/tags/<tag>.tar.gz`) with the
    matching `strip_prefix`.
 3. Downloads the archive to compute the `sha256`.
-4. Registers an `http_archive` per module.
+4. Once every `modules` tag has been resolved, registers one
+   `http_archive` per distinct (registry, module address, version) in a
+   **pool shared by every hub** (`rt_mod_<registry>_<address>_<version>`),
+   extracted whole. Each `//subdir` any hub referenced is a target inside
+   that one repository rather than a second download. The hub itself is a
+   `terraform_module_group` over the pool targets it resolved to.
 
 Every downstream fetch goes direct to GitHub — no registry hop at build
 time. Only GitHub-backed modules are supported; non-GitHub git hosts
-fail with a clear error at eval time.
+fail with a clear error at eval time. A source written with its own
+hostname (`app.terraform.io/acme/vpc/aws`) is resolved against that
+host rather than the tag's `registry`.
+
+**Modules the extension cannot fetch** — a registry module hosted off
+GitHub, or any plain `git::` / `https://` source — can still be
+supplied by hand. Fetch the archive with whatever repository rule
+fits, declare a [`terraform_external_module`](./terraform/terraform_external_module.md)
+in its build file with `source` copied verbatim from the `module`
+block, and put the target in `deps`:
+
+```python
+# MODULE.bazel
+http_archive = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
+http_archive(
+    name = "acme_vpc",
+    urls = ["https://git.example.com/acme/terraform-vpc/-/archive/v1.4.0/terraform-vpc-v1.4.0.tar.gz"],
+    strip_prefix = "terraform-vpc-v1.4.0",
+    integrity = "sha256-…",
+    build_file_content = """
+load("@rules_terraform//terraform:defs.bzl", "terraform_external_module")
+terraform_external_module(
+    name = "module",
+    key = "acme_vpc",
+    source = "git::https://git.example.com/acme/terraform-vpc.git?ref=v1.4.0",
+    version = "1.4.0",
+    srcs = glob(["**/*.tf"]),
+    visibility = ["//visibility:public"],
+)
+""",
+)
+```
+
+The init aspect installs it under every `module` block whose `source`
+matches, the same way it places a registry module.
 
 **At build time** the init aspect copies each module's files into
 `.terraform/modules/<key>/` and adds a corresponding entry to
@@ -314,9 +592,9 @@ cache only persists when `MODULE.bazel.lock` is enabled. See
 [Reproducibility](#reproducibility) for the full recipe and the
 `Implementation detail: network calls per eval` note below.
 
-**Non-default registries.** Pass `registry = "…"` on the tag class if
-you're pointing at a private mirror or an alternate registry (e.g. a
-Terraform user consuming the OpenTofu registry, or vice-versa).
+**Non-default registries.** Pass `registry = "…"` on the tag if you're
+pointing at a private mirror or an alternate registry; it applies to the
+providers and the modules of that tag alike.
 
 <details>
 <summary><strong>Implementation detail: network calls per eval</strong></summary>
@@ -389,8 +667,8 @@ parent's package.
 
 | Change                                | What to do                                                                                                    |
 |---------------------------------------|---------------------------------------------------------------------------------------------------------------|
-| Bump / add a provider                 | Update `required_providers { }`; regenerate `.terraform.lock.hcl` (real `terraform providers lock` or `bazel run //:providers_lock`) |
-| Bump / add a registry module          | Edit the `module { source = "…" version = "…" }` block. Live-resolved on the next `bazel fetch`; regenerate `MODULE.bazel.lock` if you have it enabled. |
+| Bump / add a provider                 | Update `required_providers { }`; regenerate `.terraform.lock.hcl` with `bazel run` on the module's `terraform_providers_lock` target |
+| Bump / add a registry module          | Edit the `module { source = "…" version = "…" }` block and make sure its directory is in a `deps` tag's `roots`. Live-resolved on the next `bazel fetch`; regenerate `MODULE.bazel.lock` if you have it enabled. |
 | Add / rename a local module           | Write the `module { source = "…" }` block and add the child to the parent's `deps`; no lock file involved |
 | Verify everything                     | `bazel test //...` — runs validate, fmt, tftest, and every lock drift check in one shot                       |
 
@@ -400,16 +678,16 @@ The state of each bzlmod extension in rules_terraform:
 
 | Extension                                          | Reproducible? | Why                                                                                                                                             |
 |----------------------------------------------------|:-------------:|-------------------------------------------------------------------------------------------------------------------------------------------------|
-| `terraform_toolchains` / `opentofu_toolchains`     | ✓             | Every URL + integrity is vendored in `//<engine>/private:versions.bzl`. No network at eval time; identical inputs → identical repo declarations. |
-| `terraform.providers(...)`                         | ✓             | Reads a checked-in `.terraform.lock.hcl`; never resolves version constraints. Registry API is called to look up download URLs, but the version and hash come from the lock. |
-| `terraform.modules(...)` / `opentofu.modules(...)` | ✗             | Live version-constraint resolution against the Registry API. `MODULE.bazel.lock` is the capture layer that closes the gap — see below.          |
+| `terraform_toolchains` / `tofu_toolchains`     | ✓             | Every URL + integrity is vendored in `//<engine>/private:versions.bzl`. No network at eval time; identical inputs → identical repo declarations. |
+| `deps` tag, `lock` half                            | ✓             | Reads a checked-in `.terraform.lock.hcl`; never resolves version constraints. Registry API is called to look up download URLs, but the version and hash come from the lock. |
+| `deps` tag, `roots` half                           | ✗             | Live version-constraint resolution against the Registry API. `MODULE.bazel.lock` is the capture layer that closes the gap — see below.          |
 
 ### The role of `MODULE.bazel.lock`
 
 The modules extension is the only piece of rules_terraform that
 depends on `MODULE.bazel.lock` for both reproducibility AND performance.
-`terraform_toolchains`, `opentofu_toolchains`, and
-`terraform.providers(...)` all read fully vendored state and produce
+`terraform_toolchains`, `tofu_toolchains`, and the `lock` half of a
+`deps` tag all read fully vendored state and produce
 deterministic output without any lockfile involvement. The modules
 extension is different in two related ways:
 
@@ -457,12 +735,14 @@ module "vpc" {
 }
 ```
 
-### Rules_terraform's own `.bazelrc` does NOT enable the lockfile
+### Rules_terraform's own `MODULE.bazel.lock`
 
-The ruleset ships with `common --lockfile_mode=off`. This is
-deliberate for a rules repo: bumping any dev-only `bazel_dep` version
-would produce lockfile churn in unrelated PRs. Downstream users are
-recommended to enable it in their own repos.
+The ruleset commits its lockfile. Its own test fixtures use the modules
+extension, so the lockfile is what keeps `bazel test //...` here offline
+and repeatable, and a PR that bumps a fixture's module version shows the
+resolved archive in the diff. The examples under `examples/` run with
+`--lockfile_mode=off` on purpose: they stand in for a downstream user's
+first build, where no facts exist yet.
 
 ### Update workflow
 
