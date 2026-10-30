@@ -1,4 +1,4 @@
-"""Registry-module resolution for the `deps` tag's `roots`.
+"""External-module resolution for the `deps` tag's `roots`.
 
 `extension_impl.bzl` calls `resolve_registry_modules` once per tag and
 `declare_module_pool` once per evaluation. Per module block:
@@ -20,6 +20,18 @@
 6. Once every tag is resolved, register one `terraform_module_repository`
    per distinct (registry, module address, version) across *all* hubs —
    the pool. The hub itself is declared by `extension_impl.bzl`.
+
+A git-shaped source (`git::…`, `git@…`, `github.com/…`; see
+`git_source.bzl`) goes through the same worklist with a different fetch,
+and its `?ref=` must be a tag or a full commit id: a branch moves, so a
+branch name, or no ref at all, is an error. A GitHub `https` remote is
+fetched as the archive GitHub serves for the ref, exactly like a registry
+module: unpacked once on a facts miss to record its integrity and read its
+own references, then declared as an `http_archive`, with no git involved.
+Any other remote, `ssh://` to GitHub included, is checked out with the
+host's `git` on a facts miss, the commit it names is recorded, and the
+pool entry is a `new_git_repository` at that exact commit, so a private
+remote works wherever `git clone` of it would.
 
 ## Why a pool
 
@@ -56,9 +68,22 @@ Exact-pinned + facts-cached blocks skip every network call, but the
 extension's reproducibility guarantee has to hold for all inputs, and
 we can't statically prove every block is pinned. See
 `docs/src/index.md#reproducibility`.
+
+A git tag is in the same position: what it names is looked up once and
+recorded as a fact, as an archive integrity or a commit, and that is what
+every later evaluation declares. A tag that is moved afterwards fails the
+next fresh fetch on the archive path and is ignored on the git path. A
+ref that is a full commit id is exact by construction.
 """
 
-load(":module_repo.bzl", "module_target_name", "terraform_module_repository")
+load(":git_source.bzl", "is_commit", "parse_git_source")
+load(
+    ":module_repo.bzl",
+    "module_target_name",
+    "terraform_archive_module_repository",
+    "terraform_git_module_repository",
+    "terraform_module_repository",
+)
 load(
     ":registry.bzl",
     "is_registry_source",
@@ -121,8 +146,12 @@ def _resolve_relative(base, rel, floor):
         return None
     return current
 
-def _registry_refs(module_ctx, start_path, floor):
-    """Registry `module` sources reachable from `start_path`.
+def _is_external(source):
+    """Whether a `module` source names something the extension fetches."""
+    return is_registry_source(source) or parse_git_source(source) != None
+
+def _external_refs(module_ctx, start_path, floor):
+    """Registry and git `module` sources reachable from `start_path`.
 
     Follows local (`./`, `../`) sources the way the engine does rather than
     globbing for `*.tf`: a registry module ships `examples/` and `tests/` trees
@@ -157,7 +186,7 @@ def _registry_refs(module_ctx, start_path, floor):
         seen[str(dir_path)] = True
 
         for block in parse_module_blocks(_read_tf_dir(module_ctx, dir_path)):
-            if is_registry_source(block.source):
+            if _is_external(block.source):
                 refs.append(struct(source = block.source, version = block.version))
             elif block.source.startswith("./") or block.source.startswith("../"):
                 child = _resolve_relative(dir_path, block.source, floor)
@@ -169,6 +198,182 @@ def _registry_refs(module_ctx, start_path, floor):
 
 def _sanitize_repo_segment(s):
     return s.replace("-", "_").replace("/", "_")
+
+def _sanitize_name(s):
+    """`s` reduced to the characters a repository name may contain."""
+    return "".join([c if c.isalnum() or c in "._-" else "_" for c in s.elems()])
+
+def _remote_name(remote):
+    """A readable repository-name segment for a git remote: host and path, no scheme or suffix."""
+    bare = remote.split("://", 1)[-1]
+    if bare.startswith("git@"):
+        bare = bare[len("git@"):]
+    if bare.endswith(".git"):
+        bare = bare[:-len(".git")]
+    return _sanitize_name(bare)
+
+def _is_github_https(remote):
+    """Whether `remote` is GitHub over https, which serves archives Bazel can fetch without git."""
+    lowered = remote.lower()
+    return lowered.startswith("https://github.com/") or lowered.startswith("https://www.github.com/")
+
+def _github_archive_url(remote, ref):
+    """The GitHub archive of `ref`: by id for a commit, under `refs/tags/` for a tag.
+
+    The tag form is deliberate. `archive/<name>.tar.gz` resolves a branch as
+    readily as a tag; `archive/refs/tags/<name>.tar.gz` is not found for a
+    branch, which is how a branch ref is refused on this path.
+    """
+    base = remote[:-1] if remote.endswith("/") else remote
+    if base.endswith(".git"):
+        base = base[:-len(".git")]
+    if is_commit(ref):
+        return "{}/archive/{}.tar.gz".format(base, ref)
+    return "{}/archive/refs/tags/{}.tar.gz".format(base, ref)
+
+def _fetch_github_archive(module_ctx, remote, ref, checkouts):
+    """Download and unpack a GitHub archive during evaluation, at most once per eval.
+
+    Args:
+        module_ctx: (module_ctx) The extension context.
+        remote: (str) An `https://github.com/…` remote.
+        ref: (str) A tag or full commit id.
+        checkouts: (dict) Memo of fetches already made this eval, mutated
+            in place.
+
+    Returns:
+        (struct) `struct(url, strip_prefix, integrity, path)`, where `path`
+        is the unpacked module root.
+    """
+    memo_key = "{}@{}".format(remote, ref)
+    if memo_key in checkouts:
+        return checkouts[memo_key]
+
+    url = _github_archive_url(remote, ref)
+    extract_dir = "git_{}_{}".format(_remote_name(remote), _sanitize_name(ref))
+    result = module_ctx.download_and_extract(
+        url = url,
+        output = extract_dir,
+        sha256 = "",
+        allow_fail = True,
+    )
+    if not result.success:
+        fail(("could not fetch module source {} at ref {} from {}.\n" +
+              "{}").format(
+            remote,
+            ref,
+            url,
+            "The ref is not a tag. A git module is pinned to a tag or a full commit id; a branch name is not accepted." if not is_commit(ref) else "Check that the commit exists and that GitHub is reachable from this machine.",
+        ))
+
+    # GitHub names the directory inside after the repository and ref, with
+    # a leading `v` dropped from a version-like tag. Reading the name back
+    # beats predicting it: the prefix recorded here is what `http_archive`
+    # strips later, and a wrong guess would fail only then.
+    entries = [entry for entry in module_ctx.path(extract_dir).readdir()]
+    if len(entries) != 1 or not entries[0].is_dir:
+        fail("archive {} does not unpack to a single directory".format(url))
+
+    checkouts[memo_key] = struct(
+        url = url,
+        strip_prefix = entries[0].basename,
+        integrity = result.integrity,
+        path = entries[0],
+    )
+    return checkouts[memo_key]
+
+def _git(module_ctx, args, remote, ref, allow_failure = False):
+    """Run `git` with `args`, failing with its stderr unless told to return it."""
+    result = module_ctx.execute(
+        ["git"] + args,
+        environment = {"GIT_TERMINAL_PROMPT": "0"},
+        timeout = 600,
+    )
+    if result.return_code != 0 and not allow_failure:
+        fail("git {} failed for module source {}{}:\n{}".format(
+            args[0] if args[0] != "-C" else args[2],
+            remote,
+            " at ref " + ref if ref else "",
+            result.stderr.strip(),
+        ))
+    return result
+
+def _git_tag_commit(module_ctx, remote, ref):
+    """The commit a tag names on the remote, or a failure if `ref` is not a tag.
+
+    `ls-remote --tags` lists the tag and, for an annotated tag, its peeled
+    commit as `<name>^{}`. A branch appears in neither form, so a branch
+    name is refused here before anything is fetched.
+    """
+    result = _git(module_ctx, ["ls-remote", "--tags", remote, ref], remote, ref)
+    tag_commit = None
+    peeled_commit = None
+    for line in result.stdout.splitlines():
+        parts = line.split("\t")
+        if len(parts) != 2:
+            continue
+        if parts[1] == "refs/tags/{}^{{}}".format(ref):
+            peeled_commit = parts[0]
+        elif parts[1] == "refs/tags/{}".format(ref):
+            tag_commit = parts[0]
+    commit = peeled_commit if peeled_commit else tag_commit
+    if not commit:
+        fail(("ref {} of module source {} is not a tag. A git module is pinned to a tag or a " +
+              "full commit id; a branch name is not accepted.").format(ref, remote))
+    return commit
+
+def _fetch_git(module_ctx, remote, ref, checkouts):
+    """Check out one git tag or commit during evaluation, at most once per eval.
+
+    Only needed when the facts have nothing for the ref: it is how the
+    extension learns which commit a tag names and which modules the
+    checkout itself references. The repository Bazel builds against is a
+    separate `new_git_repository` of the resolved commit.
+
+    Args:
+        module_ctx: (module_ctx) The extension context.
+        remote: (str) The address `git` is given.
+        ref: (str) A tag or full commit id.
+        checkouts: (dict) Memo of checkouts already made this eval, mutated
+            in place.
+
+    Returns:
+        (struct) `struct(commit, path)`, where `path` is the checkout root.
+    """
+    memo_key = "{}@{}".format(remote, ref)
+    if memo_key in checkouts:
+        return checkouts[memo_key]
+
+    if module_ctx.which("git") == None:
+        fail("module source {} is fetched from git, but no `git` is on PATH".format(remote))
+
+    # A tag is fetched by its full ref name, so a branch that happens to
+    # share the name cannot be what arrives.
+    fetch_ref = ref if is_commit(ref) else "refs/tags/" + ref
+    if not is_commit(ref):
+        _git_tag_commit(module_ctx, remote, ref)
+
+    path = module_ctx.path("git_{}_{}".format(_remote_name(remote), _sanitize_name(ref)))
+    if path.exists:
+        module_ctx.delete(path)
+    _git(module_ctx, ["init", "-q", str(path)], remote, ref)
+    _git(module_ctx, ["-C", str(path), "remote", "add", "origin", remote], remote, ref)
+
+    # One commit's worth of history is all that is read. A commit named by
+    # id can be fetched that way only where the server allows it; GitHub and
+    # GitLab do, and anywhere else the whole history is taken instead.
+    result = _git(module_ctx, ["-C", str(path), "fetch", "-q", "--depth", "1", "origin", fetch_ref], remote, ref, allow_failure = True)
+    target = "FETCH_HEAD"
+    if result.return_code != 0 and is_commit(ref):
+        result = _git(module_ctx, ["-C", str(path), "fetch", "-q", "origin"], remote, ref, allow_failure = True)
+        target = ref
+    if result.return_code != 0:
+        fail("git fetch of module source {} at ref {} failed:\n{}".format(remote, ref, result.stderr.strip()))
+    _git(module_ctx, ["-C", str(path), "checkout", "-q", "--detach", target], remote, ref)
+    commit = _git(module_ctx, ["-C", str(path), "rev-parse", "HEAD"], remote, ref).stdout.strip()
+
+    checkouts[memo_key] = struct(commit = commit, path = path)
+    return checkouts[memo_key]
 
 def _exact_pin_version(constraint):
     """Return the canonical SemVer string if `constraint` is a single `=` clause, else None.
@@ -195,6 +400,10 @@ def _exact_pin_version(constraint):
 
 def _fact_key(source, version):
     return "{}@{}".format(source, version)
+
+def _git_fact_key(remote, subdir, ref):
+    """Facts identity of one git-sourced module: remote, module inside it, and ref as written."""
+    return "git:{}//{}@{}".format(remote, subdir, ref)
 
 def _ref_key(source, constraint):
     """Worklist identity of an unresolved reference.
@@ -256,6 +465,129 @@ def _pool_key(registry, base_source, version):
     """Identity of one fetched archive, which is also its repository name."""
     return "rt_mod_{}_{}_{}".format(registry, base_source.replace("/", "_"), version)
 
+def _git_pool_key(remote, pin):
+    """Identity of one git checkout, which is also its repository name.
+
+    `pin` is the commit for a checkout made with git, where a tag and the
+    id it names are one checkout, and the ref as written for a GitHub
+    archive, where a tag's commit is never learned.
+    """
+    return "rt_git_{}_{}".format(_remote_name(remote), pin[:12] if is_commit(pin) else _sanitize_name(pin))
+
+def _claim_target(modules, source, subdir):
+    """The target inside a pool repository that serves `source`, creating it if new.
+
+    The init aspect matches a git module by its source verbatim, so every
+    spelling that reaches one checkout gets its own target, and two
+    spellings of one subdir cannot share a target name.
+    """
+    if source not in modules:
+        base = module_target_name(subdir)
+        taken = [entry["target"] for entry in modules.values()]
+        target = base
+        for n in range(2, len(taken) + 3):
+            if target not in taken:
+                break
+            target = "{}_{}".format(base, n)
+        modules[source] = {"subdir": subdir, "target": target}
+    return modules[source]["target"]
+
+def _module_refs(module_ctx, root, subdir):
+    """The external references of the module at `subdir` under an unpacked `root`."""
+    start_path = root
+    for segment in subdir.split("/"):
+        if segment:
+            start_path = start_path.get_child(segment)
+    return [
+        {"source": ref.source, "version": ref.version}
+        for ref in _external_refs(module_ctx, start_path, root)
+    ]
+
+def _resolve_git(module_ctx, source, git, constraint, existing_facts, new_facts, pool, checkouts):
+    """Resolve one git-sourced reference to a pool target.
+
+    A GitHub `https` remote is fetched as an archive and pinned by its
+    integrity; any other remote is checked out with git and pinned by
+    commit. Either way the ref has to be a tag or a full commit id: a
+    branch moves, and nothing built from one is reproducible.
+
+    Args:
+        module_ctx: (module_ctx) The extension context.
+        source: (str) The `module` block's source, verbatim.
+        git: (struct) `parse_git_source(source)`.
+        constraint: (str) The block's `version`, which must be empty.
+        existing_facts: (Facts|None) The previous eval's facts.
+        new_facts: (dict) This eval's facts, mutated in place.
+        pool: (dict) The shared module pool, mutated in place.
+        checkouts: (dict) Memo for the fetchers, mutated in place.
+
+    Returns:
+        (tuple[str, list[dict]]) The pool target's label and the module's
+        own external references, as `{"source", "version"}` dicts.
+    """
+    if constraint:
+        fail(("module source {} is fetched from git and cannot carry version = {}. " +
+              "Pin a git module with `?ref=` in its source instead.").format(source, repr(constraint)))
+    if not git.ref:
+        fail(("module source {} names no `?ref=`. A git module is pinned to a tag or a full " +
+              "commit id; the remote's default branch is not accepted.").format(source))
+
+    key = _git_fact_key(git.remote, git.subdir, git.ref)
+    cached = existing_facts[key] if existing_facts != None and key in existing_facts else None
+    if type(cached) != "dict" or "deps" not in cached:
+        cached = None
+
+    if _is_github_https(git.remote):
+        if cached and cached.get("url") and cached.get("integrity"):
+            new_facts[key] = cached
+            entry = {
+                "integrity": cached["integrity"],
+                "kind": "verbatim_archive",
+                "modules": {},
+                "strip_prefix": cached["strip_prefix"],
+                "url": cached["url"],
+            }
+            deps = cached["deps"]
+        else:
+            archive = _fetch_github_archive(module_ctx, git.remote, git.ref, checkouts)
+            deps = _module_refs(module_ctx, archive.path, git.subdir)
+            new_facts[key] = {
+                "deps": deps,
+                "integrity": archive.integrity,
+                "strip_prefix": archive.strip_prefix,
+                "url": archive.url,
+            }
+            entry = {
+                "integrity": archive.integrity,
+                "kind": "verbatim_archive",
+                "modules": {},
+                "strip_prefix": archive.strip_prefix,
+                "url": archive.url,
+            }
+        pool_key = _git_pool_key(git.remote, git.ref)
+    else:
+        if cached and cached.get("commit"):
+            new_facts[key] = cached
+            commit = cached["commit"]
+            deps = cached["deps"]
+        else:
+            checkout = _fetch_git(module_ctx, git.remote, git.ref, checkouts)
+            commit = checkout.commit
+            deps = _module_refs(module_ctx, checkout.path, git.subdir)
+            new_facts[key] = {"commit": commit, "deps": deps}
+        entry = {
+            "commit": commit,
+            "kind": "git",
+            "modules": {},
+            "remote": git.remote,
+        }
+        pool_key = _git_pool_key(git.remote, commit)
+
+    if pool_key not in pool:
+        pool[pool_key] = entry
+    target = _claim_target(pool[pool_key]["modules"], source, git.subdir)
+    return "@{}//:{}".format(pool_key, target), deps
+
 def resolve_registry_modules(module_ctx, *, name, roots, registry, existing_facts, new_facts, pool):
     """Resolve the registry modules named under `roots` for one `deps` tag.
 
@@ -308,7 +640,7 @@ def resolve_registry_modules(module_ctx, *, name, roots, registry, existing_fact
     pending = []
     queued = {}
     for block in blocks:
-        if not is_registry_source(block.source):
+        if not _is_external(block.source):
             continue
         if _ref_key(block.source, block.version) in queued:
             continue
@@ -320,8 +652,9 @@ def resolve_registry_modules(module_ctx, *, name, roots, registry, existing_fact
 
     # Archive per `(source-without-subdir, version)`, not per reference: two
     # `//subdir` references into one module are two repos cut from one
-    # download.
+    # download. Likewise one checkout per git `(remote, ref)`.
     archives = {}
+    checkouts = {}
 
     for _ in range(_MAX_REGISTRY_MODULES):
         if not pending:
@@ -331,6 +664,20 @@ def resolve_registry_modules(module_ctx, *, name, roots, registry, existing_fact
         # before anything found inside a fetched module: a constraint written
         # by the user is resolved before one written by a dependency.
         source, constraint, _ = pending.pop(0)
+
+        git = parse_git_source(source)
+        if git != None:
+            if source in resolved:
+                continue
+            resolved[source] = True
+            member, deps = _resolve_git(module_ctx, source, git, constraint, existing_facts, new_facts, pool, checkouts)
+            for dep in deps:
+                if _ref_key(dep["source"], dep["version"]) in queued:
+                    continue
+                queued[_ref_key(dep["source"], dep["version"])] = True
+                pending.append((dep["source"], dep["version"], ""))
+            members.append(member)
+            continue
 
         # The registry addresses the whole module; `//subdir` picks out one
         # module published inside it. Everything up to the archive is keyed on
@@ -384,7 +731,7 @@ def resolve_registry_modules(module_ctx, *, name, roots, registry, existing_fact
 
             deps = [
                 {"source": ref.source, "version": ref.version}
-                for ref in _registry_refs(module_ctx, start_path, archive.path)
+                for ref in _external_refs(module_ctx, start_path, archive.path)
             ]
             new_facts[key] = {
                 "deps": deps,
@@ -407,6 +754,7 @@ def resolve_registry_modules(module_ctx, *, name, roots, registry, existing_fact
             pool[pool_key] = {
                 "base_source": base_source,
                 "integrity": integrity,
+                "kind": "archive",
                 "strip_prefix": strip_prefix,
                 "subdirs": {},
                 "url": archive_url,
@@ -416,7 +764,7 @@ def resolve_registry_modules(module_ctx, *, name, roots, registry, existing_fact
         members.append("@{}//:{}".format(pool_key, module_target_name(subdir)))
 
     if pending:
-        fail("`{}` pulls in more than {} distinct registry modules".format(
+        fail("`{}` pulls in more than {} distinct external modules".format(
             name,
             _MAX_REGISTRY_MODULES,
         ))
@@ -447,12 +795,35 @@ def claim_hub_name(claimed, name, module_name, kind):
     claimed[name] = claimant
 
 def declare_module_pool(pool):
-    """Declare one `http_archive` per entry of the pool built by `resolve_registry_modules`.
+    """Declare one repository per entry of the pool built by `resolve_registry_modules`.
 
     Args:
-        pool: (dict) Pool repository name → archive dict.
+        pool: (dict) Pool repository name → archive or checkout dict.
     """
     for repo_name, entry in pool.items():
+        if entry["kind"] == "verbatim_archive":
+            terraform_archive_module_repository(
+                name = repo_name,
+                url = entry["url"],
+                integrity = entry["integrity"],
+                strip_prefix = entry["strip_prefix"],
+                modules = [
+                    {"source": source, "subdir": module["subdir"], "target": module["target"]}
+                    for source, module in sorted(entry["modules"].items())
+                ],
+            )
+            continue
+        if entry["kind"] == "git":
+            terraform_git_module_repository(
+                name = repo_name,
+                remote = entry["remote"],
+                commit = entry["commit"],
+                modules = [
+                    {"source": source, "subdir": module["subdir"], "target": module["target"]}
+                    for source, module in sorted(entry["modules"].items())
+                ],
+            )
+            continue
         terraform_module_repository(
             name = repo_name,
             source = entry["base_source"],

@@ -535,8 +535,12 @@ list the target in the consuming `terraform_module`'s `deps`.""",
             allow_files = True,
         ),
         "version": attr.string(
-            doc = "Module version.",
-            mandatory = True,
+            doc = """The module's version, for a registry module. The init
+            aspect records it in the module manifest and uses it to pick
+            between two versions of one module. Leave it empty for a git or
+            other non-registry source: Terraform rejects a manifest entry
+            whose version is not a semantic version, and a commit id or tag
+            name is not one.""",
         ),
     },
     provides = [TerraformExternalModuleInfo],

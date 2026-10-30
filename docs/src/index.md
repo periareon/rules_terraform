@@ -338,6 +338,7 @@ is a fully-populated module directory.
 |--------------------------|----------------------------------|---------------------------------|----------------------------------------------------------|
 | Providers                | Terraform Registry v1 API        | `.terraform.lock.hcl`           | `bazel run //path:providers_lock.update` (a [`terraform_providers_lock`](./terraform/terraform_providers_lock.md) target) — see below |
 | Registry modules         | Terraform Registry v1 API        | none — live-resolved from the `roots` of a `deps` tag | Automatic on `bazel fetch`. See "External registry modules" below for the tradeoff. |
+| Git modules              | GitHub archives over https; the host's `git` for any other remote | none — the `?ref=` must be a tag or commit; what a tag names is recorded in `MODULE.bazel.lock` | Change the `?ref=`. See "Git modules" below. |
 | Local / in-repo modules  | Bazel target graph               | none                            | Edit `deps` on the parent `terraform_module` |
 
 ### The `deps` tag
@@ -381,10 +382,22 @@ engine, so no `terraform` install is involved.
    the archive `download_url` + `shasum`. The `shasum` must be one of the
    lock entry's `zh:` hashes — those are the archive checksums recorded
    when the lock was written — so the registry can tell Bazel *where* the
-   archive is but not *what* it should contain. A provider that resolves
-   for none of the platforms is an error, not a silently thinner hub.
-   Answers are cached in `module_ctx.facts`, so with `MODULE.bazel.lock`
-   enabled a re-evaluation makes no provider requests at all.
+   archive is but not *what* it should contain.
+
+   A platform is left out of the hub only when the registry's own
+   `/v1/providers/<namespace>/<name>/versions` listing says the version
+   was never published for it. Every other way a lookup can come up empty
+   (the registry is unreachable, the lock names a version or host the
+   registry does not know) fails the evaluation with the URL that was
+   tried. Nothing is ever recorded about a lookup that failed, so a
+   transient outage cannot leave a platform permanently missing from
+   `MODULE.bazel.lock`. A provider published for none of the requested
+   platforms is likewise an error, not a silently thinner hub.
+
+   Answers are cached in `module_ctx.facts`: one entry per archive, plus
+   the published-platform list for a provider that is missing a default
+   platform. With `MODULE.bazel.lock` enabled a re-evaluation makes no
+   provider requests at all.
 3. Declares an `http_archive` per distinct archive, in a **pool shared by
    every `providers` hub**. The repository is named from the archive's
    identity (`rt_prov_<registry>_<namespace>_<name>_<version>_<platform>`),
@@ -548,10 +561,68 @@ fail with a clear error at eval time. A source written with its own
 hostname (`app.terraform.io/acme/vpc/aws`) is resolved against that
 host rather than the tag's `registry`.
 
+### Git modules
+
+A `module` block whose source is a git address is resolved by the same
+`roots` scan, with no registry involved:
+
+```hcl
+module "vpc" {
+  source = "git::ssh://git@git.example.com/acme/terraform-modules.git//vpc?ref=v1.4.0"
+}
+```
+
+The three spellings Terraform accepts are all recognised: a forced
+`git::https://…` or `git::ssh://…` address, the scp-like
+`git@host:org/repo.git`, and the `github.com/org/repo` shorthand. Each
+may carry `//subdir` and `?ref=`. A `version` on a git block is an
+error, as it is for Terraform; the ref is the pin.
+
+**The ref must be a tag or a full commit id.** A branch moves, so
+nothing built from one is reproducible: a branch name, or a source with
+no `?ref=` at all, is an error at evaluation time. A commit id is exact
+by construction. A tag is looked up once and what it names is recorded
+in `MODULE.bazel.lock`, so every later evaluation declares the same
+thing even if the tag is moved afterwards.
+
+**GitHub over `https`** needs no git at all. The extension fetches the
+archive GitHub serves for the ref (`archive/refs/tags/<tag>.tar.gz` or
+`archive/<commit>.tar.gz`), exactly as it does for a registry module:
+unpacked once on a facts miss to record its integrity and read the
+module's own external references, then declared as an `http_archive`
+pinned by that integrity, named `rt_git_<host_path>_<ref>`. The tag
+form of the URL is not found for a branch, which is how a branch is
+refused on this path. A moved tag fails the next fresh fetch on
+integrity rather than being followed. The `github.com/org/repo`
+shorthand takes this path.
+
+**Every other remote**, `ssh://` to GitHub included, goes through the
+host's `git`. On a facts miss the extension asks the remote whether the
+ref is a tag (`ls-remote --tags`), refuses it if not, checks the tag or
+commit out one commit deep, records the commit and the module's own
+references, and discards the checkout. The repository Bazel builds
+against is a `new_git_repository` of that exact commit, named
+`rt_git_<host_path>_<commit>` and shared by every spelling and every hub
+that reaches it. It is fetched with the host's git and its credentials,
+so a private remote works wherever `git clone` of it would. `git` has to
+be on `PATH` both when the extension evaluates and when the repository
+is fetched.
+
+Either way, references found inside a git module are followed like a
+registry module's: a git module that names a registry module, or
+another git module, brings it into the hub. For a ref the facts already
+hold nothing is fetched.
+
+**Not handled:** `?sshkey=` (credentials come from the host's git
+configuration or, for GitHub archives, Bazel's downloader through
+`.netrc` or a credential helper), submodules, and non-git remote sources
+such as plain `https://` archives or `s3::`. Those are supplied by hand,
+below.
+
 **Modules the extension cannot fetch** — a registry module hosted off
-GitHub, or any plain `git::` / `https://` source — can still be
-supplied by hand. Fetch the archive with whatever repository rule
-fits, declare a [`terraform_external_module`](./terraform/terraform_external_module.md)
+GitHub, or a plain `https://` / `s3::` source — can still be supplied
+by hand. Fetch the archive with whatever repository rule fits, declare
+a [`terraform_external_module`](./terraform/terraform_external_module.md)
 in its build file with `source` copied verbatim from the `module`
 block, and put the target in `deps`:
 
@@ -567,9 +638,8 @@ http_archive(
 load("@rules_terraform//terraform:defs.bzl", "terraform_external_module")
 terraform_external_module(
     name = "module",
-    key = "acme_vpc",
-    source = "git::https://git.example.com/acme/terraform-vpc.git?ref=v1.4.0",
-    version = "1.4.0",
+    # Verbatim from the `module` block. No `version`: that is for registry modules.
+    source = "https://git.example.com/acme/terraform-vpc/-/archive/v1.4.0/terraform-vpc-v1.4.0.tar.gz",
     srcs = glob(["**/*.tf"]),
     visibility = ["//visibility:public"],
 )
@@ -669,6 +739,7 @@ parent's package.
 |---------------------------------------|---------------------------------------------------------------------------------------------------------------|
 | Bump / add a provider                 | Update `required_providers { }`; regenerate `.terraform.lock.hcl` with `bazel run` on the module's `terraform_providers_lock` target |
 | Bump / add a registry module          | Edit the `module { source = "…" version = "…" }` block and make sure its directory is in a `deps` tag's `roots`. Live-resolved on the next `bazel fetch`; regenerate `MODULE.bazel.lock` if you have it enabled. |
+| Bump / add a git module               | Edit the `?ref=` in the `module { source = "git::…" }` block to the new tag or commit id. Branch names are refused. A tag is looked up once and what it names is recorded in `MODULE.bazel.lock`. |
 | Add / rename a local module           | Write the `module { source = "…" }` block and add the child to the parent's `deps`; no lock file involved |
 | Verify everything                     | `bazel test //...` — runs validate, fmt, tftest, and every lock drift check in one shot                       |
 
@@ -680,7 +751,7 @@ The state of each bzlmod extension in rules_terraform:
 |----------------------------------------------------|:-------------:|-------------------------------------------------------------------------------------------------------------------------------------------------|
 | `terraform_toolchains` / `tofu_toolchains`     | ✓             | Every URL + integrity is vendored in `//<engine>/private:versions.bzl`. No network at eval time; identical inputs → identical repo declarations. |
 | `deps` tag, `lock` half                            | ✓             | Reads a checked-in `.terraform.lock.hcl`; never resolves version constraints. Registry API is called to look up download URLs, but the version and hash come from the lock. |
-| `deps` tag, `roots` half                           | ✗             | Live version-constraint resolution against the Registry API. `MODULE.bazel.lock` is the capture layer that closes the gap — see below.          |
+| `deps` tag, `roots` half                           | ✗             | Live version-constraint resolution against the Registry API, and a git tag looked up once and recorded as a fact. `MODULE.bazel.lock` is the capture layer that closes the gap — see below. |
 
 ### The role of `MODULE.bazel.lock`
 

@@ -236,8 +236,8 @@
   "moduleExtensions": {
     "//terraform:extensions.bzl%terraform": {
       "general": {
-        "bzlTransitiveDigest": "Zzz6Hf9bPehrr7g5uVb63Y6RfpAuAnvkJgT24ypPShE=",
-        "usagesDigest": "BESlSDgweSEVoh6TWB3WypRjkFxh67n+hO6qohGlFsQ=",
+        "bzlTransitiveDigest": "tjc7BY6lDMB46VQIPz4nADOfv0v0n5RNGULXR00JnQ0=",
+        "usagesDigest": "D88ZzSjLETXKeoAFpIKe8OdpsVnFKAV0z29CjuvFcSo=",
         "recordedInputs": [
           "REPO_MAPPING:,bazel_tools bazel_tools",
           "FILE:@@//tests/with_provider/.terraform.lock.hcl 5eef929349ea8a22381dccd9196af19d15b6993c6c20fd784bddebbf02fd4f46",
@@ -248,7 +248,10 @@
           "FILE:@@//tests/nested_registry/modules/wrapper/main.tf 3196e21fb1b93ddfb98e84bb42c7b3fc67ae91eb498793ad48e81c1420254efc",
           "FILE:@@//tests/transitive_registry DIR",
           "DIRENTS:@@//tests/transitive_registry 505777b42b59f99e59abd665b98653f35009a3123048ca2cd3136d57b150c126",
-          "FILE:@@//tests/transitive_registry/main.tf 4d69ce4ec4bb650e30c4fbf1ff91f544e1376d23341fbbe004250244fc93c81d"
+          "FILE:@@//tests/transitive_registry/main.tf 4d69ce4ec4bb650e30c4fbf1ff91f544e1376d23341fbbe004250244fc93c81d",
+          "FILE:@@//tests/with_git_module DIR",
+          "DIRENTS:@@//tests/with_git_module 505777b42b59f99e59abd665b98653f35009a3123048ca2cd3136d57b150c126",
+          "FILE:@@//tests/with_git_module/main.tf 24de112d26352ebccd16f41a4789adc5ba203e456bc8c21e3cff69bcd34f21ad"
         ],
         "generatedRepoSpecs": {
           "rt_prov_registry.terraform.io_hashicorp_null_3.2.4_linux_amd64": {
@@ -423,6 +426,28 @@
               "build_file_content": "load(\"@rules_terraform//terraform/private:terraform.bzl\", \"terraform_external_module\")\n\nterraform_external_module(\n    name = \"module\",\n    source = \"cloudposse/security-group/aws\",\n    version = \"2.2.0\",\n    srcs = glob(\n        [\"**/*.tf\", \"**/*.tf.json\", \"**/*.tofu\", \"**/*.tofu.json\"],\n        allow_empty = True,\n    ),\n    visibility = [\"//visibility:public\"],\n)\n"
             }
           },
+          "rt_git_github.com_cloudposse_terraform-null-label_0.25.0": {
+            "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_archive",
+            "attributes": {
+              "urls": [
+                "https://github.com/cloudposse/terraform-null-label/archive/refs/tags/0.25.0.tar.gz"
+              ],
+              "integrity": "sha256-fZlEtS/t7DyCrlnizzbduo9epOyV5w+Z9NGOx0HWCNw=",
+              "strip_prefix": "terraform-null-label-0.25.0",
+              "build_file_content": "load(\"@rules_terraform//terraform/private:terraform.bzl\", \"terraform_external_module\")\n\nterraform_external_module(\n    name = \"module_exports\",\n    source = \"git::https://github.com/cloudposse/terraform-null-label.git//exports?ref=0.25.0\",\n    version = \"\",\n    srcs = glob(\n        [\"exports/**/*.tf\", \"exports/**/*.tf.json\", \"exports/**/*.tofu\", \"exports/**/*.tofu.json\"],\n        allow_empty = True,\n    ),\n    visibility = [\"//visibility:public\"],\n)\n\nterraform_external_module(\n    name = \"module\",\n    source = \"git::https://github.com/cloudposse/terraform-null-label.git?ref=0.25.0\",\n    version = \"\",\n    srcs = glob(\n        [\"**/*.tf\", \"**/*.tf.json\", \"**/*.tofu\", \"**/*.tofu.json\"],\n        allow_empty = True,\n    ),\n    visibility = [\"//visibility:public\"],\n)\n\nterraform_external_module(\n    name = \"module_2\",\n    source = \"github.com/cloudposse/terraform-null-label?ref=0.25.0\",\n    version = \"\",\n    srcs = glob(\n        [\"**/*.tf\", \"**/*.tf.json\", \"**/*.tofu\", \"**/*.tofu.json\"],\n        allow_empty = True,\n    ),\n    visibility = [\"//visibility:public\"],\n)\n"
+            }
+          },
+          "rt_git_github.com_cloudposse_terraform-null-label_488ab91e34a2": {
+            "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_archive",
+            "attributes": {
+              "urls": [
+                "https://github.com/cloudposse/terraform-null-label/archive/488ab91e34a24a86957e397d9f7262ec5925586a.tar.gz"
+              ],
+              "integrity": "sha256-sI4Uk4ZMbtx07nkBRF1QHEPYi81dOIIwPrOAkgZQJ3c=",
+              "strip_prefix": "terraform-null-label-488ab91e34a24a86957e397d9f7262ec5925586a",
+              "build_file_content": "load(\"@rules_terraform//terraform/private:terraform.bzl\", \"terraform_external_module\")\n\nterraform_external_module(\n    name = \"module\",\n    source = \"git::https://github.com/cloudposse/terraform-null-label.git?ref=488ab91e34a24a86957e397d9f7262ec5925586a\",\n    version = \"\",\n    srcs = glob(\n        [\"**/*.tf\", \"**/*.tf.json\", \"**/*.tofu\", \"**/*.tofu.json\"],\n        allow_empty = True,\n    ),\n    visibility = [\"//visibility:public\"],\n)\n"
+            }
+          },
           "test_providers_with_provider": {
             "repoRuleId": "@@//terraform/private:deps_hub.bzl%terraform_deps_hub",
             "attributes": {
@@ -479,6 +504,19 @@
                 "@rt_mod_registry.terraform.io_cloudposse_security-group_aws_2.2.0//:module"
               ]
             }
+          },
+          "test_git_modules": {
+            "repoRuleId": "@@//terraform/private:deps_hub.bzl%terraform_deps_hub",
+            "attributes": {
+              "provider_repos": {},
+              "module_targets": [
+                "@rt_git_github.com_cloudposse_terraform-null-label_0.25.0//:module",
+                "@rt_git_github.com_cloudposse_terraform-null-label_0.25.0//:module_2",
+                "@rt_git_github.com_cloudposse_terraform-null-label_0.25.0//:module_exports",
+                "@rt_git_github.com_cloudposse_terraform-null-label_488ab91e34a2//:module",
+                "@rt_mod_registry.terraform.io_cloudposse_label_null_0.25.0//:module"
+              ]
+            }
           }
         },
         "moduleExtensionMetadata": {
@@ -489,7 +527,7 @@
     },
     "//tofu:extensions.bzl%tofu": {
       "general": {
-        "bzlTransitiveDigest": "tzE2emiB8+K35QYJLi9ogx1Z1RDAsRYvnEUz+XyEy9w=",
+        "bzlTransitiveDigest": "35Q5F+zMtgGhph08OmyeSnXoRUBi2cgnxRFFXAGm0gw=",
         "usagesDigest": "TusXPF1iGkgMgtWVnM7Ag/z5LQOm+hQiLpeauw+njbU=",
         "recordedInputs": [
           "REPO_MAPPING:,bazel_tools bazel_tools",
@@ -799,6 +837,29 @@
         "integrity": "sha256-0ipWHHP8v8th5tQt+5j5OFhZZNFtVChXuFZwCKjfWKo=",
         "strip_prefix": "terraform-aws-security-group-2.2.0",
         "url": "https://github.com/cloudposse/terraform-aws-security-group/archive/refs/tags/2.2.0.tar.gz"
+      },
+      "git:https://github.com/cloudposse/terraform-null-label.git//@0.25.0": {
+        "deps": [],
+        "integrity": "sha256-fZlEtS/t7DyCrlnizzbduo9epOyV5w+Z9NGOx0HWCNw=",
+        "strip_prefix": "terraform-null-label-0.25.0",
+        "url": "https://github.com/cloudposse/terraform-null-label/archive/refs/tags/0.25.0.tar.gz"
+      },
+      "git:https://github.com/cloudposse/terraform-null-label.git//@488ab91e34a24a86957e397d9f7262ec5925586a": {
+        "deps": [],
+        "integrity": "sha256-sI4Uk4ZMbtx07nkBRF1QHEPYi81dOIIwPrOAkgZQJ3c=",
+        "strip_prefix": "terraform-null-label-488ab91e34a24a86957e397d9f7262ec5925586a",
+        "url": "https://github.com/cloudposse/terraform-null-label/archive/488ab91e34a24a86957e397d9f7262ec5925586a.tar.gz"
+      },
+      "git:https://github.com/cloudposse/terraform-null-label.git//exports@0.25.0": {
+        "deps": [
+          {
+            "source": "cloudposse/label/null",
+            "version": "0.25.0"
+          }
+        ],
+        "integrity": "sha256-fZlEtS/t7DyCrlnizzbduo9epOyV5w+Z9NGOx0HWCNw=",
+        "strip_prefix": "terraform-null-label-0.25.0",
+        "url": "https://github.com/cloudposse/terraform-null-label/archive/refs/tags/0.25.0.tar.gz"
       },
       "provider:registry.terraform.io/carlpett/sops@1.2.0:darwin_amd64": {
         "sha256": "817bb1d00219de01a1bb84d7a8f216a2e92f488dd7f9491792dc3443f723aa72",

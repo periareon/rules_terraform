@@ -53,13 +53,80 @@ def _terraform_provider_build_file_content(provider_source, version, platform):
         ),
     )
 
+def _fail_lookup(what, provider_source, version, registry, url, detail):
+    fail(
+        ("could not look up {what} for provider {source} {version} on {registry}: {detail}\n" +
+         "URL: {url}\n" +
+         "Check that the registry is reachable from this machine and that the lock entry's " +
+         "host and source are the ones the provider is published under.").format(
+            what = what,
+            source = provider_source,
+            version = version,
+            registry = registry,
+            detail = detail,
+            url = url,
+        ),
+    )
+
+def _registry_platforms(module_ctx, registry, provider_source, version):
+    """The platforms the registry publishes `version` of a provider for.
+
+    Uses the Registry v1 `versions` endpoint, which both
+    `registry.terraform.io` and `registry.opentofu.org` implement. Fails if
+    the registry cannot be reached or does not list the version: a lock entry
+    naming a version the registry has never heard of is a lookup that is not
+    working, not an unusual provider.
+
+    Returns:
+        (list[str]) Sorted `<os>_<arch>` strings.
+    """
+    namespace, name = provider_source.split("/", 1)
+    url = "https://{registry}/v1/providers/{namespace}/{name}/versions".format(
+        registry = registry,
+        namespace = namespace,
+        name = name,
+    )
+    output = "registry_{namespace}_{name}_versions.json".format(
+        namespace = namespace.replace("/", "_"),
+        name = name.replace("/", "_"),
+    )
+    result = module_ctx.download(url = url, output = output, allow_fail = True)
+    if not result.success:
+        _fail_lookup("published platforms", provider_source, version, registry, url, "the request failed")
+
+    payload = json.decode(module_ctx.read(output), default = None)
+    entries = payload.get("versions") if type(payload) == "dict" else None
+    if type(entries) != "list":
+        _fail_lookup("published platforms", provider_source, version, registry, url, "the response is not a versions list")
+
+    for entry in entries:
+        if type(entry) != "dict" or entry.get("version") != version:
+            continue
+        platforms = [
+            "{}_{}".format(platform["os"], platform["arch"])
+            for platform in entry.get("platforms", [])
+            if type(platform) == "dict" and platform.get("os") and platform.get("arch")
+        ]
+        if not platforms:
+            _fail_lookup("published platforms", provider_source, version, registry, url, "the registry lists the version with no platforms")
+        return sorted(platforms)
+
+    _fail_lookup("published platforms", provider_source, version, registry, url, "the registry does not list this version")
+    return None
+
 def _registry_lookup(module_ctx, registry, provider_source, version, os_name, arch):
     """Fetch the download URL and hex SHA256 for a provider archive.
 
     Uses the Terraform Registry v1 provider download endpoint, which is
     supported by both `registry.terraform.io` and `registry.opentofu.org`.
-    Returns (url, sha256_hex) on success, or (None, None) if the provider
-    isn't available for the requested platform.
+    Only called for a platform the registry's own versions list says is
+    published, so there is no benign reason for it to fail: any failure is
+    reported and stops the evaluation rather than being read as "not
+    available", which would record the gap in `MODULE.bazel.lock` and never
+    retry it.
+
+    Returns:
+        (tuple[str, str]) `(url, sha256_hex)`.
     """
     namespace, name = provider_source.split("/", 1)
     url = "https://{registry}/v1/providers/{namespace}/{name}/{version}/download/{os}/{arch}".format(
@@ -83,13 +150,13 @@ def _registry_lookup(module_ctx, registry, provider_source, version, os_name, ar
         allow_fail = True,
     )
     if not result.success:
-        return None, None
+        _fail_lookup("the archive location", provider_source, version, registry, url, "the request failed")
 
-    payload = json.decode(module_ctx.read(output))
-    download_url = payload.get("download_url")
-    shasum = payload.get("shasum")
+    payload = json.decode(module_ctx.read(output), default = None)
+    download_url = payload.get("download_url") if type(payload) == "dict" else None
+    shasum = payload.get("shasum") if type(payload) == "dict" else None
     if not download_url or not shasum:
-        return None, None
+        _fail_lookup("the archive location", provider_source, version, registry, url, "the response carries no download_url and shasum")
     return download_url, shasum
 
 def terraform_provider_repository(*, name, provider_source, version, platform, url, sha256):
@@ -105,24 +172,77 @@ def terraform_provider_repository(*, name, provider_source, version, platform, u
 def _provider_fact_key(registry, source, version, platform):
     return "provider:{}/{}@{}:{}".format(registry, source, version, platform)
 
-def _lookup_cached(module_ctx, registry, provider, os_name, arch, existing_facts, new_facts):
+def _platforms_fact_key(registry, source, version):
+    return "provider-platforms:{}/{}@{}".format(registry, source, version)
+
+def _recall(key, existing_facts, new_facts):
+    """A fact by key: from this evaluation first, then the previous one.
+
+    Consulting `new_facts` first is what lets two hubs that lock the same
+    provider version share one lookup on the evaluation that first sees it.
+    A fact found in `existing_facts` is carried into `new_facts`, since Bazel
+    keeps only what this evaluation returns.
+    """
+    if new_facts != None and key in new_facts:
+        return new_facts[key]
+    if existing_facts != None and key in existing_facts:
+        if new_facts != None:
+            new_facts[key] = existing_facts[key]
+        return existing_facts[key]
+    return None
+
+def _remember(key, value, new_facts):
+    if new_facts != None:
+        new_facts[key] = value
+    return value
+
+def _cached_archive(registry, provider, platform, existing_facts, new_facts):
+    """The recorded `(url, sha256)` for one provider archive, or None.
+
+    Older evaluations recorded a platform the lookup failed for as an entry
+    with empty strings, which made a transient failure permanent. Such an
+    entry is treated as absent, so it is looked up again and not carried
+    forward.
+    """
+    key = _provider_fact_key(registry, provider.source, provider.version, platform)
+    cached = _recall(key, existing_facts, new_facts)
+    if type(cached) != "dict" or not cached.get("url") or not cached.get("sha256"):
+        if new_facts != None:
+            new_facts.pop(key, None)
+        return None
+    return cached["url"], cached["sha256"]
+
+def _published_platforms(module_ctx, registry, provider, existing_facts, new_facts):
+    """`_registry_platforms`, memoized through `module_ctx.facts`.
+
+    Which platforms a published provider version exists for does not change
+    after publication. It is only consulted to justify leaving a platform
+    out: a platform with a recorded archive is known to be published without
+    it, so a provider published for every default platform never needs this
+    fact at all.
+    """
+    key = _platforms_fact_key(registry, provider.source, provider.version)
+    cached = _recall(key, existing_facts, new_facts)
+    if type(cached) == "dict" and type(cached.get("platforms")) == "list" and cached["platforms"]:
+        return cached["platforms"]
+    platforms = _registry_platforms(module_ctx, registry, provider.source, provider.version)
+    _remember(key, {"platforms": platforms}, new_facts)
+    return platforms
+
+def _lookup_archive(module_ctx, registry, provider, os_name, arch, existing_facts, new_facts):
     """`_registry_lookup`, memoized through `module_ctx.facts` when available.
 
-    Where a published provider version's archive lives, and whether it exists
-    for a platform at all, does not change after publication. Remembering the
-    answer is what keeps a `.tf` edit anywhere in the workspace from costing
-    five registry round trips per provider.
+    Where a published provider version's archive lives does not change after
+    publication. Remembering the answer is what keeps a `.tf` edit anywhere
+    in the workspace from costing five registry round trips per provider.
 
-    Returns `(url, sha256)`, both `None` when the provider is not published
-    for the platform.
+    Returns:
+        (tuple[str, str]) `(url, sha256)`.
     """
     platform = "{}_{}".format(os_name, arch)
-    key = _provider_fact_key(registry, provider.source, provider.version, platform)
-    if existing_facts != None and key in existing_facts:
-        cached = existing_facts[key]
-        if new_facts != None:
-            new_facts[key] = cached
-        return (cached["url"] or None, cached["sha256"] or None)
+    cached = _cached_archive(registry, provider, platform, existing_facts, new_facts)
+    if cached != None:
+        return cached
 
     url, shasum = _registry_lookup(
         module_ctx = module_ctx,
@@ -132,8 +252,8 @@ def _lookup_cached(module_ctx, registry, provider, os_name, arch, existing_facts
         os_name = os_name,
         arch = arch,
     )
-    if new_facts != None:
-        new_facts[key] = {"sha256": shasum or "", "url": url or ""}
+    key = _provider_fact_key(registry, provider.source, provider.version, platform)
+    _remember(key, {"sha256": shasum, "url": url}, new_facts)
     return url, shasum
 
 def _check_against_lock(provider, platform, shasum, lock_file_path):
@@ -204,8 +324,10 @@ def resolve_providers_from_lock_file(
         existing_facts: (Facts|None) The previous evaluation's
             `module_ctx.facts`, consulted before any registry call.
         new_facts: (dict|None) Where to record this evaluation's lookups
-            for the next one. Entries are keyed per (registry, provider,
-            version, platform).
+            for the next one. One entry per (registry, provider, version,
+            platform) archive, plus one per (registry, provider, version)
+            listing its published platforms where that was needed to
+            leave a platform out.
 
     Returns:
         (dict[tuple[str, str], str]) Mapping (provider_source,
@@ -230,10 +352,30 @@ def resolve_providers_from_lock_file(
         # would turn into a hub with that provider missing.
         provider_registry = provider.host if provider.host else registry
 
+        # A platform is left out only on the registry's word that the version
+        # was never published for it. Any other reason a lookup could come up
+        # empty, a registry outage or a typo in the lock, is an error here
+        # and now, not a thinner hub that fails for someone else later.
+        published = None
         resolved_platforms = []
         for os_name, arch in platforms:
             platform_str = "{os}_{arch}".format(os = os_name, arch = arch)
-            url, shasum = _lookup_cached(
+            if _cached_archive(provider_registry, provider, platform_str, existing_facts, new_facts) == None:
+                if published == None:
+                    published = _published_platforms(
+                        module_ctx,
+                        provider_registry,
+                        provider,
+                        existing_facts,
+                        new_facts,
+                    )
+                if platform_str not in published:
+                    # The generated select() simply has no case for this
+                    # platform; a build there gets a clear "no matching
+                    # toolchain" error rather than a bogus download.
+                    continue
+
+            url, shasum = _lookup_archive(
                 module_ctx,
                 provider_registry,
                 provider,
@@ -242,12 +384,6 @@ def resolve_providers_from_lock_file(
                 existing_facts,
                 new_facts,
             )
-            if not url:
-                # Provider is not published for this platform. Skip it; the
-                # generated select() simply won't have a case for this
-                # constraint set. Users on that platform will get a clear
-                # "no matching toolchain" error rather than a bogus download.
-                continue
 
             _check_against_lock(provider, platform_str, shasum, lock_file_path)
             resolved_platforms.append(platform_str)
@@ -270,17 +406,13 @@ def resolve_providers_from_lock_file(
                 )
             provider_repos[(provider.source, platform_str)] = repo_name
 
-        # Not found for any platform is not "an unusual provider", it is a
-        # lookup that is not working: a typo in the lock, a registry that is
-        # down, or an entry that belongs to a registry we were not told
-        # about. Left alone it would surface much later, at `terraform init`,
-        # as a provider the module never installed.
+        # Published, but for none of the platforms asked for. Left alone it
+        # would surface much later, at `terraform init`, as a provider the
+        # module never installed.
         if not resolved_platforms:
             fail(
-                ("provider {source} {version} (from {lock}) could not be resolved on {registry} " +
-                 "for any of: {platforms}.\n" +
-                 "Check that the registry is reachable and that the lock entry's host and " +
-                 "source are the ones the provider is published under.").format(
+                ("provider {source} {version} (from {lock}) is not published on {registry} " +
+                 "for any of: {platforms}.").format(
                     source = provider.source,
                     version = provider.version,
                     lock = lock_file_path,
