@@ -437,6 +437,7 @@ is a fully-populated module directory.</p>
 <div class="table-wrapper"><table><thead><tr><th>Dependency type</th><th>Fetched from</th><th>Lock file</th><th>Refresh via</th></tr></thead><tbody>
 <tr><td>Providers</td><td>Terraform Registry v1 API</td><td><code>.terraform.lock.hcl</code></td><td><code>bazel run //path:providers_lock.update</code> (a <a href="./terraform/terraform_providers_lock.html"><code>terraform_providers_lock</code></a> target) — see below</td></tr>
 <tr><td>Registry modules</td><td>Terraform Registry v1 API</td><td>none — live-resolved from the <code>roots</code> of a <code>deps</code> tag</td><td>Automatic on <code>bazel fetch</code>. See "External registry modules" below for the tradeoff.</td></tr>
+<tr><td>Git modules</td><td>GitHub archives over https; the host's <code>git</code> for any other remote</td><td>none — the <code>?ref=</code> must be a tag or commit; what a tag names is recorded in <code>MODULE.bazel.lock</code></td><td>Change the <code>?ref=</code>. See "Git modules" below.</td></tr>
 <tr><td>Local / in-repo modules</td><td>Bazel target graph</td><td>none</td><td>Edit <code>deps</code> on the parent <code>terraform_module</code></td></tr>
 </tbody></table>
 </div>
@@ -467,30 +468,48 @@ updater (see <a href="index.html#getting-started">Getting started</a>); it runs 
 engine, so no <code>terraform</code> install is involved.</p>
 <p><strong>At repo-rule time</strong> the extension:</p>
 <ol>
-<li>Reads the lock file via <code>module_ctx.read</code>.</li>
-<li>For every <code>(provider, platform)</code> pair, calls
+<li>
+<p>Reads the lock file via <code>module_ctx.read</code>.</p>
+</li>
+<li>
+<p>For every <code>(provider, platform)</code> pair, calls
 <code>https://&lt;registry&gt;/v1/providers/&lt;namespace&gt;/&lt;name&gt;/&lt;version&gt;/download/&lt;os&gt;/&lt;arch&gt;</code>
 via <code>module_ctx.download(...)</code> and reads the returned JSON to obtain
 the archive <code>download_url</code> + <code>shasum</code>. The <code>shasum</code> must be one of the
 lock entry's <code>zh:</code> hashes — those are the archive checksums recorded
 when the lock was written — so the registry can tell Bazel <em>where</em> the
-archive is but not <em>what</em> it should contain. A provider that resolves
-for none of the platforms is an error, not a silently thinner hub.
-Answers are cached in <code>module_ctx.facts</code>, so with <code>MODULE.bazel.lock</code>
-enabled a re-evaluation makes no provider requests at all.</li>
-<li>Declares an <code>http_archive</code> per distinct archive, in a <strong>pool shared by
+archive is but not <em>what</em> it should contain.</p>
+<p>A platform is left out of the hub only when the registry's own
+<code>/v1/providers/&lt;namespace&gt;/&lt;name&gt;/versions</code> listing says the version
+was never published for it. Every other way a lookup can come up empty
+(the registry is unreachable, the lock names a version or host the
+registry does not know) fails the evaluation with the URL that was
+tried. Nothing is ever recorded about a lookup that failed, so a
+transient outage cannot leave a platform permanently missing from
+<code>MODULE.bazel.lock</code>. A provider published for none of the requested
+platforms is likewise an error, not a silently thinner hub.</p>
+<p>Answers are cached in <code>module_ctx.facts</code>: one entry per archive, plus
+the published-platform list for a provider that is missing a default
+platform. With <code>MODULE.bazel.lock</code> enabled a re-evaluation makes no
+provider requests at all.</p>
+</li>
+<li>
+<p>Declares an <code>http_archive</code> per distinct archive, in a <strong>pool shared by
 every <code>providers</code> hub</strong>. The repository is named from the archive's
 identity (<code>rt_prov_&lt;registry&gt;_&lt;namespace&gt;_&lt;name&gt;_&lt;version&gt;_&lt;platform&gt;</code>),
 so two lock files that agree on a provider version fetch and extract it
 once. Archives are lazy — Bazel only fetches the platform your build
-actually resolves.</li>
-<li>Emits the hub: <code>@my_deps</code> carries every provider in the lock plus the
+actually resolves.</p>
+</li>
+<li>
+<p>Emits the hub: <code>@my_deps</code> carries every provider in the lock plus the
 lock itself, and <code>@my_deps//&lt;namespace&gt;_&lt;name&gt;</code> is a per-provider alias
 that picks the right pool archive via <code>select()</code>. Depend on <code>@my_deps</code>
 and the module needs no <code>lock</code> attribute: a Terraform maintainer who
 adds a provider edits <code>required_providers</code> and regenerates the lock,
 and no BUILD file changes. Depend on individual aliases plus <code>lock</code> to
-install a subset.</li>
+install a subset.</p>
+</li>
 </ol>
 <p><strong>At build time</strong> <a href="./terraform/terraform_module.html"><code>terraform_init_aspect</code></a>
 extracts each provider's files into
@@ -621,10 +640,58 @@ time. Only GitHub-backed modules are supported; non-GitHub git hosts
 fail with a clear error at eval time. A source written with its own
 hostname (<code>app.terraform.io/acme/vpc/aws</code>) is resolved against that
 host rather than the tag's <code>registry</code>.</p>
+<h3 id="git-modules"><a class="header" href="#git-modules">Git modules</a></h3>
+<p>A <code>module</code> block whose source is a git address is resolved by the same
+<code>roots</code> scan, with no registry involved:</p>
+<pre><code class="language-hcl">module "vpc" {
+  source = "git::ssh://git@git.example.com/acme/terraform-modules.git//vpc?ref=v1.4.0"
+}
+</code></pre>
+<p>The three spellings Terraform accepts are all recognised: a forced
+<code>git::https://…</code> or <code>git::ssh://…</code> address, the scp-like
+<code>git@host:org/repo.git</code>, and the <code>github.com/org/repo</code> shorthand. Each
+may carry <code>//subdir</code> and <code>?ref=</code>. A <code>version</code> on a git block is an
+error, as it is for Terraform; the ref is the pin.</p>
+<p><strong>The ref must be a tag or a full commit id.</strong> A branch moves, so
+nothing built from one is reproducible: a branch name, or a source with
+no <code>?ref=</code> at all, is an error at evaluation time. A commit id is exact
+by construction. A tag is looked up once and what it names is recorded
+in <code>MODULE.bazel.lock</code>, so every later evaluation declares the same
+thing even if the tag is moved afterwards.</p>
+<p><strong>GitHub over <code>https</code></strong> needs no git at all. The extension fetches the
+archive GitHub serves for the ref (<code>archive/refs/tags/&lt;tag&gt;.tar.gz</code> or
+<code>archive/&lt;commit&gt;.tar.gz</code>), exactly as it does for a registry module:
+unpacked once on a facts miss to record its integrity and read the
+module's own external references, then declared as an <code>http_archive</code>
+pinned by that integrity, named <code>rt_git_&lt;host_path&gt;_&lt;ref&gt;</code>. The tag
+form of the URL is not found for a branch, which is how a branch is
+refused on this path. A moved tag fails the next fresh fetch on
+integrity rather than being followed. The <code>github.com/org/repo</code>
+shorthand takes this path.</p>
+<p><strong>Every other remote</strong>, <code>ssh://</code> to GitHub included, goes through the
+host's <code>git</code>. On a facts miss the extension asks the remote whether the
+ref is a tag (<code>ls-remote --tags</code>), refuses it if not, checks the tag or
+commit out one commit deep, records the commit and the module's own
+references, and discards the checkout. The repository Bazel builds
+against is a <code>new_git_repository</code> of that exact commit, named
+<code>rt_git_&lt;host_path&gt;_&lt;commit&gt;</code> and shared by every spelling and every hub
+that reaches it. It is fetched with the host's git and its credentials,
+so a private remote works wherever <code>git clone</code> of it would. <code>git</code> has to
+be on <code>PATH</code> both when the extension evaluates and when the repository
+is fetched.</p>
+<p>Either way, references found inside a git module are followed like a
+registry module's: a git module that names a registry module, or
+another git module, brings it into the hub. For a ref the facts already
+hold nothing is fetched.</p>
+<p><strong>Not handled:</strong> <code>?sshkey=</code> (credentials come from the host's git
+configuration or, for GitHub archives, Bazel's downloader through
+<code>.netrc</code> or a credential helper), submodules, and non-git remote sources
+such as plain <code>https://</code> archives or <code>s3::</code>. Those are supplied by hand,
+below.</p>
 <p><strong>Modules the extension cannot fetch</strong> — a registry module hosted off
-GitHub, or any plain <code>git::</code> / <code>https://</code> source — can still be
-supplied by hand. Fetch the archive with whatever repository rule
-fits, declare a <a href="./terraform/terraform_external_module.html"><code>terraform_external_module</code></a>
+GitHub, or a plain <code>https://</code> / <code>s3::</code> source — can still be supplied
+by hand. Fetch the archive with whatever repository rule fits, declare
+a <a href="./terraform/terraform_external_module.html"><code>terraform_external_module</code></a>
 in its build file with <code>source</code> copied verbatim from the <code>module</code>
 block, and put the target in <code>deps</code>:</p>
 <pre><code class="language-python"># MODULE.bazel
@@ -638,9 +705,8 @@ http_archive(
 load("@rules_terraform//terraform:defs.bzl", "terraform_external_module")
 terraform_external_module(
     name = "module",
-    key = "acme_vpc",
-    source = "git::https://git.example.com/acme/terraform-vpc.git?ref=v1.4.0",
-    version = "1.4.0",
+    # Verbatim from the `module` block. No `version`: that is for registry modules.
+    source = "https://git.example.com/acme/terraform-vpc/-/archive/v1.4.0/terraform-vpc-v1.4.0.tar.gz",
     srcs = glob(["**/*.tf"]),
     visibility = ["//visibility:public"],
 )
@@ -716,6 +782,7 @@ parent's package.</p>
 <div class="table-wrapper"><table><thead><tr><th>Change</th><th>What to do</th></tr></thead><tbody>
 <tr><td>Bump / add a provider</td><td>Update <code>required_providers { }</code>; regenerate <code>.terraform.lock.hcl</code> with <code>bazel run</code> on the module's <code>terraform_providers_lock</code> target</td></tr>
 <tr><td>Bump / add a registry module</td><td>Edit the <code>module { source = "…" version = "…" }</code> block and make sure its directory is in a <code>deps</code> tag's <code>roots</code>. Live-resolved on the next <code>bazel fetch</code>; regenerate <code>MODULE.bazel.lock</code> if you have it enabled.</td></tr>
+<tr><td>Bump / add a git module</td><td>Edit the <code>?ref=</code> in the <code>module { source = "git::…" }</code> block to the new tag or commit id. Branch names are refused. A tag is looked up once and what it names is recorded in <code>MODULE.bazel.lock</code>.</td></tr>
 <tr><td>Add / rename a local module</td><td>Write the <code>module { source = "…" }</code> block and add the child to the parent's <code>deps</code>; no lock file involved</td></tr>
 <tr><td>Verify everything</td><td><code>bazel test //...</code> — runs validate, fmt, tftest, and every lock drift check in one shot</td></tr>
 </tbody></table>
@@ -725,7 +792,7 @@ parent's package.</p>
 <div class="table-wrapper"><table><thead><tr><th>Extension</th><th style="text-align: center">Reproducible?</th><th>Why</th></tr></thead><tbody>
 <tr><td><code>terraform_toolchains</code> / <code>tofu_toolchains</code></td><td style="text-align: center">✓</td><td>Every URL + integrity is vendored in <code>//&lt;engine&gt;/private:versions.bzl</code>. No network at eval time; identical inputs → identical repo declarations.</td></tr>
 <tr><td><code>deps</code> tag, <code>lock</code> half</td><td style="text-align: center">✓</td><td>Reads a checked-in <code>.terraform.lock.hcl</code>; never resolves version constraints. Registry API is called to look up download URLs, but the version and hash come from the lock.</td></tr>
-<tr><td><code>deps</code> tag, <code>roots</code> half</td><td style="text-align: center">✗</td><td>Live version-constraint resolution against the Registry API. <code>MODULE.bazel.lock</code> is the capture layer that closes the gap — see below.</td></tr>
+<tr><td><code>deps</code> tag, <code>roots</code> half</td><td style="text-align: center">✗</td><td>Live version-constraint resolution against the Registry API, and a git tag looked up once and recorded as a fact. <code>MODULE.bazel.lock</code> is the capture layer that closes the gap — see below.</td></tr>
 </tbody></table>
 </div>
 <h3 id="the-role-of-modulebazellock"><a class="header" href="#the-role-of-modulebazellock">The role of <code>MODULE.bazel.lock</code></a></h3>
@@ -881,7 +948,7 @@ list the target in the consuming <code>terraform_module</code>'s <code>deps</cod
 <tr><td style="text-align: left"><a id="terraform_external_module-name"></a>name</td><td style="text-align: left">A unique name for this target.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels#target-names">Name</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
 <tr><td style="text-align: left"><a id="terraform_external_module-srcs"></a>srcs</td><td style="text-align: left">Module source files.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">List of labels</a></td><td style="text-align: left">optional</td><td style="text-align: left"><code>[]</code></td></tr>
 <tr><td style="text-align: left"><a id="terraform_external_module-source"></a>source</td><td style="text-align: left">The <code>source</code> string exactly as <code>module</code> blocks write it: a registry address (<code>terraform-aws-modules/vpc/aws</code>, with any <code>//subdir</code>), or any other address Terraform accepts, such as <code>git::https://…?ref=v1.2.0</code>. The init aspect installs this module under every <code>module</code> block whose <code>source</code> matches.</td><td style="text-align: left">String</td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
-<tr><td style="text-align: left"><a id="terraform_external_module-version"></a>version</td><td style="text-align: left">Module version.</td><td style="text-align: left">String</td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
+<tr><td style="text-align: left"><a id="terraform_external_module-version"></a>version</td><td style="text-align: left">The module's version, for a registry module. The init aspect records it in the module manifest and uses it to pick between two versions of one module. Leave it empty for a git or other non-registry source: Terraform rejects a manifest entry whose version is not a semantic version, and a commit id or tag name is not one.</td><td style="text-align: left">String</td><td style="text-align: left">optional</td><td style="text-align: left"><code>""</code></td></tr>
 </tbody></table>
 </div><div style="break-before: page; page-break-before: always;"></div><!-- Generated with Stardoc: http://skydoc.bazel.build -->
 <p>terraform_fmt_aspect</p>
@@ -1137,14 +1204,14 @@ terraform_toolchains.version(version = "1.9.8", default = True)
 select any of them: <code>--@rules_terraform//terraform/settings:version=1.9.8</code>.</p>
 <h2 id="terraform"><a class="header" href="#terraform"><code>terraform</code></a></h2>
 <p>Carries the <code>deps</code> tag class: the providers a lock file pins and the
-registry modules some directories' <code>module</code> blocks name, as one hub per
-tag.</p>
+registry and git modules some directories' <code>module</code> blocks name, as one
+hub per tag.</p>
 <pre><code class="language-python">terraform = use_extension("@rules_terraform//terraform:extensions.bzl", "terraform")
 
 # One `deps` tag per lock file. `lock` brings the providers the lock pins;
-# `roots` brings the registry modules named by the `module` blocks in those
-# directories (root modules and shared libraries alike). Either may be
-# omitted.
+# `roots` brings the registry and git modules named by the `module` blocks
+# in those directories (root modules and shared libraries alike). Either may
+# be omitted.
 terraform.deps(
     name = "app",
     lock = "//path/to/module:.terraform.lock.hcl",
@@ -1158,7 +1225,7 @@ terraform.deps(
 use_repo(terraform, "app")
 </code></pre>
 <p><code>@app</code> is a <code>terraform_dependency_group</code>: every provider in the lock, the
-lock itself, and every registry module the roots name. A <code>terraform_module</code>
+lock itself, and every external module the roots name. A <code>terraform_module</code>
 that depends on it needs no <code>lock</code> attribute. <code>@app//:providers</code> and
 <code>@app//:modules</code> are the two halves, and <code>@app//&lt;namespace&gt;_&lt;name&gt;</code> is one
 provider. Name the hub after what it serves rather than after the tag.</p>
@@ -1173,7 +1240,7 @@ duplicate is reported at evaluation time.</p>
 <div class="table-wrapper"><table><thead><tr><th>Attribute</th><th>Type</th><th>Description</th></tr></thead><tbody>
 <tr><td><code>name</code></td><td><code>string</code> (required)</td><td>Hub repository name.</td></tr>
 <tr><td><code>lock</code></td><td><code>label</code></td><td>A <code>.terraform.lock.hcl</code>. Every provider it pins is fetched for every platform the registry publishes.</td></tr>
-<tr><td><code>roots</code></td><td><code>label_list</code></td><td>Directories whose <code>module { source = "…" }</code> blocks name registry modules, each as any <code>.tf</code> file inside it. Every <code>*.tf</code> in each directory is scanned; registry modules composed of other registry modules are followed.</td></tr>
+<tr><td><code>roots</code></td><td><code>label_list</code></td><td>Directories whose <code>module { source = "…" }</code> blocks name registry or git modules (<code>git::…</code>, <code>git@…</code>, <code>github.com/…</code>, pinned with <code>?ref=</code> to a tag or full commit id; branches are refused), each as any <code>.tf</code> file inside it. Every <code>*.tf</code> in each directory is scanned; modules composed of other registry or git modules are followed. GitHub <code>https</code> remotes are fetched as integrity-pinned archives with no git involved; other remotes go through the host's <code>git</code>.</td></tr>
 <tr><td><code>root</code></td><td><code>label</code></td><td>Shorthand for a one-element <code>roots</code>.</td></tr>
 <tr><td><code>registry</code></td><td><code>string</code> (default empty)</td><td>Registry host to query for lock entries and sources that name none. Empty means <code>registry.terraform.io</code> from this extension, <code>registry.opentofu.org</code> from the OpenTofu one.</td></tr>
 </tbody></table>
@@ -1277,7 +1344,7 @@ list the target in the consuming <code>terraform_module</code>'s <code>deps</cod
 <tr><td style="text-align: left"><a id="tofu_external_module-name"></a>name</td><td style="text-align: left">A unique name for this target.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels#target-names">Name</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
 <tr><td style="text-align: left"><a id="tofu_external_module-srcs"></a>srcs</td><td style="text-align: left">Module source files.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">List of labels</a></td><td style="text-align: left">optional</td><td style="text-align: left"><code>[]</code></td></tr>
 <tr><td style="text-align: left"><a id="tofu_external_module-source"></a>source</td><td style="text-align: left">The <code>source</code> string exactly as <code>module</code> blocks write it: a registry address (<code>terraform-aws-modules/vpc/aws</code>, with any <code>//subdir</code>), or any other address Terraform accepts, such as <code>git::https://…?ref=v1.2.0</code>. The init aspect installs this module under every <code>module</code> block whose <code>source</code> matches.</td><td style="text-align: left">String</td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
-<tr><td style="text-align: left"><a id="tofu_external_module-version"></a>version</td><td style="text-align: left">Module version.</td><td style="text-align: left">String</td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
+<tr><td style="text-align: left"><a id="tofu_external_module-version"></a>version</td><td style="text-align: left">The module's version, for a registry module. The init aspect records it in the module manifest and uses it to pick between two versions of one module. Leave it empty for a git or other non-registry source: Terraform rejects a manifest entry whose version is not a semantic version, and a commit id or tag name is not one.</td><td style="text-align: left">String</td><td style="text-align: left">optional</td><td style="text-align: left"><code>""</code></td></tr>
 </tbody></table>
 </div><div style="break-before: page; page-break-before: always;"></div><!-- Generated with Stardoc: http://skydoc.bazel.build -->
 <p>tofu_fmt_test</p>

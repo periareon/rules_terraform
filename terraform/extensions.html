@@ -184,14 +184,14 @@ terraform_toolchains.version(version = "1.9.8", default = True)
 select any of them: <code>--@rules_terraform//terraform/settings:version=1.9.8</code>.</p>
 <h2 id="terraform"><a class="header" href="#terraform"><code>terraform</code></a></h2>
 <p>Carries the <code>deps</code> tag class: the providers a lock file pins and the
-registry modules some directories' <code>module</code> blocks name, as one hub per
-tag.</p>
+registry and git modules some directories' <code>module</code> blocks name, as one
+hub per tag.</p>
 <pre><code class="language-python">terraform = use_extension("@rules_terraform//terraform:extensions.bzl", "terraform")
 
 # One `deps` tag per lock file. `lock` brings the providers the lock pins;
-# `roots` brings the registry modules named by the `module` blocks in those
-# directories (root modules and shared libraries alike). Either may be
-# omitted.
+# `roots` brings the registry and git modules named by the `module` blocks
+# in those directories (root modules and shared libraries alike). Either may
+# be omitted.
 terraform.deps(
     name = "app",
     lock = "//path/to/module:.terraform.lock.hcl",
@@ -205,7 +205,7 @@ terraform.deps(
 use_repo(terraform, "app")
 </code></pre>
 <p><code>@app</code> is a <code>terraform_dependency_group</code>: every provider in the lock, the
-lock itself, and every registry module the roots name. A <code>terraform_module</code>
+lock itself, and every external module the roots name. A <code>terraform_module</code>
 that depends on it needs no <code>lock</code> attribute. <code>@app//:providers</code> and
 <code>@app//:modules</code> are the two halves, and <code>@app//&lt;namespace&gt;_&lt;name&gt;</code> is one
 provider. Name the hub after what it serves rather than after the tag.</p>
@@ -220,7 +220,7 @@ duplicate is reported at evaluation time.</p>
 <div class="table-wrapper"><table><thead><tr><th>Attribute</th><th>Type</th><th>Description</th></tr></thead><tbody>
 <tr><td><code>name</code></td><td><code>string</code> (required)</td><td>Hub repository name.</td></tr>
 <tr><td><code>lock</code></td><td><code>label</code></td><td>A <code>.terraform.lock.hcl</code>. Every provider it pins is fetched for every platform the registry publishes.</td></tr>
-<tr><td><code>roots</code></td><td><code>label_list</code></td><td>Directories whose <code>module { source = "…" }</code> blocks name registry modules, each as any <code>.tf</code> file inside it. Every <code>*.tf</code> in each directory is scanned; registry modules composed of other registry modules are followed.</td></tr>
+<tr><td><code>roots</code></td><td><code>label_list</code></td><td>Directories whose <code>module { source = "…" }</code> blocks name registry or git modules (<code>git::…</code>, <code>git@…</code>, <code>github.com/…</code>, pinned with <code>?ref=</code> to a tag or full commit id; branches are refused), each as any <code>.tf</code> file inside it. Every <code>*.tf</code> in each directory is scanned; modules composed of other registry or git modules are followed. GitHub <code>https</code> remotes are fetched as integrity-pinned archives with no git involved; other remotes go through the host's <code>git</code>.</td></tr>
 <tr><td><code>root</code></td><td><code>label</code></td><td>Shorthand for a one-element <code>roots</code>.</td></tr>
 <tr><td><code>registry</code></td><td><code>string</code> (default empty)</td><td>Registry host to query for lock entries and sources that name none. Empty means <code>registry.terraform.io</code> from this extension, <code>registry.opentofu.org</code> from the OpenTofu one.</td></tr>
 </tbody></table>
