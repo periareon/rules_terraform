@@ -1,0 +1,47 @@
+load("//terraform:terraform_binary.bzl", "terraform_binary")
+load("//terraform:terraform_fmt_test.bzl", "terraform_fmt_test")
+load("//terraform:terraform_module.bzl", "terraform_module")
+load("//terraform:terraform_validate_test.bzl", "terraform_validate_test")
+load("//tofu:tofu_binary.bzl", "tofu_binary")
+load("//tofu:tofu_fmt_test.bzl", "tofu_fmt_test")
+load("//tofu:tofu_validate_test.bzl", "tofu_validate_test")
+
+terraform_module(
+    name = "with_git_module",
+    srcs = glob(["*.tf"]),
+    # Three spellings of one git repository at one tag, one of them a
+    # `//subdir` whose module names a registry module.
+    deps = [
+        "@test_git_modules",
+    ],
+)
+
+terraform_binary(
+    name = "terraform",
+    root = ":with_git_module",
+)
+
+terraform_validate_test(
+    name = "with_git_module_test",
+    target = ":with_git_module",
+)
+
+terraform_fmt_test(
+    name = "with_git_module_fmt_test",
+    target = ":with_git_module",
+)
+
+tofu_binary(
+    name = "tofu",
+    root = ":with_git_module",
+)
+
+tofu_validate_test(
+    name = "with_git_module_tofu_test",
+    target = ":with_git_module",
+)
+
+tofu_fmt_test(
+    name = "with_git_module_tofu_fmt_test",
+    target = ":with_git_module",
+)

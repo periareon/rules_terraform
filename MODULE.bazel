@@ -67,8 +67,17 @@ terraform.deps(
         "//tests/transitive_registry:main.tf",
     ],
 )
+
+# Git modules: three spellings of one GitHub repository at one tag, including
+# a `//subdir` whose module names a registry module, so the checkout is read
+# for its own references.
+terraform.deps(
+    name = "test_git_modules",
+    root = "//tests/with_git_module:main.tf",
+)
 use_repo(
     terraform,
+    "test_git_modules",
     "test_providers_with_modules_ext",
     "test_providers_with_provider",
     "test_providers_with_third_party",

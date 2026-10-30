@@ -18,9 +18,10 @@ sha256). Once resolved, the registered `http_archive` fetches direct
 from GitHub — no registry hop at build time.
 """
 
+load(":git_source.bzl", "is_git_source")
 load(":semver.bzl", "highest_matching", "parse_constraints", "parse_version")
 
-visibility(["//terraform/...", "//tofu/..."])
+visibility(["//terraform/...", "//tofu/...", "//tests/..."])
 
 def _registry_source(source, registry):
     """Split a module source into the registry to ask and the address to ask for.
@@ -284,7 +285,12 @@ def is_registry_source(source):
     """
     if not source:
         return False
-    for prefix in ("./", "../", "/", "git::", "git@", "http://", "https://", "s3::", "gcs::"):
+
+    # Checked first: `github.com/org/repo` has as many segments as a registry
+    # address, and Terraform's own detectors run before registry lookup.
+    if is_git_source(source):
+        return False
+    for prefix in ("./", "../", "/", "http://", "https://", "s3::", "gcs::"):
         if source.startswith(prefix):
             return False
 

@@ -122,8 +122,8 @@ def deps_tag_class(default_registry):
     """
     return tag_class(
         doc = """What a root module needs from outside the workspace: the
-        providers a `.terraform.lock.hcl` pins (`lock`) and the registry
-        modules named by the `module` blocks in some directories (`roots`).
+        providers a `.terraform.lock.hcl` pins (`lock`) and the registry and
+        git modules named by the `module` blocks in some directories (`roots`).
         Either half may be omitted. Produces the hub `@<name>`; a
         `terraform_module` that depends on it needs no `lock` attribute.
         `@<name>//:providers`, `@<name>//:modules` and
@@ -152,14 +152,16 @@ def deps_tag_class(default_registry):
             ),
             "roots": attr.label_list(
                 doc = """The directories whose `module { source = "…" }` blocks
-                name registry modules, each given as any `.tf` file inside it.
+                name registry or git modules (`git::…`, `git@…`, `github.com/…`,
+                pinned with `?ref=` to a tag or full commit id; a branch is
+                refused), each given as any `.tf` file inside it.
                 The file gets no special treatment: every `*.tf` in its
                 directory is read, and a sibling would behave identically. Root
                 modules and shared library modules both belong here, since a
                 library's own `module` blocks are what reach the registry.
 
-                Registry modules composed of other registry modules are
-                followed. Archives are pooled across every hub, and a module
+                Modules composed of other registry or git modules are
+                followed. Fetches are pooled across every hub, and a module
                 depending on a hub depends on a candidate pool from which the
                 init aspect installs only what its own `module` blocks name,
                 so listing many directories in one hub costs nothing.
