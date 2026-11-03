@@ -1,0 +1,49 @@
+load("//terraform:terraform_binary.bzl", "terraform_binary")
+load("//terraform:terraform_module.bzl", "terraform_module")
+load("//terraform:terraform_validate_test.bzl", "terraform_validate_test")
+load("//tofu:tofu_validate_test.bzl", "tofu_validate_test")
+
+# Not valid in the default workspace, so the aspect skips it and one test
+# per workspace covers it instead.
+terraform_module(
+    name = "with_workspaces",
+    srcs = glob(["*.tf"]),
+    tags = ["no_validate"],
+)
+
+terraform_binary(
+    name = "terraform",
+    root = ":with_workspaces",
+)
+
+[
+    terraform_validate_test(
+        name = "validate_{}".format(workspace),
+        target = ":with_workspaces",
+        workspace = workspace,
+    )
+    for workspace in [
+        "dev",
+        "prod",
+    ]
+]
+
+[
+    tofu_validate_test(
+        name = "validate_{}_tofu".format(workspace),
+        target = ":with_workspaces",
+        workspace = workspace,
+    )
+    for workspace in [
+        "dev",
+        "prod",
+    ]
+]
+
+# No `workspace`: the environment decides. `--test_env=TF_WORKSPACE=dev`
+# passes it; without one it fails, which is the point of the fixture.
+terraform_validate_test(
+    name = "validate_from_env",
+    tags = ["manual"],
+    target = ":with_workspaces",
+)

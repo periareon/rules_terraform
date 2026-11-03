@@ -112,6 +112,8 @@ def build_validate_test_impl(ctx, toolchain_type, *, engine):
         "terraform": rlocationpath(toolchain.terraform, ctx.workspace_name),
         "use_runfiles": True,
     }
+    if ctx.attr.workspace:
+        args_data["workspace"] = ctx.attr.workspace
 
     args_file = ctx.actions.declare_file("{}.{}_validate_args.json".format(ctx.label.name, engine.name))
     ctx.actions.write(output = args_file, content = json.encode_indent(args_data))

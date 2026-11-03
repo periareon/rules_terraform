@@ -428,6 +428,8 @@ def build_runner(ctx, toolchain_type, *, mode):
         "module_dir_rlocationpath": rlocationpath(module_directory, ctx.workspace_name),
         "terraform_rlocationpath": rlocationpath(toolchain.terraform, ctx.workspace_name),
     }
+    if test_mode and ctx.attr.workspace:
+        args_data["workspace"] = ctx.attr.workspace
     if mode == "plan":
         args_data["plan"] = {
             "args": ctx.attr.plan_args,
@@ -485,7 +487,20 @@ RUNNER_ATTRS = {
     ),
 }
 
-PLAN_TEST_ATTRS = dict(RUNNER_ATTRS, **{
+WORKSPACE_ATTR = {
+    "workspace": attr.string(
+        doc = """Run in this Terraform workspace: `TF_WORKSPACE` is set to it
+        for the engine, over anything in the test environment. Unset, the
+        workspace is whatever the environment selects (`--test_env`), else
+        `default`. One test target per workspace is how a root whose
+        configuration is keyed on `terraform.workspace` gets every
+        workspace checked.""",
+    ),
+}
+
+TEST_ATTRS = dict(RUNNER_ATTRS, **WORKSPACE_ATTR)
+
+PLAN_TEST_ATTRS = dict(TEST_ATTRS, **{
     "expect_no_changes": attr.bool(
         default = False,
         doc = """Fail when the plan proposes any change. Off by default:

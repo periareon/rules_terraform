@@ -21,6 +21,10 @@ type ArgsFile struct {
 	// runs inside — the layout was settled at analysis time.
 	ModuleDir   string `json:"module_dir"`
 	UseRunfiles bool   `json:"use_runfiles,omitempty"`
+	// Workspace is the test's `workspace` attribute: the Terraform workspace
+	// to validate in, set as TF_WORKSPACE over anything the environment
+	// carries. Empty leaves the environment's choice, else `default`.
+	Workspace string `json:"workspace,omitempty"`
 }
 
 type args struct {
@@ -128,6 +132,9 @@ func run() int {
 		return 1
 	}
 	defer envCleanup()
+	if argsFile.Workspace != "" {
+		env = moduledir.SetEnv(env, "TF_WORKSPACE", argsFile.Workspace)
+	}
 
 	// Buffer the engine's output so the "Success! The configuration is
 	// valid." chatter doesn't surface as `INFO: From TerraformValidate …`

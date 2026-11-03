@@ -208,6 +208,18 @@ func HermeticEnv(environ []string) ([]string, func(), error) {
 	return out, cleanup, nil
 }
 
+// SetEnv returns environ with key set to value, replacing any earlier value.
+func SetEnv(environ []string, key, value string) []string {
+	out := make([]string, 0, len(environ)+1)
+	for _, kv := range environ {
+		if strings.HasPrefix(kv, key+"=") {
+			continue
+		}
+		out = append(out, kv)
+	}
+	return append(out, key+"="+value)
+}
+
 // LocalStateFiles returns the local-backend state files present directly in
 // workDir: `terraform.tfstate` and the `terraform.tfstate.d/` workspace
 // directory. Both only exist when the engine was run against a configuration
