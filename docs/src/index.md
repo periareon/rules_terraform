@@ -258,21 +258,27 @@ The `terraform_binary` rule creates an executable that copies the
 aspect-built module directory into a writable temp dir and runs the
 real `terraform` binary there.
 
-That temp dir is removed when the command finishes, which means **a
-Bazel-run module needs a remote backend**. Without a `backend` or
-`cloud` block, the runner refuses `apply`, `destroy`, `import`,
-`refresh`, `taint`, `untaint` and the writing `state` subcommands, and
-the message names the fix. `plan` and the read-only commands are never
-refused.
+That temp dir is removed when the command finishes. A module with a
+`backend` or `cloud` block is unaffected: its state belongs to the backend.
+A module with neither keeps its state where the native CLI keeps it, the
+working directory, which here is the temp dir, so by default the state goes
+with the run: `disposable_state` on the `terraform_module` is `True`. A run
+that did write state is kept and its path printed, so the record of what an
+`apply` created never vanishes silently, but the next run starts from a
+fresh copy and does not see it. Any state sitting in the module's source
+directory is ignored.
 
-Where disposable state is the point (demos, sandboxes, bootstrapping the
-bucket that will hold real state), set `allow_ephemeral_state = True` on
-the `terraform_module`. State is then kept between runs under
-`bazel-out/<config>/bin/<pkg>/<name>.state/`: private to the machine,
-forked per build configuration, and deleted by `bazel clean`. The runner
-prints the path after each run. Relative file arguments (`-out=tfplan`,
-`-var-file=x.tfvars`) resolve against the temp dir, so pass absolute
-paths.
+Where the state has to outlive the run and there is still no backend
+(bootstrapping the bucket that will hold real state, a sandbox applied and
+destroyed over days), set `disposable_state = False`. The runner then
+points the engine's local backend at `terraform.tfstate` (and
+`terraform.tfstate.d/` for workspaces) in a per-module directory under
+`bazel-out/rules_terraform/`, and names it after every state-writing
+command. That directory is private to the machine and `bazel clean`
+deletes it, state included; nothing is written to the source tree. Setting
+it on a module that declares a backend is an error. Relative file arguments
+(`-out=tfplan`, `-var-file=x.tfvars`) resolve against the temp dir, so pass
+absolute paths.
 
 Because the aspect already installed the providers and the module
 manifest, the only thing a run-time `terraform init` still contributes is

@@ -177,3 +177,53 @@ func TestSetupWorkingDirectoryRequiresModuleDir(t *testing.T) {
 		t.Fatal("setupWorkingDirectory succeeded without a module directory; want an error")
 	}
 }
+
+func TestLocalBackendOverride(t *testing.T) {
+	got := localBackendOverride(filepath.Join("ws", "iac", "app"))
+	for _, want := range []string{
+		`backend "local"`,
+		`path          = "ws/iac/app/terraform.tfstate"`,
+		`workspace_dir = "ws/iac/app/terraform.tfstate.d"`,
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("override missing %q:\n%s", want, got)
+		}
+	}
+}
+
+func TestExecroot(t *testing.T) {
+	root := t.TempDir()
+	execrootDir := filepath.Join(root, "execroot", "_main")
+	const rel = "bazel-out/k8-fastbuild/bin/pkg/x.terraform_args.json"
+	args := filepath.Join(execrootDir, filepath.FromSlash(rel))
+	if err := os.MkdirAll(filepath.Dir(args), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(args, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// Reached through a runfiles-tree symlink, as under `bazel run` with
+	// runfile links built.
+	link := filepath.Join(root, "x.runfiles", "_main", "pkg", "x.terraform_args.json")
+	if err := os.MkdirAll(filepath.Dir(link), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(args, link); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	want, err := filepath.EvalSymlinks(execrootDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{args, link} {
+		if got := execroot(path, rel); got != want {
+			t.Errorf("execroot(%s) = %q, want %q", path, got, want)
+		}
+	}
+	if got := execroot(filepath.Join(root, "elsewhere", "x.terraform_args.json"), rel); got != "" {
+		t.Errorf("execroot of a relocated file = %q, want empty", got)
+	}
+	if got := execroot(args, ""); got != "" {
+		t.Errorf("execroot with no relative path = %q, want empty", got)
+	}
+}

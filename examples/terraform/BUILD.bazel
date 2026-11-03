@@ -26,11 +26,12 @@ load("@rules_terraform//terraform:terraform_validate_test.bzl", "terraform_valid
 terraform_module(
     name = "example",
     srcs = glob(["*.tf"]),
-    # A demo with no backend block: its state is disposable, so `apply` and
-    # `destroy` are allowed against local state kept under bazel-out. A real
-    # deployment declares a backend instead and leaves this unset.
-    allow_ephemeral_state = True,
     data = glob(["*.tftest.hcl"]),
+    # A demo with no backend block. State is kept under bazel-out between
+    # runs, so an `apply` here can be followed by a `destroy`; `bazel clean`
+    # removes it. A real deployment declares a backend instead and leaves
+    # this unset.
+    disposable_state = False,
     # `@app` is the hub the `deps` tag in MODULE.bazel produces: every
     # provider the lock pins, and the lock itself. Adding a provider to
     # `required_providers` and rerunning `providers_lock.update` is then a

@@ -33,11 +33,12 @@ load("@rules_terraform//tofu:tofu_validate_test.bzl", "tofu_validate_test")
 tofu_module(
     name = "example",
     srcs = glob(["*.tf"]),
-    # A demo with no backend block: its state is disposable, so `apply` and
-    # `destroy` are allowed against local state kept under bazel-out. A real
-    # deployment declares a backend instead and leaves this unset.
-    allow_ephemeral_state = True,
     data = glob(["*.tftest.hcl"]),
+    # A demo with no backend block. State is kept under bazel-out between
+    # runs, so an `apply` here can be followed by a `destroy`; `bazel clean`
+    # removes it. A real deployment declares a backend instead and leaves
+    # this unset.
+    disposable_state = False,
     # `@app` is the hub the `tofu.deps` tag in MODULE.bazel produces: every
     # provider the lock pins, the lock itself, and the registry module the
     # `label` block names. Adding a provider or a registry module needs no
