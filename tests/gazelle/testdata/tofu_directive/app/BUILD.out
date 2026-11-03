@@ -1,0 +1,6 @@
+load("@rules_terraform//tofu:defs.bzl", "tofu_module")
+
+tofu_module(
+    name = "app",
+    srcs = ["main.tf"],
+)

@@ -1,0 +1,20 @@
+load("@rules_terraform//terraform:defs.bzl", "terraform_binary", "terraform_module", "terraform_providers_lock")
+
+# gazelle:tf_engine tofu
+# gazelle:tf_kind root
+
+terraform_module(
+    name = "app",
+    srcs = ["main.tf"],
+)
+
+terraform_binary(
+    name = "terraform",
+    root = ":app",
+)
+
+terraform_providers_lock(
+    name = "providers_lock.update",
+    output = ".terraform.lock.hcl",
+    target = ":app",
+)

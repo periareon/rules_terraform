@@ -1,0 +1,12 @@
+load("@rules_terraform//terraform:defs.bzl", "terraform_module")
+
+# gazelle:tf_deps_hub shared registry
+
+terraform_module(
+    name = "lib",
+    srcs = ["main.tf"],
+    deps = [
+        "@registry",
+        "@shared",
+    ],
+)

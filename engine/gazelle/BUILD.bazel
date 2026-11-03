@@ -1,0 +1,34 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "gazelle",
+    srcs = [
+        "config.go",
+        "engine.go",
+        "files.go",
+        "generate.go",
+        "lang.go",
+        "resolve.go",
+    ],
+    importpath = "rules_terraform/engine/gazelle",
+    visibility = [
+        "//engine:__subpackages__",
+        "//terraform:__subpackages__",
+        "//tofu:__subpackages__",
+    ],
+    deps = [
+        "//engine/internal/tfparse",
+        "@gazelle//config",
+        "@gazelle//label",
+        "@gazelle//language",
+        "@gazelle//repo",
+        "@gazelle//resolve",
+        "@gazelle//rule",
+    ],
+)
+
+go_test(
+    name = "gazelle_test",
+    srcs = ["files_test.go"],
+    embed = [":gazelle"],
+)

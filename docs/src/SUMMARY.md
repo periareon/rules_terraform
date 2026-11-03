@@ -30,3 +30,4 @@
   - [tofu_validate_test](./tofu/tofu_validate_test.md)
   - [extensions](./tofu/extensions.md)
 - [OpenTofu Settings](./tofu/settings.md)
+- [Gazelle](./gazelle.md)

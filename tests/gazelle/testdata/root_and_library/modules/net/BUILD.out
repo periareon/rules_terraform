@@ -1,0 +1,7 @@
+load("@rules_terraform//terraform:defs.bzl", "terraform_module")
+
+terraform_module(
+    name = "net",
+    srcs = ["main.tf"],
+    visibility = ["//:__subpackages__"],
+)
