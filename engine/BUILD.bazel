@@ -1,0 +1,15 @@
+load("@bazel_skylib//:bzl_library.bzl", "bzl_library")
+
+# Engine-agnostic Starlark. Loadable from `//terraform` and `//tofu` only,
+# through each file's `visibility()`; this library exists for their
+# `bzl_library` graphs and the docs.
+bzl_library(
+    name = "bzl_lib",
+    srcs = glob(["*.bzl"]),
+    visibility = [
+        "//docs:__pkg__",
+        "//engine:__subpackages__",
+        "//terraform:__subpackages__",
+        "//tofu:__subpackages__",
+    ],
+)

@@ -1,7 +1,7 @@
+load("//engine/tests:init_test.bzl", "terraform_init_test")
 load("//terraform:terraform_fmt_test.bzl", "terraform_fmt_test")
 load("//terraform:terraform_module.bzl", "terraform_module")
 load("//terraform:terraform_validate_test.bzl", "terraform_validate_test")
-load("//tests/private:init_test.bzl", "terraform_init_test")
 load("//tofu:tofu_validate_test.bzl", "tofu_validate_test")
 
 # `deps` names only the local library. The registry module `wrapper` uses

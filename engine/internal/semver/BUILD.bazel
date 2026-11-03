@@ -1,0 +1,14 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "semver",
+    srcs = ["semver.go"],
+    importpath = "rules_terraform/engine/internal/semver",
+    visibility = ["//engine:__subpackages__"],
+)
+
+go_test(
+    name = "semver_test",
+    srcs = ["semver_test.go"],
+    embed = [":semver"],
+)

@@ -6,8 +6,6 @@ bzl_library(
     visibility = [
         "//docs:__pkg__",
         "//terraform:__subpackages__",
-        "//tests:__subpackages__",
-        "//tofu:__subpackages__",
     ],
-    deps = [],
+    deps = ["//engine:bzl_lib"],
 )

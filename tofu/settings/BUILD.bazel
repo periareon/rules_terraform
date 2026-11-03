@@ -2,8 +2,8 @@
 
 The `:version` string flag picks which OpenTofu release the auto-registered
 toolchains resolve to. Empty, the default, means the version the
-`tofu_toolchains` extension chose: the one the root module's
-`version(default = True)` tag named, else the newest release shipped in
+`tofu` extension chose: the one the root module's
+`toolchain(default = True)` tag named, else the newest release shipped in
 `//tofu/private:versions.bzl`. Any other value must be a release the hub
 knows — shipped, or requested with a `version` tag — and can be set
 globally in `.bazelrc`, per invocation

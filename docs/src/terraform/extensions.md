@@ -1,29 +1,32 @@
 # Terraform Extensions
 
-Two module extensions live in `//terraform:extensions.bzl`:
+One module extension lives in `//terraform:extensions.bzl`, `terraform`,
+with two tag classes.
 
-## `terraform_toolchains`
+## `terraform.toolchain`
 
-Materializes one hub repo (`@terraform_toolchains`) that declares a
-toolchain per (version, platform) for the releases shipped in
+The extension always materializes one hub repo (`@terraform_toolchains`)
+that declares a toolchain per (version, platform) for the releases shipped in
 `//terraform/private:versions.bzl` — the three newest when the table was
-generated — and for any release a `version` tag asks for. For a tagged
-release the extension fetches that release's `SHA256SUMS` once and records
-the checksums as facts in `MODULE.bazel.lock`. rules_terraform's own
-`MODULE.bazel` `use_repo`s the hub and `register_toolchains`s it, so
-downstream users get toolchain resolution for free. Per-(version, platform)
-`http_archive`s are lazy; only the selected combination is fetched.
+generated — and `@terraform`, the CLI hub. rules_terraform's own
+`MODULE.bazel` `use_repo`s the toolchain hub and `register_toolchains`s it,
+so downstream users get toolchain resolution for free. Per-(version,
+platform) `http_archive`s are lazy; only the selected combination is fetched.
+
+A `toolchain` tag adds any other release. The extension fetches that
+release's `SHA256SUMS` once and records the checksums as facts in
+`MODULE.bazel.lock`.
 
 ```python
 # Nothing to do beyond `bazel_dep` to use the newest shipped release.
 bazel_dep(name = "rules_terraform", version = "...")
 
 # To use another release:
-terraform_toolchains = use_extension("@rules_terraform//terraform:extensions.bzl", "terraform_toolchains")
-terraform_toolchains.version(version = "1.9.8", default = True)
+terraform = use_extension("@rules_terraform//terraform:extensions.bzl", "terraform")
+terraform.toolchain(version = "1.9.8", default = True)
 ```
 
-`terraform_toolchains.version`
+`terraform.toolchain`
 
 | Attribute | Type | Description |
 |---|---|---|
@@ -33,9 +36,9 @@ terraform_toolchains.version(version = "1.9.8", default = True)
 The hub declares a `config_setting` per known release, so the flag can
 select any of them: `--@rules_terraform//terraform/settings:version=1.9.8`.
 
-## `terraform`
+## `terraform.deps`
 
-Carries the `deps` tag class: the providers a lock file pins and the
+The `deps` tag class: the providers a lock file pins and the
 registry and git modules some directories' `module` blocks name, as one
 hub per tag.
 

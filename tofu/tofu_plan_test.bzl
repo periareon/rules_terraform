@@ -1,6 +1,5 @@
 """tofu_plan_test"""
 
-# buildifier: disable=bzl-visibility
 load("//tofu/private:engine_rules.bzl", _tofu_plan_test = "tofu_plan_test")
 
 def tofu_plan_test(name, tags = [], **kwargs):
