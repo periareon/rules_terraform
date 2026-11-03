@@ -25,14 +25,20 @@ type ArgsFile struct {
 	// layout is settled at analysis time, not reconstructed here.
 	ModuleDirRlocationPath string `json:"module_dir_rlocationpath"`
 
-	// AllowEphemeralState is the root module's `allow_ephemeral_state`. With
-	// no backend block, state written under `bazel run` lands in StateDir, a
-	// directory under bazel-out that `bazel clean` removes; without the opt-in
-	// the runner refuses the commands that would write it.
-	AllowEphemeralState bool `json:"allow_ephemeral_state"`
-	// StateDir is where local state is kept across `bazel run`s when the opt-in
-	// is set: workspace-relative, joined with BUILD_WORKSPACE_DIRECTORY.
-	StateDir string `json:"state_dir"`
+	// DisposableState is the root module's `disposable_state`. True, the
+	// engine keeps local state where it natively would, its working
+	// directory, which here is the staged copy and goes with the run. False,
+	// its local backend is pointed at LocalDir so the state outlasts it.
+	DisposableState bool `json:"disposable_state"`
+	// LocalDir is the module's directory under `bazel-out`, relative to the
+	// execroot: what the native CLI would keep in the module directory
+	// between runs lives there instead. It names the module, not the
+	// configuration, so every binary over one module shares it.
+	LocalDir string `json:"local_dir"`
+	// ArgsFilePath is this file's own path relative to the execroot. The
+	// runner resolves the file through runfiles and strips this off the end
+	// to find the execroot, with no searching for a `bazel-out` directory.
+	ArgsFilePath string `json:"args_file_path"`
 
 	// Plan configures `terraform_plan_test`; nil for the other modes.
 	Plan *PlanArgs `json:"plan,omitempty"`
@@ -103,6 +109,13 @@ func run() int {
 		return 1
 	}
 
+	// The module's local directory sits in the same execroot as the args
+	// file just resolved. Outside one there is none.
+	localDir := ""
+	if root := execroot(argsResolved, argsFile.ArgsFilePath); root != "" && argsFile.LocalDir != "" {
+		localDir = filepath.Join(root, filepath.FromSlash(argsFile.LocalDir))
+	}
+
 	workDir, cleanup, err := setupWorkingDirectory(r, argsFile.ModuleDirRlocationPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: failed to setup working directory: %v\n", err)
@@ -138,7 +151,7 @@ func run() int {
 	case modePlan:
 		code = runPlanTest(e, argsFile.Plan)
 	default:
-		code, keep = runCommand(e, argsFile, os.Args[1:])
+		code, keep = runCommand(e, argsFile, localDir, os.Args[1:])
 	}
 	return code
 }
@@ -214,7 +227,7 @@ func exitCode(err error) int {
 //
 // The second result is whether the staged directory must survive the run,
 // which it must when it holds the only copy of something the user needs.
-func runCommand(e engine, argsFile *ArgsFile, userArgs []string) (int, bool) {
+func runCommand(e engine, argsFile *ArgsFile, localDir string, userArgs []string) (int, bool) {
 	args := userArgs
 	if len(args) == 0 {
 		// Match `terraform` with no args: print help via the CLI itself.
@@ -222,25 +235,29 @@ func runCommand(e engine, argsFile *ArgsFile, userArgs []string) (int, bool) {
 	}
 
 	// Where state goes when there is no backend is decided before anything
-	// runs: refusing after the engine has already written state would be
-	// too late.
+	// runs: the override has to be in place before `init`.
 	hasBackend := tfparse.HasBackend(e.workDir)
-	stateDir := ""
-	if !hasBackend && mutatesState(args) {
-		if !argsFile.AllowEphemeralState {
-			fmt.Fprint(os.Stderr, ephemeralStateRefusal(subcommand(args), argsFile.StateDir))
-			return 1, false
-		}
+	keepState := !argsFile.DisposableState
+	if hasBackend && keepState {
+		fmt.Fprintln(os.Stderr, "Error: disposable_state = False, but the configuration declares a backend; state belongs to the backend. Drop one or the other.")
+		return 1, false
 	}
-	if !hasBackend && argsFile.AllowEphemeralState && argsFile.StateDir != "" {
-		root := os.Getenv("BUILD_WORKSPACE_DIRECTORY")
-		if root == "" {
-			fmt.Fprintln(os.Stderr, "Error: BUILD_WORKSPACE_DIRECTORY is not set; local state can only be kept under `bazel run`")
-			return 1, false
-		}
-		stateDir = filepath.Join(root, filepath.FromSlash(argsFile.StateDir))
-		if err := restoreLocalState(stateDir, e.workDir); err != nil {
-			fmt.Fprintf(os.Stderr, "Error: restoring local state from %s: %v\n", stateDir, err)
+	stateKept := !hasBackend && keepState && localDir != ""
+	if !hasBackend && keepState {
+		switch {
+		case localDir != "":
+			if err := os.MkdirAll(localDir, 0o755); err != nil {
+				fmt.Fprintf(os.Stderr, "Error: creating the local state directory %s: %v\n", localDir, err)
+				return 1, false
+			}
+			if err := os.WriteFile(filepath.Join(e.workDir, localBackendOverrideName), []byte(localBackendOverride(localDir)), 0o644); err != nil {
+				fmt.Fprintf(os.Stderr, "Error: writing %s: %v\n", localBackendOverrideName, err)
+				return 1, false
+			}
+		case needsBackend(args):
+			// Only the commands that reach for the state need the directory;
+			// `validate` and the other backend-free commands run anywhere.
+			fmt.Fprintln(os.Stderr, "Error: disposable_state = False, but this runner is not executing from a Bazel execroot, so there is no bazel-out to keep the state in. Run it with `bazel run`.")
 			return 1, false
 		}
 	}
@@ -255,17 +272,10 @@ func runCommand(e engine, argsFile *ArgsFile, userArgs []string) (int, bool) {
 
 	code := e.exec(args...)
 
-	if stateDir != "" {
-		// Saved whether or not the command succeeded: a failed apply has
+	if stateKept && mutatesState(args) {
+		// Said whether or not the command succeeded: a failed apply has
 		// usually still created something, and the state is the record of it.
-		if err := saveLocalState(e.workDir, stateDir); err != nil {
-			fmt.Fprintf(os.Stderr, "Error: saving local state to %s: %v\n", stateDir, err)
-			return 1, true
-		}
-		if len(moduledir.LocalStateFiles(e.workDir)) > 0 {
-			fmt.Fprintf(os.Stderr, "\nrules_terraform: local state kept at %s (allow_ephemeral_state is set; `bazel clean` removes it).\n", stateDir)
-		}
-		return code, code != 0
+		fmt.Fprintf(os.Stderr, "\nrules_terraform: local state is kept at %s (disposable_state is False; `bazel clean` removes it).\n", localDir)
 	}
 
 	if code != 0 {
@@ -274,22 +284,64 @@ func runCommand(e engine, argsFile *ArgsFile, userArgs []string) (int, bool) {
 	}
 
 	// The working directory is a staged copy, so anything the engine wrote
-	// there is about to vanish. The gate above stops the commands that write
-	// state; this is the backstop for anything it did not anticipate.
+	// there goes with it. State is the record of what a run created, so a
+	// copy holding some is kept and named rather than deleted: the module
+	// declared its state disposable, which is about the next run, not about
+	// the one that just made resources.
 	if state := moduledir.LocalStateFiles(e.workDir); len(state) > 0 {
 		fmt.Fprintf(os.Stderr,
 			"\nrules_terraform: the engine wrote local state in the staged working directory, "+
-				"which has been kept:\n  %s\nA Bazel-run module has no durable local directory; "+
-				"configure a `backend` (or `cloud`) block so state lives somewhere that outlasts this run.\n",
+				"which has been kept:\n  %s\nThe next run starts from a fresh copy and will not see it. "+
+				"For state that should outlive the run, configure a `backend` (or `cloud`) block, "+
+				"or set `disposable_state = False` on the terraform_module to keep it under bazel-out.\n",
 			strings.Join(state, "\n  "))
 		return 0, true
 	}
 	return 0, false
 }
 
-// mutatingCommands are the subcommands that write state. Gated when the
-// configuration has no backend, because then the state they write lives in a
-// directory nothing durable owns.
+// execroot returns the directory that resolved, a file's location on disk,
+// is anchored at when the file's execroot-relative path is execrootRel, or
+// "" when the file is not at that path under any directory. Under `bazel run`
+// every runfile resolves into the execroot, through a symlink when a
+// runfiles tree is built, so this finds it without the `bazel-out`
+// convenience symlink, which `--symlink_prefix` moves or removes. A runner
+// copied out of the output tree has no execroot, and with it no place for
+// local state.
+func execroot(resolved, execrootRel string) string {
+	if r, err := filepath.EvalSymlinks(resolved); err == nil {
+		resolved = r
+	}
+	suffix := string(filepath.Separator) + filepath.FromSlash(execrootRel)
+	if execrootRel == "" || !strings.HasSuffix(resolved, suffix) {
+		return ""
+	}
+	return strings.TrimSuffix(resolved, suffix)
+}
+
+// localBackendOverrideName is an override file (`*_override.tf`), so it merges
+// into the configuration without editing any of the user's files. It exists
+// only in the staged copy.
+const localBackendOverrideName = "rules_terraform_local_state_override.tf"
+
+// localBackendOverride points the engine's local backend at the module's
+// local directory: `terraform.tfstate` and, for workspaces,
+// `terraform.tfstate.d/`, laid out as a native `terraform apply` lays them
+// out in the module directory. Forward slashes throughout; the engine accepts
+// them on every platform, and they need no escaping in HCL.
+func localBackendOverride(dir string) string {
+	d := filepath.ToSlash(dir)
+	return fmt.Sprintf(`terraform {
+  backend "local" {
+    path          = %q
+    workspace_dir = %q
+  }
+}
+`, d+"/terraform.tfstate", d+"/terraform.tfstate.d")
+}
+
+// mutatingCommands are the subcommands that write state. After one of them,
+// a run that keeps state under bazel-out says where.
 var mutatingCommands = map[string]bool{
 	"apply":   true,
 	"destroy": true,
@@ -327,93 +379,6 @@ func indexOf(args []string, s string) int {
 		}
 	}
 	return -1
-}
-
-func ephemeralStateRefusal(command, stateDir string) string {
-	return fmt.Sprintf(`rules_terraform: refusing to run "%s": this module declares no state backend.
-
-Without a backend block the engine keeps state in its working directory, and
-under Bazel that directory is a staged copy that exists for one run. The only
-place rules_terraform could keep it is
-
-    %s
-
-which sits under bazel-out: "bazel clean" deletes it, it is private to this
-machine, and it forks with the build configuration. Losing it orphans every
-resource the command creates.
-
-Declare a backend in one of the root module's .tf files:
-
-    terraform {
-      backend "s3" {
-        bucket = "my-state"
-        key    = "app/terraform.tfstate"
-      }
-    }
-
-Any backend, or a cloud {} block, will do; the runner then leaves state to it.
-
-If disposable state is the point (a demo, a sandbox, or bootstrapping the bucket
-that will hold real state), opt in on the terraform_module:
-
-    allow_ephemeral_state = True
-
-State is then kept at the path above between runs. "plan" is never gated.
-`, command, stateDir)
-}
-
-// localStateNames are the local backend's files and the workspace directory.
-var localStateNames = []string{"terraform.tfstate", "terraform.tfstate.backup", "terraform.tfstate.d"}
-
-func restoreLocalState(stateDir, workDir string) error {
-	for _, name := range localStateNames {
-		src := filepath.Join(stateDir, name)
-		info, err := os.Stat(src)
-		if os.IsNotExist(err) {
-			continue
-		}
-		if err != nil {
-			return err
-		}
-		dst := filepath.Join(workDir, name)
-		if info.IsDir() {
-			if err := fsutil.CopyDirectory(src, dst); err != nil {
-				return err
-			}
-			continue
-		}
-		if err := fsutil.CopyFile(src, dst); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func saveLocalState(workDir, stateDir string) error {
-	if err := os.MkdirAll(stateDir, 0755); err != nil {
-		return err
-	}
-	for _, name := range localStateNames {
-		src := filepath.Join(workDir, name)
-		info, err := os.Stat(src)
-		if os.IsNotExist(err) {
-			continue
-		}
-		if err != nil {
-			return err
-		}
-		dst := filepath.Join(stateDir, name)
-		if info.IsDir() {
-			if err := fsutil.CopyDirectory(src, dst); err != nil {
-				return err
-			}
-			continue
-		}
-		if err := fsutil.CopyFile(src, dst); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 // backendFreeCommands are the subcommands that run correctly against the

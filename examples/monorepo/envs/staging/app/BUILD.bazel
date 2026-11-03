@@ -23,7 +23,6 @@ terraform_module(
     name = "app",
     srcs = glob(["*.tf"]),
     # Example environment with no backend; see examples/terraform.
-    allow_ephemeral_state = True,
     deps = [
         "//modules/compute",
         "//modules/naming",

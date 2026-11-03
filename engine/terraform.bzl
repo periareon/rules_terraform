@@ -170,7 +170,7 @@ def _terraform_module_impl(ctx):
             srcs = depset(ctx.files.srcs),
             data = depset(ctx.files.data),
             root_dir = root_dir,
-            allow_ephemeral_state = ctx.attr.allow_ephemeral_state,
+            disposable_state = ctx.attr.disposable_state,
             # Transitive: a shared module library whose members reference each
             # other only reaches the init action if the whole closure comes
             # along. The root module names `compute`; `compute`'s own `module`
@@ -315,22 +315,6 @@ def make_module_rule(engine):
         doc = "Defines a {} module that can be used as a dependency in other Terraform targets.".format(engine.name),
         implementation = _terraform_module_impl,
         attrs = {
-            "allow_ephemeral_state": attr.bool(
-                default = False,
-                doc = """Permit `bazel run` of `apply`, `destroy` and the other
-                state-writing commands against a module with no `backend` or
-                `cloud` block.
-
-                Without a backend the engine keeps state in its working directory,
-                which under Bazel is a staged copy that exists for one run. The
-                runner therefore refuses those commands by default, naming the fix.
-                With this set, state is kept under `bazel-out` between runs: private
-                to the machine, forked per build configuration, and deleted by
-                `bazel clean`. Set it only where losing the state is harmless: demos,
-                sandboxes, or bootstrapping the bucket that will hold real state.
-                Ignored when a backend is declared; `plan` and the read-only
-                commands are never gated.""",
-            ),
             "data": attr.label_list(
                 doc = "Additional files or targets that should be available at runtime.",
                 allow_files = True,
@@ -354,6 +338,25 @@ def make_module_rule(engine):
                     [TerraformExternalModuleInfo],
                     [TerraformModuleGroupInfo],
                 ],
+            ),
+            "disposable_state": attr.bool(
+                default = True,
+                doc = """Whether this module's local state may go with the run, for a
+                module with no `backend` or `cloud` block.
+
+                `bazel run` executes the engine in a staged copy that is deleted
+                when the command finishes. True, the default, leaves the engine
+                to keep state where it natively would, its working directory, so
+                the state goes with the copy: right for demos, sandboxes and
+                anything `plan`-only. A run that did write state is kept and its
+                path printed, so nothing vanishes silently. False points the
+                engine's local backend at `terraform.tfstate` (and
+                `terraform.tfstate.d/` for workspaces) in a per-module directory
+                under `bazel-out/rules_terraform/`, where it outlives the run.
+                That directory is private to the machine and `bazel clean`
+                deletes it; state that must outlast that belongs in a backend.
+                An error when the module declares a backend, whose state is the
+                backend's.""",
             ),
             "lock": attr.label(
                 doc = "An optional `.terraform.lock.hcl` file.",
@@ -407,14 +410,22 @@ def build_runner(ctx, toolchain_type, *, mode):
     if not module_directory:
         fail("{}: terraform_init_aspect produced no module directory for '{}'".format(ctx.label, ctx.attr.root.label))
 
+    # The module's directory under `bazel-out`, where what the native CLI
+    # would keep in the module directory between runs lives instead. Named
+    # after the root module, not this target, so every binary over one module
+    # shares it; and directly under the output root rather than `ctx.bin_dir`,
+    # so it does not fork with the configuration. Execroot-relative: the
+    # runner finds the execroot from where the args file resolves to.
+    root_label = ctx.attr.root.label
+    output_root = ctx.bin_dir.path.split("/")[0]
+    local_dir = "/".join([p for p in [output_root, "rules_terraform", root_label.workspace_root, root_label.package, root_label.name] if p])
+
+    args_file = ctx.actions.declare_file("{}.terraform_args.json".format(ctx.label.name))
     args_data = {
-        "allow_ephemeral_state": root_info.allow_ephemeral_state,
+        "args_file_path": args_file.path,
+        "disposable_state": root_info.disposable_state,
+        "local_dir": local_dir,
         "module_dir_rlocationpath": rlocationpath(module_directory, ctx.workspace_name),
-        # Where local state lives between runs when `allow_ephemeral_state`
-        # is set: a per-target directory under bazel-out, reached from
-        # `BUILD_WORKSPACE_DIRECTORY` through the convenience symlink. Under
-        # bazel-out on purpose — it should go when the build outputs go.
-        "state_dir": "{}/{}/{}.state".format(ctx.bin_dir.path, ctx.label.package, ctx.label.name) if ctx.label.package else "{}/{}.state".format(ctx.bin_dir.path, ctx.label.name),
         "terraform_rlocationpath": rlocationpath(toolchain.terraform, ctx.workspace_name),
     }
     if mode == "plan":
@@ -424,7 +435,6 @@ def build_runner(ctx, toolchain_type, *, mode):
             "lock": ctx.attr.lock,
         }
 
-    args_file = ctx.actions.declare_file("{}.terraform_args.json".format(ctx.label.name))
     ctx.actions.write(
         output = args_file,
         content = json.encode_indent(args_data),

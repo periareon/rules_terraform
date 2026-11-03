@@ -10,10 +10,11 @@ TerraformInfo = provider(
     # buildifier: disable=out-of-order-load
     doc = "Information about a Terraform module.",
     fields = {
-        "allow_ephemeral_state": """bool: Whether `bazel run` may write local state for this
-            module. See the attribute of the same name on `terraform_module`.""",
         "data": "depset[File]: All runfiles/data associated with the module.",
         "deps": "depset[TerraformInfo]: All direct dependencies of the module.",
+        "disposable_state": """bool: Whether this module's local state may go with a
+            `bazel run`, when it declares no backend. See the attribute of the
+            same name on `terraform_module`.""",
         "external_modules": "depset[TerraformExternalModuleInfo]: External module dependencies.",
         "lock": "File: Optional .terraform.lock.hcl file.",
         "providers": """list[TerraformProviderInfo]: The providers this module depends on
