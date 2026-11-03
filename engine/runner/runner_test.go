@@ -227,3 +227,22 @@ func TestExecroot(t *testing.T) {
 		t.Errorf("execroot with no relative path = %q, want empty", got)
 	}
 }
+
+func TestChangesWorkspaceSelection(t *testing.T) {
+	for _, tc := range []struct {
+		args []string
+		want bool
+	}{
+		{[]string{"workspace", "select", "prod"}, true},
+		{[]string{"workspace", "new", "prod"}, true},
+		{[]string{"-chdir=x", "workspace", "select", "prod"}, true},
+		{[]string{"workspace", "list"}, false},
+		{[]string{"workspace", "show"}, false},
+		{[]string{"plan"}, false},
+		{nil, false},
+	} {
+		if got := changesWorkspaceSelection(tc.args); got != tc.want {
+			t.Errorf("changesWorkspaceSelection(%q) = %v, want %v", tc.args, got, tc.want)
+		}
+	}
+}

@@ -40,6 +40,12 @@ type ArgsFile struct {
 	// to find the execroot, with no searching for a `bazel-out` directory.
 	ArgsFilePath string `json:"args_file_path"`
 
+	// Workspace is a test rule's `workspace` attribute: the Terraform
+	// workspace the test runs in, set as TF_WORKSPACE over anything the test
+	// environment carries. Never set for `bazel run`, which follows the
+	// operator's environment.
+	Workspace string `json:"workspace,omitempty"`
+
 	// Plan configures `terraform_plan_test`; nil for the other modes.
 	Plan *PlanArgs `json:"plan,omitempty"`
 }
@@ -140,6 +146,9 @@ func run() int {
 		}
 		defer envCleanup()
 		env = hermetic
+		if argsFile.Workspace != "" {
+			env = moduledir.SetEnv(env, "TF_WORKSPACE", argsFile.Workspace)
+		}
 	}
 
 	e := engine{path: enginePath, workDir: workDir, env: env}
@@ -278,6 +287,13 @@ func runCommand(e engine, argsFile *ArgsFile, localDir string, userArgs []string
 		fmt.Fprintf(os.Stderr, "\nrules_terraform: local state is kept at %s (disposable_state is False; `bazel clean` removes it).\n", localDir)
 	}
 
+	if code == 0 && changesWorkspaceSelection(args) {
+		// The native CLI records the selection in `.terraform/environment`
+		// in the module directory. Here that is the staged copy, so the
+		// selection is gone with it; a run picks its workspace up front.
+		fmt.Fprintln(os.Stderr, "\nrules_terraform: the workspace selection does not outlive this run. Set TF_WORKSPACE in the environment to pick a workspace for a `bazel run`.")
+	}
+
 	if code != 0 {
 		// Leak the temp dir on failure so users can inspect state/plan output.
 		return code, true
@@ -317,6 +333,17 @@ func execroot(resolved, execrootRel string) string {
 		return ""
 	}
 	return strings.TrimSuffix(resolved, suffix)
+}
+
+// changesWorkspaceSelection reports whether the invocation is a `workspace`
+// subcommand that selects a workspace: `select`, and `new`, which selects
+// the workspace it creates.
+func changesWorkspaceSelection(args []string) bool {
+	if subcommand(args) != "workspace" {
+		return false
+	}
+	verb := subcommand(args[indexOf(args, "workspace")+1:])
+	return verb == "select" || verb == "new"
 }
 
 // localBackendOverrideName is an override file (`*_override.tf`), so it merges

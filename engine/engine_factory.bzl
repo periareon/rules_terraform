@@ -15,7 +15,7 @@ load(":format.bzl", "build_fmt_aspect_impl", "build_fmt_test_impl", "make_format
 load(":init.bzl", "terraform_init_aspect")
 load(":lock.bzl", "PROVIDERS_LOCK_ATTRS", "build_providers_lock")
 load(":providers.bzl", "TerraformInfo")
-load(":terraform.bzl", "PLAN_TEST_ATTRS", "RUNNER_ATTRS", "build_runner", "make_module_rule")
+load(":terraform.bzl", "PLAN_TEST_ATTRS", "RUNNER_ATTRS", "TEST_ATTRS", "WORKSPACE_ATTR", "build_runner", "make_module_rule")
 load(":toolchain.bzl", "make_current_toolchain_rule")
 load(":validate.bzl", "build_validate_aspect_impl", "build_validate_test_impl")
 
@@ -102,7 +102,7 @@ Bazel `--test_arg` values are intentionally ignored so the surface stays
 predictable — every run executes the module's `.tftest.hcl` files.
 """.format(engine = name),
         implementation = _test_impl,
-        attrs = RUNNER_ATTRS,
+        attrs = TEST_ATTRS,
         test = True,
         toolchains = [toolchain_type],
     )
@@ -148,7 +148,7 @@ it. The operator's CLI configuration is disabled, as for every test here.
     validate_test = rule(
         implementation = _validate_test_impl,
         doc = "A rule for running `{} validate` on a Terraform target.".format(name),
-        attrs = {
+        attrs = dict(WORKSPACE_ATTR, **{
             "target": attr.label(
                 doc = "The target to validate.",
                 providers = [TerraformInfo],
@@ -160,7 +160,7 @@ it. The operator's CLI configuration is disabled, as for every test here.
                 executable = True,
                 default = Label("//engine/validate:validator"),
             ),
-        },
+        }),
         test = True,
         toolchains = [toolchain_type],
     )
