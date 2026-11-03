@@ -399,6 +399,20 @@ the backend as before. The practical consequences: a <code>terraform_test</code>
 a module with a remote backend needs no credentials, and a configuration
 error in one of those subcommands is reported as itself rather than as a
 backend failure.</p>
+<p><strong>Workspaces.</strong> The rules add no workspace concept of their own; they use
+Terraform's. <code>TF_WORKSPACE</code> in the environment selects one for every
+project in a run, so <code>--action_env=TF_WORKSPACE=prod</code> validates every
+module in prod under the aspect and <code>--test_env=TF_WORKSPACE=prod</code> does
+the same for the test rules. A root whose configuration is keyed on
+<code>terraform.workspace</code> gets each of its workspaces checked by one test
+target per workspace, with the <code>workspace</code> attribute of
+<code>terraform_validate_test</code>, <code>terraform_test</code> or <code>terraform_plan_test</code> forcing
+it, and <code>no_validate</code> on the module where the default workspace is not a
+valid one. <code>bazel run</code> reads <code>TF_WORKSPACE</code> the same way. A <code>workspace select</code> inside a <code>bazel run</code> changes only the staged copy, which is gone
+when the command finishes, so it does not carry to the next run and the
+runner says so; <code>workspace new</code> still creates the workspace in the backend.
+Every run picks its workspace up front, from the environment, and nothing a
+previous run selected leaks into it.</p>
 <p><code>terraform_validate_test</code>, the validate aspect and <code>terraform_test</code> run
 the engine with the operator's CLI configuration disabled
 (<code>TF_CLI_CONFIG_FILE</code> pointed at an empty file, <code>CHECKPOINT_DISABLE=1</code>,
