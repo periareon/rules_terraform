@@ -163,15 +163,15 @@ the setting's label so callers can reference it programmatically.</p>
 <p><a id="version"></a></p>
 <h2 id="version"><a class="header" href="#version">version</a></h2>
 <p>Picks which OpenTofu release the auto-registered toolchains resolve to.</p>
-<p>The <code>tofu_toolchains</code> extension declares one toolchain per (version, platform)
+<p>The <code>tofu</code> extension declares one toolchain per (version, platform)
 for the releases shipped in <code>//tofu/private:versions.bzl</code> — the
 newest three when the table was generated — and for any release a
-<code>tofu_toolchains.version(version = "…")</code> tag asks for. For a tagged release the
+<code>tofu.toolchain(version = "…")</code> tag asks for. For a tagged release the
 extension fetches the release's <code>SHA256SUMS</code> once and records the
 checksums as facts in <code>MODULE.bazel.lock</code>, so an older pin costs no
 change to rules_terraform and no network on later evaluations.</p>
 <p>Empty, the default, selects the extension's default: the release the
-root module marked <code>version(…, default = True)</code>, else the newest
+root module marked <code>toolchain(…, default = True)</code>, else the newest
 shipped one. Any other value names one of the known releases. Set it
 globally in <code>.bazelrc</code>, per invocation via
 <code>--@rules_terraform//tofu/settings:version=1.9.1</code>, or per target

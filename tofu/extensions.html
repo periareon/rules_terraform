@@ -156,32 +156,30 @@
                 <div id="content" class="content">
                     <main>
                         <h1 id="opentofu-extensions"><a class="header" href="#opentofu-extensions">OpenTofu Extensions</a></h1>
-<p>One module extension lives in <code>//tofu:extensions.bzl</code>:</p>
-<h2 id="tofu_toolchains"><a class="header" href="#tofu_toolchains"><code>tofu_toolchains</code></a></h2>
-<p>No user-facing configuration. Mirrors <code>//terraform:extensions.bzl%terraform_toolchains</code>
-but resolves against <code>//tofu:toolchain_type</code>. Materializes
-<code>@tofu_toolchains</code> covering every supported OpenTofu version, each
-toolchain for the releases shipped in <code>//tofu/private:versions.bzl</code> and any
-a <code>version</code> tag requests, each guarded by a <code>config_setting</code> on
-<a href="./settings.html"><code>//tofu/settings:version</code></a> that the hub itself declares.
-rules_terraform's own
-<code>MODULE.bazel</code> registers the hub so downstream users get toolchain
-resolution for free.</p>
+<p>One module extension lives in <code>//tofu:extensions.bzl</code>, <code>tofu</code>, with the
+same two tag classes as the <code>terraform</code> extension.</p>
+<h2 id="tofutoolchain"><a class="header" href="#tofutoolchain"><code>tofu.toolchain</code></a></h2>
+<p>The extension always materializes <code>@tofu_toolchains</code>, a hub declaring a
+toolchain for every OpenTofu release shipped in <code>//tofu/private:versions.bzl</code>
+and any a <code>toolchain</code> tag requests, each guarded by a <code>config_setting</code> on
+<a href="./settings.html"><code>//tofu/settings:version</code></a> that the hub itself declares, and
+<code>@tofu</code>, the CLI hub. rules_terraform's own <code>MODULE.bazel</code> registers the
+hub so downstream users get toolchain resolution for free.</p>
 <pre><code class="language-python"># Nothing to do beyond `bazel_dep` to use the newest shipped release.
 bazel_dep(name = "rules_terraform", version = "...")
 
 # To use another release:
-tofu_toolchains = use_extension("@rules_terraform//tofu:extensions.bzl", "tofu_toolchains")
-tofu_toolchains.version(version = "1.9.1", default = True)
+tofu = use_extension("@rules_terraform//tofu:extensions.bzl", "tofu")
+tofu.toolchain(version = "1.9.1", default = True)
 </code></pre>
-<p><code>tofu_toolchains.version</code> takes the same <code>version</code> and <code>default</code>
-attributes as the Terraform extension's tag; see
+<p><code>tofu.toolchain</code> takes the same <code>version</code> and <code>default</code> attributes as the
+Terraform extension's tag; see
 <a href="../terraform/extensions.html">the Terraform page</a>. For a tagged release the
 extension fetches that release's <code>SHA256SUMS</code> once and records the
 checksums as facts in <code>MODULE.bazel.lock</code>.</p>
-<h2 id="providers-and-modules"><a class="header" href="#providers-and-modules">Providers and modules</a></h2>
-<p>The <code>tofu</code> extension carries the same <code>deps</code> tag class as the <code>terraform</code>
-extension, defaulting to <code>registry.opentofu.org</code>. An OpenTofu-only
+<h2 id="tofudeps"><a class="header" href="#tofudeps"><code>tofu.deps</code></a></h2>
+<p>The same <code>deps</code> tag class as the <code>terraform</code> extension, defaulting to
+<code>registry.opentofu.org</code>. An OpenTofu-only
 repository uses it for everything and never loads
 <code>//terraform:extensions.bzl</code>:</p>
 <pre><code class="language-python">tofu = use_extension("@rules_terraform//tofu:extensions.bzl", "tofu")

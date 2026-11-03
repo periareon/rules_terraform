@@ -175,11 +175,11 @@ tables carry the three newest releases of each engine.</p>
 <code>SHA256SUMS</code> once and records the checksums as facts in
 <code>MODULE.bazel.lock</code>, so pinning an older engine needs no change to
 rules_terraform:</p>
-<pre><code class="language-python">terraform_toolchains = use_extension("@rules_terraform//terraform:extensions.bzl", "terraform_toolchains")
-terraform_toolchains.version(version = "1.9.8", default = True)   # default = True: use it unless the flag says otherwise
+<pre><code class="language-python">terraform = use_extension("@rules_terraform//terraform:extensions.bzl", "terraform")
+terraform.toolchain(version = "1.9.8", default = True)   # default = True: use it unless the flag says otherwise
 
-tofu_toolchains = use_extension("@rules_terraform//tofu:extensions.bzl", "tofu_toolchains")
-tofu_toolchains.version(version = "1.9.1")                        # available, selected by flag
+tofu = use_extension("@rules_terraform//tofu:extensions.bzl", "tofu")
+tofu.toolchain(version = "1.9.1")                        # available, selected by flag
 </code></pre>
 <p>The flags select among the releases the hub knows, shipped or tagged:</p>
 <pre><code>--@rules_terraform//terraform/settings:version=1.9.8
@@ -310,14 +310,14 @@ and writes state. Reach for it when you want a one-off CLI invocation
 wiring up a <code>terraform_binary</code> target for the module.</p>
 <p>To use <code>@terraform</code> / <code>@tofu</code> from downstream, add them to your
 <code>MODULE.bazel</code>:</p>
-<pre><code class="language-python">terraform_toolchains = use_extension("@rules_terraform//terraform:extensions.bzl", "terraform_toolchains")
-use_repo(terraform_toolchains, "terraform")
+<pre><code class="language-python">terraform = use_extension("@rules_terraform//terraform:extensions.bzl", "terraform")
+use_repo(terraform, "terraform")
 
-tofu_toolchains = use_extension("@rules_terraform//tofu:extensions.bzl", "tofu_toolchains")
-use_repo(tofu_toolchains, "tofu")
+tofu = use_extension("@rules_terraform//tofu:extensions.bzl", "tofu")
+use_repo(tofu, "tofu")
 </code></pre>
-<p>The extensions themselves are already invoked by rules_terraform's own
-<code>MODULE.bazel</code> (they register toolchains); the <code>use_repo</code> line only
+<p>The extensions are already invoked by rules_terraform's own
+<code>MODULE.bazel</code>, which registers the toolchain hubs; the <code>use_repo</code> line only
 binds the repo name in your namespace so <code>@terraform</code> / <code>@tofu</code>
 resolve.</p>
 <h2 id="bazel-managed-terraform"><a class="header" href="#bazel-managed-terraform">Bazel-managed Terraform</a></h2>
@@ -344,7 +344,10 @@ automatically; anything else is matched to the <code>module</code> block whose
 <code>source</code> names it.</li>
 </ul>
 <p>A <code>terraform_module</code> is exactly one directory: every file in <code>srcs</code>
-must live directly in the target's own package. Nested <code>.tf</code> files are
+must live directly in the target's own package, and <code>srcs</code> accepts only
+what the engine loads: <code>.tf</code> and <code>.tf.json</code> for <code>terraform_module</code>, plus
+<code>.tofu</code> and <code>.tofu.json</code> for <code>tofu_module</code>. Any other file is an analysis
+error rather than a file the engine would silently skip. Nested <code>.tf</code> files are
 a child module and belong in their own <code>terraform_module</code>. This is
 enforced at analysis time, and it is what lets the aspect know which
 directory it is building without guessing.</p>
@@ -790,7 +793,7 @@ parent's package.</p>
 <h2 id="reproducibility"><a class="header" href="#reproducibility">Reproducibility</a></h2>
 <p>The state of each bzlmod extension in rules_terraform:</p>
 <div class="table-wrapper"><table><thead><tr><th>Extension</th><th style="text-align: center">Reproducible?</th><th>Why</th></tr></thead><tbody>
-<tr><td><code>terraform_toolchains</code> / <code>tofu_toolchains</code></td><td style="text-align: center">✓</td><td>Every URL + integrity is vendored in <code>//&lt;engine&gt;/private:versions.bzl</code>. No network at eval time; identical inputs → identical repo declarations.</td></tr>
+<tr><td><code>toolchain</code> tag</td><td style="text-align: center">✓</td><td>Every URL + integrity is vendored in <code>//&lt;engine&gt;/private:versions.bzl</code>; a tagged release's checksums are fetched once and kept as facts. Identical inputs → identical repo declarations.</td></tr>
 <tr><td><code>deps</code> tag, <code>lock</code> half</td><td style="text-align: center">✓</td><td>Reads a checked-in <code>.terraform.lock.hcl</code>; never resolves version constraints. Registry API is called to look up download URLs, but the version and hash come from the lock.</td></tr>
 <tr><td><code>deps</code> tag, <code>roots</code> half</td><td style="text-align: center">✗</td><td>Live version-constraint resolution against the Registry API, and a git tag looked up once and recorded as a fact. <code>MODULE.bazel.lock</code> is the capture layer that closes the gap — see below.</td></tr>
 </tbody></table>
@@ -798,8 +801,7 @@ parent's package.</p>
 <h3 id="the-role-of-modulebazellock"><a class="header" href="#the-role-of-modulebazellock">The role of <code>MODULE.bazel.lock</code></a></h3>
 <p>The modules extension is the only piece of rules_terraform that
 depends on <code>MODULE.bazel.lock</code> for both reproducibility AND performance.
-<code>terraform_toolchains</code>, <code>tofu_toolchains</code>, and the <code>lock</code> half of a
-<code>deps</code> tag all read fully vendored state and produce
+The <code>toolchain</code> tag and the <code>lock</code> half of a <code>deps</code> tag read fully vendored state and produce
 deterministic output without any lockfile involvement. The modules
 extension is different in two related ways:</p>
 <ol>
@@ -896,7 +898,7 @@ the same ground with Bazel's native machinery.</p>
 </ul>
 <h2 id="module-extensions"><a class="header" href="#module-extensions">Module extensions</a></h2>
 <ul>
-<li><a href="./terraform/extensions.html">extensions</a> — <code>terraform_toolchains</code>, <code>terraform</code>.</li>
+<li><a href="./terraform/extensions.html">extensions</a> — <code>terraform</code>: <code>toolchain</code> and <code>deps</code> tags.</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated with Stardoc: http://skydoc.bazel.build -->
 <p>terraform_binary</p>
@@ -998,12 +1000,12 @@ load("@rules_terraform//terraform:terraform_module.bzl", "terraform_module")
 
 terraform_module(<a href="terraform/terraform_module.html#terraform_module-name">name</a>, <a href="terraform/terraform_module.html#terraform_module-deps">deps</a>, <a href="terraform/terraform_module.html#terraform_module-srcs">srcs</a>, <a href="terraform/terraform_module.html#terraform_module-data">data</a>, <a href="terraform/terraform_module.html#terraform_module-allow_ephemeral_state">allow_ephemeral_state</a>, <a href="terraform/terraform_module.html#terraform_module-lock">lock</a>)
 </pre>
-<p>Defines a Terraform module that can be used as a dependency in other Terraform targets.</p>
+<p>Defines a terraform module that can be used as a dependency in other Terraform targets.</p>
 <p><strong>ATTRIBUTES</strong></p>
 <div class="table-wrapper"><table><thead><tr><th style="text-align: left">Name</th><th style="text-align: left">Description</th><th style="text-align: left">Type</th><th style="text-align: left">Mandatory</th><th style="text-align: left">Default</th></tr></thead><tbody>
 <tr><td style="text-align: left"><a id="terraform_module-name"></a>name</td><td style="text-align: left">A unique name for this target.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels#target-names">Name</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
-<tr><td style="text-align: left"><a id="terraform_module-deps"></a>deps</td><td style="text-align: left">Other terraform_module targets, a dependency hub (<code>@&lt;name&gt;</code> from a <code>deps</code> tag, or its <code>//:providers</code> / <code>//:modules</code> halves), individual <code>@&lt;name&gt;//&lt;namespace&gt;_&lt;name&gt;</code> providers, <code>terraform_provider</code>, or <code>terraform_external_module</code> targets this module depends on.<br><br>A <code>terraform_module</code> dep is the Bazel half of a <code>module</code> block, the way a <code>py_library</code> dep is the Bazel half of an <code>import</code>: the <code>.tf</code> file names the path, <code>deps</code> says which target supplies it. A dep whose package already nests under this module's directory lands at that relative path; anything else is matched to a <code>module</code> block whose <code>source</code> ends with the dep's package name.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">List of labels</a></td><td style="text-align: left">optional</td><td style="text-align: left"><code>[]</code></td></tr>
-<tr><td style="text-align: left"><a id="terraform_module-srcs"></a>srcs</td><td style="text-align: left">Terraform source files that make up this module: <code>.tf</code>, <code>.tf.json</code>, and OpenTofu's <code>.tofu</code> / <code>.tofu.json</code>.<br><br>All of them must live directly in this target's package — a Terraform module is a single directory. Put nested .tf files in their own <code>terraform_module</code> and reference it with a <code>module</code> block.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">List of labels</a></td><td style="text-align: left">optional</td><td style="text-align: left"><code>[]</code></td></tr>
+<tr><td style="text-align: left"><a id="terraform_module-deps"></a>deps</td><td style="text-align: left">Other module targets, a dependency hub (<code>@&lt;name&gt;</code> from a <code>deps</code> tag, or its <code>//:providers</code> / <code>//:modules</code> halves), individual <code>@&lt;name&gt;//&lt;namespace&gt;_&lt;name&gt;</code> providers, <code>terraform_provider</code>, or <code>terraform_external_module</code> targets this module depends on.<br><br>A module dep is the Bazel half of a <code>module</code> block, the way a <code>py_library</code> dep is the Bazel half of an <code>import</code>: the <code>.tf</code> file names the path, <code>deps</code> says which target supplies it. A dep whose package already nests under this module's directory lands at that relative path; anything else is matched to a <code>module</code> block whose <code>source</code> ends with the dep's package name.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">List of labels</a></td><td style="text-align: left">optional</td><td style="text-align: left"><code>[]</code></td></tr>
+<tr><td style="text-align: left"><a id="terraform_module-srcs"></a>srcs</td><td style="text-align: left">The configuration files that make up this module: <code>.tf</code>, <code>.tf.json</code>. Any other file is an error, since terraform would not load it.<br><br>All of them must live directly in this target's package: a module is a single directory. Put nested configuration files in their own module target and reference it with a <code>module</code> block.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">List of labels</a></td><td style="text-align: left">optional</td><td style="text-align: left"><code>[]</code></td></tr>
 <tr><td style="text-align: left"><a id="terraform_module-data"></a>data</td><td style="text-align: left">Additional files or targets that should be available at runtime.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">List of labels</a></td><td style="text-align: left">optional</td><td style="text-align: left"><code>[]</code></td></tr>
 <tr><td style="text-align: left"><a id="terraform_module-allow_ephemeral_state"></a>allow_ephemeral_state</td><td style="text-align: left">Permit <code>bazel run</code> of <code>apply</code>, <code>destroy</code> and the other state-writing commands against a module with no <code>backend</code> or <code>cloud</code> block.<br><br>Without a backend the engine keeps state in its working directory, which under Bazel is a staged copy that exists for one run. The runner therefore refuses those commands by default, naming the fix. With this set, state is kept under <code>bazel-out</code> between runs: private to the machine, forked per build configuration, and deleted by <code>bazel clean</code>. Set it only where losing the state is harmless: demos, sandboxes, or bootstrapping the bucket that will hold real state. Ignored when a backend is declared; <code>plan</code> and the read-only commands are never gated.</td><td style="text-align: left">Boolean</td><td style="text-align: left">optional</td><td style="text-align: left"><code>False</code></td></tr>
 <tr><td style="text-align: left"><a id="terraform_module-lock"></a>lock</td><td style="text-align: left">An optional <code>.terraform.lock.hcl</code> file.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">Label</a></td><td style="text-align: left">optional</td><td style="text-align: left"><code>None</code></td></tr>
@@ -1176,25 +1178,27 @@ terraform_validate_test(<a href="terraform/terraform_validate_test.html#terrafor
 <tr><td style="text-align: left"><a id="terraform_validate_test-target"></a>target</td><td style="text-align: left">The target to validate.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">Label</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
 </tbody></table>
 </div><div style="break-before: page; page-break-before: always;"></div><h1 id="terraform-extensions"><a class="header" href="#terraform-extensions">Terraform Extensions</a></h1>
-<p>Two module extensions live in <code>//terraform:extensions.bzl</code>:</p>
-<h2 id="terraform_toolchains"><a class="header" href="#terraform_toolchains"><code>terraform_toolchains</code></a></h2>
-<p>Materializes one hub repo (<code>@terraform_toolchains</code>) that declares a
-toolchain per (version, platform) for the releases shipped in
+<p>One module extension lives in <code>//terraform:extensions.bzl</code>, <code>terraform</code>,
+with two tag classes.</p>
+<h2 id="terraformtoolchain"><a class="header" href="#terraformtoolchain"><code>terraform.toolchain</code></a></h2>
+<p>The extension always materializes one hub repo (<code>@terraform_toolchains</code>)
+that declares a toolchain per (version, platform) for the releases shipped in
 <code>//terraform/private:versions.bzl</code> — the three newest when the table was
-generated — and for any release a <code>version</code> tag asks for. For a tagged
-release the extension fetches that release's <code>SHA256SUMS</code> once and records
-the checksums as facts in <code>MODULE.bazel.lock</code>. rules_terraform's own
-<code>MODULE.bazel</code> <code>use_repo</code>s the hub and <code>register_toolchains</code>s it, so
-downstream users get toolchain resolution for free. Per-(version, platform)
-<code>http_archive</code>s are lazy; only the selected combination is fetched.</p>
+generated — and <code>@terraform</code>, the CLI hub. rules_terraform's own
+<code>MODULE.bazel</code> <code>use_repo</code>s the toolchain hub and <code>register_toolchains</code>s it,
+so downstream users get toolchain resolution for free. Per-(version,
+platform) <code>http_archive</code>s are lazy; only the selected combination is fetched.</p>
+<p>A <code>toolchain</code> tag adds any other release. The extension fetches that
+release's <code>SHA256SUMS</code> once and records the checksums as facts in
+<code>MODULE.bazel.lock</code>.</p>
 <pre><code class="language-python"># Nothing to do beyond `bazel_dep` to use the newest shipped release.
 bazel_dep(name = "rules_terraform", version = "...")
 
 # To use another release:
-terraform_toolchains = use_extension("@rules_terraform//terraform:extensions.bzl", "terraform_toolchains")
-terraform_toolchains.version(version = "1.9.8", default = True)
+terraform = use_extension("@rules_terraform//terraform:extensions.bzl", "terraform")
+terraform.toolchain(version = "1.9.8", default = True)
 </code></pre>
-<p><code>terraform_toolchains.version</code></p>
+<p><code>terraform.toolchain</code></p>
 <div class="table-wrapper"><table><thead><tr><th>Attribute</th><th>Type</th><th>Description</th></tr></thead><tbody>
 <tr><td><code>version</code></td><td><code>string</code> (required)</td><td>The release, e.g. <code>1.9.8</code>. Shipped releases need no tag.</td></tr>
 <tr><td><code>default</code></td><td><code>bool</code> (default <code>False</code>)</td><td>Use this release when <a href="terraform/./settings.html"><code>//terraform/settings:version</code></a> is empty. Root module only; at most one tag may set it.</td></tr>
@@ -1202,8 +1206,8 @@ terraform_toolchains.version(version = "1.9.8", default = True)
 </div>
 <p>The hub declares a <code>config_setting</code> per known release, so the flag can
 select any of them: <code>--@rules_terraform//terraform/settings:version=1.9.8</code>.</p>
-<h2 id="terraform"><a class="header" href="#terraform"><code>terraform</code></a></h2>
-<p>Carries the <code>deps</code> tag class: the providers a lock file pins and the
+<h2 id="terraformdeps"><a class="header" href="#terraformdeps"><code>terraform.deps</code></a></h2>
+<p>The <code>deps</code> tag class: the providers a lock file pins and the
 registry and git modules some directories' <code>module</code> blocks name, as one
 hub per tag.</p>
 <pre><code class="language-python">terraform = use_extension("@rules_terraform//terraform:extensions.bzl", "terraform")
@@ -1252,15 +1256,15 @@ the setting's label so callers can reference it programmatically.</p>
 <p><a id="version"></a></p>
 <h2 id="version"><a class="header" href="#version">version</a></h2>
 <p>Picks which Terraform release the auto-registered toolchains resolve to.</p>
-<p>The <code>terraform_toolchains</code> extension declares one toolchain per (version, platform)
+<p>The <code>terraform</code> extension declares one toolchain per (version, platform)
 for the releases shipped in <code>//terraform/private:versions.bzl</code> — the
 newest three when the table was generated — and for any release a
-<code>terraform_toolchains.version(version = "…")</code> tag asks for. For a tagged release the
+<code>terraform.toolchain(version = "…")</code> tag asks for. For a tagged release the
 extension fetches the release's <code>SHA256SUMS</code> once and records the
 checksums as facts in <code>MODULE.bazel.lock</code>, so an older pin costs no
 change to rules_terraform and no network on later evaluations.</p>
 <p>Empty, the default, selects the extension's default: the release the
-root module marked <code>version(…, default = True)</code>, else the newest
+root module marked <code>toolchain(…, default = True)</code>, else the newest
 shipped one. Any other value names one of the known releases. Set it
 globally in <code>.bazelrc</code>, per invocation via
 <code>--@rules_terraform//terraform/settings:version=1.9.8</code>, or per target
@@ -1289,7 +1293,7 @@ a <code>terraform_*</code> symbol.</p>
 </ul>
 <h2 id="module-extensions-1"><a class="header" href="#module-extensions-1">Module extensions</a></h2>
 <ul>
-<li><a href="./tofu/extensions.html">extensions</a> — <code>tofu_toolchains</code>.</li>
+<li><a href="./tofu/extensions.html">extensions</a> — <code>tofu</code>: <code>toolchain</code> and <code>deps</code> tags.</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated with Stardoc: http://skydoc.bazel.build -->
 <p>tofu_binary</p>
@@ -1435,10 +1439,9 @@ from <code>target</code> (and vice versa). Network-free presence check.</p>
 <tr><td style="text-align: left"><a id="tofu_providers_lock_test-target"></a>target</td><td style="text-align: left">The terraform_module whose transitive sources are being checked.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">Label</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
 </tbody></table>
 </div><div style="break-before: page; page-break-before: always;"></div><!-- Generated with Stardoc: http://skydoc.bazel.build -->
-<p>tofu_module — alias for <code>terraform_module</code>.</p>
-<p>Same rule under both names: a bundle of <code>.tf</code> files + <code>deps</code> + optional
-lock is engine-neutral, so <code>tofu_module</code> is just a naming alias so
-OpenTofu-only projects don't have to import a <code>terraform_*</code> symbol.</p>
+<p>tofu_module</p>
+<p>The same rule body as <code>terraform_module</code>, bound to OpenTofu: <code>srcs</code> also
+accepts <code>.tofu</code> and <code>.tofu.json</code>, which Terraform would ignore.</p>
 <h2 id="rules-14"><a class="header" href="#rules-14">Rules</a></h2>
 <ul>
 <li><a href="tofu/tofu_module.html#tofu_module">tofu_module</a></li>
@@ -1450,12 +1453,12 @@ load("@rules_terraform//tofu:tofu_module.bzl", "tofu_module")
 
 tofu_module(<a href="tofu/tofu_module.html#tofu_module-name">name</a>, <a href="tofu/tofu_module.html#tofu_module-deps">deps</a>, <a href="tofu/tofu_module.html#tofu_module-srcs">srcs</a>, <a href="tofu/tofu_module.html#tofu_module-data">data</a>, <a href="tofu/tofu_module.html#tofu_module-allow_ephemeral_state">allow_ephemeral_state</a>, <a href="tofu/tofu_module.html#tofu_module-lock">lock</a>)
 </pre>
-<p>Defines a Terraform module that can be used as a dependency in other Terraform targets.</p>
+<p>Defines a tofu module that can be used as a dependency in other Terraform targets.</p>
 <p><strong>ATTRIBUTES</strong></p>
 <div class="table-wrapper"><table><thead><tr><th style="text-align: left">Name</th><th style="text-align: left">Description</th><th style="text-align: left">Type</th><th style="text-align: left">Mandatory</th><th style="text-align: left">Default</th></tr></thead><tbody>
 <tr><td style="text-align: left"><a id="tofu_module-name"></a>name</td><td style="text-align: left">A unique name for this target.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels#target-names">Name</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
-<tr><td style="text-align: left"><a id="tofu_module-deps"></a>deps</td><td style="text-align: left">Other terraform_module targets, a dependency hub (<code>@&lt;name&gt;</code> from a <code>deps</code> tag, or its <code>//:providers</code> / <code>//:modules</code> halves), individual <code>@&lt;name&gt;//&lt;namespace&gt;_&lt;name&gt;</code> providers, <code>terraform_provider</code>, or <code>terraform_external_module</code> targets this module depends on.<br><br>A <code>terraform_module</code> dep is the Bazel half of a <code>module</code> block, the way a <code>py_library</code> dep is the Bazel half of an <code>import</code>: the <code>.tf</code> file names the path, <code>deps</code> says which target supplies it. A dep whose package already nests under this module's directory lands at that relative path; anything else is matched to a <code>module</code> block whose <code>source</code> ends with the dep's package name.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">List of labels</a></td><td style="text-align: left">optional</td><td style="text-align: left"><code>[]</code></td></tr>
-<tr><td style="text-align: left"><a id="tofu_module-srcs"></a>srcs</td><td style="text-align: left">Terraform source files that make up this module: <code>.tf</code>, <code>.tf.json</code>, and OpenTofu's <code>.tofu</code> / <code>.tofu.json</code>.<br><br>All of them must live directly in this target's package — a Terraform module is a single directory. Put nested .tf files in their own <code>terraform_module</code> and reference it with a <code>module</code> block.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">List of labels</a></td><td style="text-align: left">optional</td><td style="text-align: left"><code>[]</code></td></tr>
+<tr><td style="text-align: left"><a id="tofu_module-deps"></a>deps</td><td style="text-align: left">Other module targets, a dependency hub (<code>@&lt;name&gt;</code> from a <code>deps</code> tag, or its <code>//:providers</code> / <code>//:modules</code> halves), individual <code>@&lt;name&gt;//&lt;namespace&gt;_&lt;name&gt;</code> providers, <code>terraform_provider</code>, or <code>terraform_external_module</code> targets this module depends on.<br><br>A module dep is the Bazel half of a <code>module</code> block, the way a <code>py_library</code> dep is the Bazel half of an <code>import</code>: the <code>.tf</code> file names the path, <code>deps</code> says which target supplies it. A dep whose package already nests under this module's directory lands at that relative path; anything else is matched to a <code>module</code> block whose <code>source</code> ends with the dep's package name.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">List of labels</a></td><td style="text-align: left">optional</td><td style="text-align: left"><code>[]</code></td></tr>
+<tr><td style="text-align: left"><a id="tofu_module-srcs"></a>srcs</td><td style="text-align: left">The configuration files that make up this module: <code>.tf</code>, <code>.tf.json</code>, <code>.tofu</code>, <code>.tofu.json</code>. Any other file is an error, since tofu would not load it.<br><br>All of them must live directly in this target's package: a module is a single directory. Put nested configuration files in their own module target and reference it with a <code>module</code> block.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">List of labels</a></td><td style="text-align: left">optional</td><td style="text-align: left"><code>[]</code></td></tr>
 <tr><td style="text-align: left"><a id="tofu_module-data"></a>data</td><td style="text-align: left">Additional files or targets that should be available at runtime.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">List of labels</a></td><td style="text-align: left">optional</td><td style="text-align: left"><code>[]</code></td></tr>
 <tr><td style="text-align: left"><a id="tofu_module-allow_ephemeral_state"></a>allow_ephemeral_state</td><td style="text-align: left">Permit <code>bazel run</code> of <code>apply</code>, <code>destroy</code> and the other state-writing commands against a module with no <code>backend</code> or <code>cloud</code> block.<br><br>Without a backend the engine keeps state in its working directory, which under Bazel is a staged copy that exists for one run. The runner therefore refuses those commands by default, naming the fix. With this set, state is kept under <code>bazel-out</code> between runs: private to the machine, forked per build configuration, and deleted by <code>bazel clean</code>. Set it only where losing the state is harmless: demos, sandboxes, or bootstrapping the bucket that will hold real state. Ignored when a backend is declared; <code>plan</code> and the read-only commands are never gated.</td><td style="text-align: left">Boolean</td><td style="text-align: left">optional</td><td style="text-align: left"><code>False</code></td></tr>
 <tr><td style="text-align: left"><a id="tofu_module-lock"></a>lock</td><td style="text-align: left">An optional <code>.terraform.lock.hcl</code> file.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">Label</a></td><td style="text-align: left">optional</td><td style="text-align: left"><code>None</code></td></tr>
@@ -1576,32 +1579,30 @@ tofu_validate_aspect()
 <p><strong>ASPECT ATTRIBUTES</strong></p>
 <p><strong>ATTRIBUTES</strong></p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="opentofu-extensions"><a class="header" href="#opentofu-extensions">OpenTofu Extensions</a></h1>
-<p>One module extension lives in <code>//tofu:extensions.bzl</code>:</p>
-<h2 id="tofu_toolchains"><a class="header" href="#tofu_toolchains"><code>tofu_toolchains</code></a></h2>
-<p>No user-facing configuration. Mirrors <code>//terraform:extensions.bzl%terraform_toolchains</code>
-but resolves against <code>//tofu:toolchain_type</code>. Materializes
-<code>@tofu_toolchains</code> covering every supported OpenTofu version, each
-toolchain for the releases shipped in <code>//tofu/private:versions.bzl</code> and any
-a <code>version</code> tag requests, each guarded by a <code>config_setting</code> on
-<a href="tofu/./settings.html"><code>//tofu/settings:version</code></a> that the hub itself declares.
-rules_terraform's own
-<code>MODULE.bazel</code> registers the hub so downstream users get toolchain
-resolution for free.</p>
+<p>One module extension lives in <code>//tofu:extensions.bzl</code>, <code>tofu</code>, with the
+same two tag classes as the <code>terraform</code> extension.</p>
+<h2 id="tofutoolchain"><a class="header" href="#tofutoolchain"><code>tofu.toolchain</code></a></h2>
+<p>The extension always materializes <code>@tofu_toolchains</code>, a hub declaring a
+toolchain for every OpenTofu release shipped in <code>//tofu/private:versions.bzl</code>
+and any a <code>toolchain</code> tag requests, each guarded by a <code>config_setting</code> on
+<a href="tofu/./settings.html"><code>//tofu/settings:version</code></a> that the hub itself declares, and
+<code>@tofu</code>, the CLI hub. rules_terraform's own <code>MODULE.bazel</code> registers the
+hub so downstream users get toolchain resolution for free.</p>
 <pre><code class="language-python"># Nothing to do beyond `bazel_dep` to use the newest shipped release.
 bazel_dep(name = "rules_terraform", version = "...")
 
 # To use another release:
-tofu_toolchains = use_extension("@rules_terraform//tofu:extensions.bzl", "tofu_toolchains")
-tofu_toolchains.version(version = "1.9.1", default = True)
+tofu = use_extension("@rules_terraform//tofu:extensions.bzl", "tofu")
+tofu.toolchain(version = "1.9.1", default = True)
 </code></pre>
-<p><code>tofu_toolchains.version</code> takes the same <code>version</code> and <code>default</code>
-attributes as the Terraform extension's tag; see
+<p><code>tofu.toolchain</code> takes the same <code>version</code> and <code>default</code> attributes as the
+Terraform extension's tag; see
 <a href="tofu/../terraform/extensions.html">the Terraform page</a>. For a tagged release the
 extension fetches that release's <code>SHA256SUMS</code> once and records the
 checksums as facts in <code>MODULE.bazel.lock</code>.</p>
-<h2 id="providers-and-modules"><a class="header" href="#providers-and-modules">Providers and modules</a></h2>
-<p>The <code>tofu</code> extension carries the same <code>deps</code> tag class as the <code>terraform</code>
-extension, defaulting to <code>registry.opentofu.org</code>. An OpenTofu-only
+<h2 id="tofudeps"><a class="header" href="#tofudeps"><code>tofu.deps</code></a></h2>
+<p>The same <code>deps</code> tag class as the <code>terraform</code> extension, defaulting to
+<code>registry.opentofu.org</code>. An OpenTofu-only
 repository uses it for everything and never loads
 <code>//terraform:extensions.bzl</code>:</p>
 <pre><code class="language-python">tofu = use_extension("@rules_terraform//tofu:extensions.bzl", "tofu")
@@ -1630,15 +1631,15 @@ the setting's label so callers can reference it programmatically.</p>
 <p><a id="version"></a></p>
 <h2 id="version-1"><a class="header" href="#version-1">version</a></h2>
 <p>Picks which OpenTofu release the auto-registered toolchains resolve to.</p>
-<p>The <code>tofu_toolchains</code> extension declares one toolchain per (version, platform)
+<p>The <code>tofu</code> extension declares one toolchain per (version, platform)
 for the releases shipped in <code>//tofu/private:versions.bzl</code> — the
 newest three when the table was generated — and for any release a
-<code>tofu_toolchains.version(version = "…")</code> tag asks for. For a tagged release the
+<code>tofu.toolchain(version = "…")</code> tag asks for. For a tagged release the
 extension fetches the release's <code>SHA256SUMS</code> once and records the
 checksums as facts in <code>MODULE.bazel.lock</code>, so an older pin costs no
 change to rules_terraform and no network on later evaluations.</p>
 <p>Empty, the default, selects the extension's default: the release the
-root module marked <code>version(…, default = True)</code>, else the newest
+root module marked <code>toolchain(…, default = True)</code>, else the newest
 shipped one. Any other value names one of the known releases. Set it
 globally in <code>.bazelrc</code>, per invocation via
 <code>--@rules_terraform//tofu/settings:version=1.9.1</code>, or per target
