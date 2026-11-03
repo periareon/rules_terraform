@@ -1,7 +1,7 @@
 """terraform_provider"""
 
 load(
-    "//terraform/private:terraform.bzl",
+    "//engine:terraform.bzl",
     _terraform_provider = "terraform_provider",
 )
 

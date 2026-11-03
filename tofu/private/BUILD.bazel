@@ -7,5 +7,5 @@ bzl_library(
         "//docs:__pkg__",
         "//tofu:__subpackages__",
     ],
-    deps = ["//terraform/private:bzl_lib"],
+    deps = ["//engine:bzl_lib"],
 )

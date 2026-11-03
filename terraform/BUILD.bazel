@@ -1,6 +1,5 @@
 load("@bazel_skylib//:bzl_library.bzl", "bzl_library")
-load("//terraform/private:format.bzl", "terraform_formatter")
-load("//terraform/private:toolchain.bzl", "current_terraform_toolchain")
+load("//terraform/private:engine_rules.bzl", "current_terraform_toolchain", "terraform_formatter")
 
 package(default_visibility = ["//visibility:public"])
 

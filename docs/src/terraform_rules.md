@@ -15,4 +15,4 @@
 
 ## Module extensions
 
-- [extensions](./terraform/extensions.md) — `terraform_toolchains`, `terraform`.
+- [extensions](./terraform/extensions.md) — `terraform`: `toolchain` and `deps` tags.

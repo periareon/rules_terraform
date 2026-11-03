@@ -1,0 +1,33 @@
+load("@rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
+
+go_library(
+    name = "runner_lib",
+    srcs = [
+        "junit.go",
+        "runner.go",
+    ],
+    importpath = "rules_terraform/engine/runner",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//engine/internal/fsutil",
+        "//engine/internal/moduledir",
+        "//engine/internal/tfparse",
+        "@rules_go//go/runfiles",
+    ],
+)
+
+go_binary(
+    name = "runner",
+    embed = [":runner_lib"],
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "runner_test",
+    srcs = [
+        "junit_test.go",
+        "runner_test.go",
+    ],
+    embed = [":runner_lib"],
+    deps = ["@rules_go//go/runfiles"],
+)

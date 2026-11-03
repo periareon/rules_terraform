@@ -1,67 +1,39 @@
-"""OpenTofu bzlmod extensions.
+"""The `tofu` bzlmod extension.
 
-Two extensions live here:
+One extension, two tag classes:
 
-* `tofu_toolchains` — materializes a hub covering the OpenTofu releases
-  shipped in `//tofu/private:versions.bzl` plus any a `version` tag asks
-  for; `//tofu/settings:version` picks one, empty meaning the default.
-* `tofu` — the `deps` tag class mirroring the `terraform` extension's,
-  defaulting to `registry.opentofu.org`. OpenTofu's registry
-  serves its own builds of the hashicorp providers, so a lock written by
-  `tofu` carries their hashes and must be resolved against that registry.
+* `toolchain` — makes a OpenTofu release available beyond the ones shipped in
+  `//tofu/private:versions.bzl`, and optionally marks it the default.
+  The extension always materializes `@tofu_toolchains`, a hub declaring a
+  toolchain per (version, platform), and `@tofu`, the CLI hub.
+  rules_terraform's own `MODULE.bazel` `use_repo`s the toolchain hub and
+  `register_toolchains`s it, so downstream users get toolchain resolution
+  for free. `//tofu/settings:version` picks the release; empty means the
+  default.
+* `deps` — the providers a lock file pins and the registry and git modules
+  some directories' `module` blocks name, as one hub per tag. Fetched
+  archives go into one pool shared by every hub, keyed by what the archive
+  is rather than who asked for it; each hub is an alias layer over that pool.
+
+The body is `//engine:extension_impl.bzl`, shared with the other engine.
+Everything OpenTofu-specific is in `//tofu/private:engine.bzl`.
 """
 
-# buildifier: disable=bzl-visibility
-load("//terraform/private:cli.bzl", "tofu_cli_hub")
-
-# buildifier: disable=bzl-visibility
-load("//terraform/private:extension_impl.bzl", "deps_tag_class", "run_extension")
-
-# buildifier: disable=bzl-visibility
-load("//terraform/private:toolchain_extension.bzl", "toolchains_extension_impl", "version_tag_class")
-load(
-    "//tofu/private:versions.bzl",
-    "TOFU_DEFAULT_VERSION",
-    "TOFU_VERSIONS",
-)
-
-_HUB_NAME = "tofu_toolchains"
-_TOFU_REGISTRY = "registry.opentofu.org"
-
-def _tofu_toolchains_impl(module_ctx):
-    return toolchains_extension_impl(
-        module_ctx,
-        engine = "tofu",
-        hub_name = _HUB_NAME,
-        toolchain_type = "@rules_terraform//tofu:toolchain_type",
-        version_flag = "@rules_terraform//tofu/settings:version",
-        versions = TOFU_VERSIONS,
-        default_version = TOFU_DEFAULT_VERSION,
-        binary_name = "tofu",
-        archive_prefix = "tofu",
-        sha256sums_url = lambda v: "https://github.com/opentofu/opentofu/releases/download/v{v}/tofu_{v}_SHA256SUMS".format(v = v),
-        download_url = lambda v, p: "https://github.com/opentofu/opentofu/releases/download/v{v}/tofu_{v}_{p}.zip".format(v = v, p = p),
-        # `@tofu` — `bazel run @tofu -- <cmd>` chdirs to $BUILD_WORKING_DIRECTORY
-        # and execs the resolved toolchain `tofu` binary with the user's argv.
-        declare_cli_hub = lambda: tofu_cli_hub(name = "tofu"),
-    )
-
-tofu_toolchains = module_extension(
-    doc = """Materializes the `@tofu_toolchains` hub: the releases shipped in
-    `//tofu/private:versions.bzl` plus any a `version` tag asks for, and the
-    `@tofu` CLI hub.""",
-    implementation = _tofu_toolchains_impl,
-    tag_classes = {"version": version_tag_class("tofu")},
-)
+load("//engine:extension_impl.bzl", "deps_tag_class", "run_extension")
+load("//engine:toolchain_extension.bzl", "toolchain_tag_class")
+load("//tofu/private:engine.bzl", "TOFU_ENGINE")
 
 def _tofu_impl(module_ctx):
-    return run_extension(module_ctx, registry_default = _TOFU_REGISTRY)
+    return run_extension(module_ctx, engine = TOFU_ENGINE)
 
 tofu = module_extension(
-    doc = """Bzlmod extension for an OpenTofu module's external dependencies:
-    the same `deps` tag class as the `terraform` extension, defaulting to
-    `registry.opentofu.org`. An OpenTofu-only repository needs nothing from
-    `//terraform:extensions.bzl`.""",
+    doc = """The OpenTofu extension: `toolchain` tags pick engine releases,
+    `deps` tags describe a module's external dependencies. Always
+    materializes `@tofu_toolchains` and `@tofu`; `deps` defaults to
+    `registry.opentofu.org`.""",
     implementation = _tofu_impl,
-    tag_classes = {"deps": deps_tag_class(_TOFU_REGISTRY)},
+    tag_classes = {
+        "deps": deps_tag_class(TOFU_ENGINE.registry),
+        "toolchain": toolchain_tag_class(TOFU_ENGINE.name),
+    },
 )

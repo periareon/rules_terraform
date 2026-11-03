@@ -1,0 +1,12 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "argsfile",
+    srcs = ["argsfile.go"],
+    importpath = "rules_terraform/engine/internal/argsfile",
+    visibility = [
+        "//engine:__subpackages__",
+        "//tests/private:__subpackages__",
+    ],
+    deps = ["@rules_go//go/runfiles"],
+)

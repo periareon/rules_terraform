@@ -1,5 +1,5 @@
+load("//engine/tests:init_test.bzl", "terraform_init_test")
 load("//terraform:terraform_module.bzl", "terraform_module")
-load("//tests/private:init_test.bzl", "terraform_init_test")
 
 terraform_module(
     name = "transitive_registry",

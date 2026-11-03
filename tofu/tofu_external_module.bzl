@@ -5,9 +5,8 @@ engine-neutral, so `tofu_external_module` is just a naming alias so
 OpenTofu-only projects don't have to import a `terraform_*` symbol.
 """
 
-# buildifier: disable=bzl-visibility
 load(
-    "//terraform/private:terraform.bzl",
+    "//engine:terraform.bzl",
     _terraform_external_module = "terraform_external_module",
 )
 

@@ -23,4 +23,4 @@ a `terraform_*` symbol.
 
 ## Module extensions
 
-- [extensions](./tofu/extensions.md) — `tofu_toolchains`.
+- [extensions](./tofu/extensions.md) — `tofu`: `toolchain` and `deps` tags.

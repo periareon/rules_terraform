@@ -21,8 +21,8 @@ local_path_override(
 # Toolchains for both terraform and tofu are auto-registered by
 # rules_terraform's own MODULE.bazel. Pick a Terraform release with:
 #
-#   terraform_toolchains = use_extension("@rules_terraform//terraform:extensions.bzl", "terraform_toolchains")
-#   terraform_toolchains.version(version = "1.9.8", default = True)
+#   terraform = use_extension("@rules_terraform//terraform:extensions.bzl", "terraform")
+#   terraform.toolchain(version = "1.9.8", default = True)
 #
 # or select among the known releases per invocation with
 #   --@rules_terraform//terraform/settings:version=1.9.8

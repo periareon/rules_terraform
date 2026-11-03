@@ -5,9 +5,8 @@ The rule reads only HCL text (the `.terraform.lock.hcl` and the module's
 same implementation covers both Terraform and OpenTofu.
 """
 
-# buildifier: disable=bzl-visibility
 load(
-    "//terraform/private:lock.bzl",
+    "//engine:lock.bzl",
     _terraform_providers_lock_test = "terraform_providers_lock_test",
 )
 

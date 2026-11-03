@@ -27,11 +27,11 @@ Any other release is one tag away. The extension fetches that release's
 rules_terraform:
 
 ```python
-terraform_toolchains = use_extension("@rules_terraform//terraform:extensions.bzl", "terraform_toolchains")
-terraform_toolchains.version(version = "1.9.8", default = True)   # default = True: use it unless the flag says otherwise
+terraform = use_extension("@rules_terraform//terraform:extensions.bzl", "terraform")
+terraform.toolchain(version = "1.9.8", default = True)   # default = True: use it unless the flag says otherwise
 
-tofu_toolchains = use_extension("@rules_terraform//tofu:extensions.bzl", "tofu_toolchains")
-tofu_toolchains.version(version = "1.9.1")                        # available, selected by flag
+tofu = use_extension("@rules_terraform//tofu:extensions.bzl", "tofu")
+tofu.toolchain(version = "1.9.1")                        # available, selected by flag
 ```
 
 The flags select among the releases the hub knows, shipped or tagged:
@@ -186,15 +186,15 @@ To use `@terraform` / `@tofu` from downstream, add them to your
 `MODULE.bazel`:
 
 ```python
-terraform_toolchains = use_extension("@rules_terraform//terraform:extensions.bzl", "terraform_toolchains")
-use_repo(terraform_toolchains, "terraform")
+terraform = use_extension("@rules_terraform//terraform:extensions.bzl", "terraform")
+use_repo(terraform, "terraform")
 
-tofu_toolchains = use_extension("@rules_terraform//tofu:extensions.bzl", "tofu_toolchains")
-use_repo(tofu_toolchains, "tofu")
+tofu = use_extension("@rules_terraform//tofu:extensions.bzl", "tofu")
+use_repo(tofu, "tofu")
 ```
 
-The extensions themselves are already invoked by rules_terraform's own
-`MODULE.bazel` (they register toolchains); the `use_repo` line only
+The extensions are already invoked by rules_terraform's own
+`MODULE.bazel`, which registers the toolchain hubs; the `use_repo` line only
 binds the repo name in your namespace so `@terraform` / `@tofu`
 resolve.
 
@@ -223,7 +223,10 @@ bzlmod-extension time; build actions are offline. As a consequence:
   `source` names it.
 
 A `terraform_module` is exactly one directory: every file in `srcs`
-must live directly in the target's own package. Nested `.tf` files are
+must live directly in the target's own package, and `srcs` accepts only
+what the engine loads: `.tf` and `.tf.json` for `terraform_module`, plus
+`.tofu` and `.tofu.json` for `tofu_module`. Any other file is an analysis
+error rather than a file the engine would silently skip. Nested `.tf` files are
 a child module and belong in their own `terraform_module`. This is
 enforced at analysis time, and it is what lets the aspect know which
 directory it is building without guessing.
@@ -749,7 +752,7 @@ The state of each bzlmod extension in rules_terraform:
 
 | Extension                                          | Reproducible? | Why                                                                                                                                             |
 |----------------------------------------------------|:-------------:|-------------------------------------------------------------------------------------------------------------------------------------------------|
-| `terraform_toolchains` / `tofu_toolchains`     | ✓             | Every URL + integrity is vendored in `//<engine>/private:versions.bzl`. No network at eval time; identical inputs → identical repo declarations. |
+| `toolchain` tag                                    | ✓             | Every URL + integrity is vendored in `//<engine>/private:versions.bzl`; a tagged release's checksums are fetched once and kept as facts. Identical inputs → identical repo declarations. |
 | `deps` tag, `lock` half                            | ✓             | Reads a checked-in `.terraform.lock.hcl`; never resolves version constraints. Registry API is called to look up download URLs, but the version and hash come from the lock. |
 | `deps` tag, `roots` half                           | ✗             | Live version-constraint resolution against the Registry API, and a git tag looked up once and recorded as a fact. `MODULE.bazel.lock` is the capture layer that closes the gap — see below. |
 
@@ -757,8 +760,7 @@ The state of each bzlmod extension in rules_terraform:
 
 The modules extension is the only piece of rules_terraform that
 depends on `MODULE.bazel.lock` for both reproducibility AND performance.
-`terraform_toolchains`, `tofu_toolchains`, and the `lock` half of a
-`deps` tag all read fully vendored state and produce
+The `toolchain` tag and the `lock` half of a `deps` tag read fully vendored state and produce
 deterministic output without any lockfile involvement. The modules
 extension is different in two related ways:
 

@@ -1,14 +1,9 @@
-"""tofu_module — alias for `terraform_module`.
+"""tofu_module
 
-Same rule under both names: a bundle of `.tf` files + `deps` + optional
-lock is engine-neutral, so `tofu_module` is just a naming alias so
-OpenTofu-only projects don't have to import a `terraform_*` symbol.
+The same rule body as `terraform_module`, bound to OpenTofu: `srcs` also
+accepts `.tofu` and `.tofu.json`, which Terraform would ignore.
 """
 
-# buildifier: disable=bzl-visibility
-load(
-    "//terraform/private:terraform.bzl",
-    _terraform_module = "terraform_module",
-)
+load("//tofu/private:engine_rules.bzl", _tofu_module = "tofu_module")
 
-tofu_module = _terraform_module
+tofu_module = _tofu_module

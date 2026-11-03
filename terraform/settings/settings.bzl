@@ -10,16 +10,16 @@ visibility(["//terraform/..."])
 def version():
     """Picks which Terraform release the auto-registered toolchains resolve to.
 
-    The `terraform_toolchains` extension declares one toolchain per (version, platform)
+    The `terraform` extension declares one toolchain per (version, platform)
     for the releases shipped in `//terraform/private:versions.bzl` — the
     newest three when the table was generated — and for any release a
-    `terraform_toolchains.version(version = "…")` tag asks for. For a tagged release the
+    `terraform.toolchain(version = "…")` tag asks for. For a tagged release the
     extension fetches the release's `SHA256SUMS` once and records the
     checksums as facts in `MODULE.bazel.lock`, so an older pin costs no
     change to rules_terraform and no network on later evaluations.
 
     Empty, the default, selects the extension's default: the release the
-    root module marked `version(…, default = True)`, else the newest
+    root module marked `toolchain(…, default = True)`, else the newest
     shipped one. Any other value names one of the known releases. Set it
     globally in `.bazelrc`, per invocation via
     `--@rules_terraform//terraform/settings:version=1.9.8`, or per target

@@ -1,38 +1,36 @@
 # OpenTofu Extensions
 
-One module extension lives in `//tofu:extensions.bzl`:
+One module extension lives in `//tofu:extensions.bzl`, `tofu`, with the
+same two tag classes as the `terraform` extension.
 
-## `tofu_toolchains`
+## `tofu.toolchain`
 
-No user-facing configuration. Mirrors `//terraform:extensions.bzl%terraform_toolchains`
-but resolves against `//tofu:toolchain_type`. Materializes
-`@tofu_toolchains` covering every supported OpenTofu version, each
-toolchain for the releases shipped in `//tofu/private:versions.bzl` and any
-a `version` tag requests, each guarded by a `config_setting` on
-[`//tofu/settings:version`](./settings.md) that the hub itself declares.
-rules_terraform's own
-`MODULE.bazel` registers the hub so downstream users get toolchain
-resolution for free.
+The extension always materializes `@tofu_toolchains`, a hub declaring a
+toolchain for every OpenTofu release shipped in `//tofu/private:versions.bzl`
+and any a `toolchain` tag requests, each guarded by a `config_setting` on
+[`//tofu/settings:version`](./settings.md) that the hub itself declares, and
+`@tofu`, the CLI hub. rules_terraform's own `MODULE.bazel` registers the
+hub so downstream users get toolchain resolution for free.
 
 ```python
 # Nothing to do beyond `bazel_dep` to use the newest shipped release.
 bazel_dep(name = "rules_terraform", version = "...")
 
 # To use another release:
-tofu_toolchains = use_extension("@rules_terraform//tofu:extensions.bzl", "tofu_toolchains")
-tofu_toolchains.version(version = "1.9.1", default = True)
+tofu = use_extension("@rules_terraform//tofu:extensions.bzl", "tofu")
+tofu.toolchain(version = "1.9.1", default = True)
 ```
 
-`tofu_toolchains.version` takes the same `version` and `default`
-attributes as the Terraform extension's tag; see
+`tofu.toolchain` takes the same `version` and `default` attributes as the
+Terraform extension's tag; see
 [the Terraform page](../terraform/extensions.md). For a tagged release the
 extension fetches that release's `SHA256SUMS` once and records the
 checksums as facts in `MODULE.bazel.lock`.
 
-## Providers and modules
+## `tofu.deps`
 
-The `tofu` extension carries the same `deps` tag class as the `terraform`
-extension, defaulting to `registry.opentofu.org`. An OpenTofu-only
+The same `deps` tag class as the `terraform` extension, defaulting to
+`registry.opentofu.org`. An OpenTofu-only
 repository uses it for everything and never loads
 `//terraform:extensions.bzl`:
 

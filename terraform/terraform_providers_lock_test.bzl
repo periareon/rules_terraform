@@ -6,7 +6,7 @@ names. Reads HCL text only; no engine binary is invoked.
 """
 
 load(
-    "//terraform/private:lock.bzl",
+    "//engine:lock.bzl",
     _terraform_providers_lock_test = "terraform_providers_lock_test",
 )
 

@@ -1,0 +1,34 @@
+load("//terraform:terraform_module.bzl", "terraform_module")
+load("//tofu:tofu_module.bzl", "tofu_module")
+load(":source_extensions_test.bzl", "accepted_source_test", "rejected_source_test")
+
+# A `.tofu` file is configuration to OpenTofu and nothing to Terraform, so
+# `terraform_module` refuses it at analysis time rather than staging a file
+# the engine would skip.
+terraform_module(
+    name = "terraform_with_tofu_file",
+    srcs = [
+        "extra.tofu",
+        "main.tf",
+    ],
+    tags = ["manual"],
+)
+
+rejected_source_test(
+    name = "terraform_rejects_tofu_file_test",
+    target_under_test = ":terraform_with_tofu_file",
+)
+
+tofu_module(
+    name = "tofu_with_tofu_file",
+    srcs = [
+        "extra.tofu",
+        "main.tf",
+    ],
+    tags = ["manual"],
+)
+
+accepted_source_test(
+    name = "tofu_accepts_tofu_file_test",
+    target_under_test = ":tofu_with_tofu_file",
+)

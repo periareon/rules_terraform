@@ -42,7 +42,7 @@ examples/tofu/
 - **Workflow rules bind to a different toolchain.** `tofu_binary`,
   `tofu_test`, `tofu_validate_test`, and `tofu_fmt_test`
   require `//tofu:toolchain_type`. Bazel resolves the `tofu` binary
-  fetched by the `tofu_toolchains` extension.
+  fetched by the `tofu` extension's toolchain hub.
 - **Version flag is `//tofu/settings:version`.** Independent of
   Terraform's version flag, so a monorepo can pin different versions per
   engine.

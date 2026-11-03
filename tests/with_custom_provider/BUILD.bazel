@@ -1,8 +1,6 @@
+load("//engine/tests:init_test.bzl", "terraform_init_test")
 load("//terraform:terraform_module.bzl", "terraform_module")
-
-# buildifier: disable=bzl-visibility
-load("//terraform/private:terraform.bzl", "terraform_provider")
-load("//tests/private:init_test.bzl", "terraform_init_test")
+load("//terraform:terraform_provider.bzl", "terraform_provider")
 
 terraform_provider(
     name = "custom_provider",
@@ -39,11 +37,11 @@ terraform_init_test(
         "main.tf",
         ".terraform.lock.hcl",
     ] + select({
-        "//terraform/private/constraints:darwin_amd64": [_PROVIDER_DIR + "darwin_amd64/terraform-provider-custom"],
-        "//terraform/private/constraints:darwin_arm64": [_PROVIDER_DIR + "darwin_arm64/terraform-provider-custom"],
-        "//terraform/private/constraints:linux_amd64": [_PROVIDER_DIR + "linux_amd64/terraform-provider-custom"],
-        "//terraform/private/constraints:linux_arm64": [_PROVIDER_DIR + "linux_arm64/terraform-provider-custom"],
-        "//terraform/private/constraints:windows_amd64": [_PROVIDER_DIR + "windows_amd64/terraform-provider-custom.exe"],
+        "//engine/constraints:darwin_amd64": [_PROVIDER_DIR + "darwin_amd64/terraform-provider-custom"],
+        "//engine/constraints:darwin_arm64": [_PROVIDER_DIR + "darwin_arm64/terraform-provider-custom"],
+        "//engine/constraints:linux_amd64": [_PROVIDER_DIR + "linux_amd64/terraform-provider-custom"],
+        "//engine/constraints:linux_arm64": [_PROVIDER_DIR + "linux_arm64/terraform-provider-custom"],
+        "//engine/constraints:windows_amd64": [_PROVIDER_DIR + "windows_amd64/terraform-provider-custom.exe"],
     }),
     target = ":with_custom_provider",
 )
