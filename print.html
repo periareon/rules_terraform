@@ -439,7 +439,7 @@ is a fully-populated module directory.</p>
 <h3 id="at-a-glance"><a class="header" href="#at-a-glance">At a glance</a></h3>
 <div class="table-wrapper"><table><thead><tr><th>Dependency type</th><th>Fetched from</th><th>Lock file</th><th>Refresh via</th></tr></thead><tbody>
 <tr><td>Providers</td><td>Terraform Registry v1 API</td><td><code>.terraform.lock.hcl</code></td><td><code>bazel run //path:providers_lock.update</code> (a <a href="./terraform/terraform_providers_lock.html"><code>terraform_providers_lock</code></a> target) — see below</td></tr>
-<tr><td>Registry modules</td><td>Terraform Registry v1 API</td><td>none — live-resolved from the <code>roots</code> of a <code>deps</code> tag</td><td>Automatic on <code>bazel fetch</code>. See "External registry modules" below for the tradeoff.</td></tr>
+<tr><td>Registry modules</td><td>Terraform Registry v1 API</td><td>none in Terraform; the version each constraint resolved to is a fact in <code>MODULE.bazel.lock</code></td><td>A changed <code>module</code> block resolves on the next <code>bazel fetch</code>. To move an unchanged constraint to a newer release: <code>RULES_TERRAFORM_UPGRADE=1 bazel fetch //...</code>, then commit the lockfile diff.</td></tr>
 <tr><td>Git modules</td><td>GitHub archives over https; the host's <code>git</code> for any other remote</td><td>none — the <code>?ref=</code> must be a tag or commit; what a tag names is recorded in <code>MODULE.bazel.lock</code></td><td>Change the <code>?ref=</code>. See "Git modules" below.</td></tr>
 <tr><td>Local / in-repo modules</td><td>Bazel target graph</td><td>none</td><td>Edit <code>deps</code> on the parent <code>terraform_module</code></td></tr>
 </tbody></table>
@@ -587,9 +587,12 @@ actually installed. A module that depends on providers but has no <code>lock</co
 is an analysis error, since the engine will not use a provider directory
 it cannot check against one.</p>
 <h3 id="external-registry-modules"><a class="header" href="#external-registry-modules">External registry modules</a></h3>
-<p>There is <strong>no lock file</strong> for registry modules — the extension resolves
-them live against the Registry API on every fresh evaluation. Terraform
-users load the extension from the terraform side:</p>
+<p>Terraform has no lock file for modules, so the extension keeps its own
+record: each <code>module</code> block's constraint is resolved against the Registry
+API once, and the version it chose is written as a fact to
+<code>MODULE.bazel.lock</code>. Every later evaluation declares that version until an
+upgrade is asked for. Terraform users load the extension from the terraform
+side:</p>
 <pre><code class="language-python">terraform.deps(
     name = "shared",
     lock = "//:.terraform.lock.hcl",
@@ -721,12 +724,18 @@ matches, the same way it places a registry module.</p>
 <p><strong>At build time</strong> the init aspect copies each module's files into
 <code>.terraform/modules/&lt;key&gt;/</code> and adds a corresponding entry to
 Terraform's <code>modules.json</code> manifest.</p>
-<p><strong>Reproducibility and caching.</strong> The extension is
-<code>reproducible = False</code> and every <code>.tf</code> edit in the root module
-directory invalidates it (bzlmod tracks each <code>module_ctx.read()</code>).
-Re-eval cost is cached across runs via <code>module_ctx.facts</code> — but that
-cache only persists when <code>MODULE.bazel.lock</code> is enabled. See
-<a href="index.html#reproducibility">Reproducibility</a> for the full recipe and the
+<p><strong>Reproducibility and caching.</strong> The extension is <code>reproducible = True</code>:
+every answer it ever took from the network, a constraint's resolved
+version, a tag's commit, an archive's URL and integrity, is a fact in
+<code>MODULE.bazel.lock</code>, so the same inputs and facts declare the same
+repositories. Every <code>.tf</code> edit in a root directory still re-evaluates it
+(bzlmod tracks each <code>module_ctx.read()</code>), but a re-evaluation with warm
+facts makes no network calls. Facts persist only while the lockfile is
+enabled. To re-resolve on purpose, set <code>RULES_TERRAFORM_UPGRADE=1</code> in the
+environment of one <code>bazel fetch</code> (or pass
+<code>--repo_env=RULES_TERRAFORM_UPGRADE=1</code>); the extension sees the variable
+through <code>module_ctx.getenv</code>, so setting and clearing it each count as an
+input change. See <a href="index.html#reproducibility">Reproducibility</a> and the
 <code>Implementation detail: network calls per eval</code> note below.</p>
 <p><strong>Non-default registries.</strong> Pass <code>registry = "…"</code> on the tag if you're
 pointing at a private mirror or an alternate registry; it applies to the
@@ -736,15 +745,19 @@ providers and the modules of that tag alike.</p>
 <p>For each <code>module { }</code> block, the extension issues up to three Registry
 API requests, cached across evals via <code>module_ctx.facts</code>:</p>
 <div class="table-wrapper"><table><thead><tr><th>Call</th><th>Purpose</th><th>Cost</th><th>Skipped when</th></tr></thead><tbody>
-<tr><td><code>GET /v1/modules/&lt;source&gt;/versions</code></td><td>Resolve <code>version</code> constraint to a concrete SemVer</td><td>Small JSON</td><td><code>version</code> is already an exact-pinned SemVer</td></tr>
+<tr><td><code>GET /v1/modules/&lt;source&gt;/versions</code></td><td>Resolve <code>version</code> constraint to a concrete SemVer</td><td>Small JSON</td><td><code>version</code> is an exact pin, or facts hold <code>resolve:&lt;registry&gt;/&lt;source&gt;@&lt;constraint&gt;</code> and no upgrade was asked for</td></tr>
 <tr><td><code>GET /v1/modules/&lt;source&gt;/&lt;version&gt;</code></td><td>Read <code>source</code> (git URL) + <code>tag</code> to build the archive URL</td><td>Small JSON</td><td>Facts cache has an entry for <code>&lt;source&gt;@&lt;version&gt;</code></td></tr>
 <tr><td><code>GET &lt;archive URL&gt;</code></td><td>Stream the archive body to compute an sha256 integrity</td><td><strong>MB per module</strong></td><td>Facts cache has an entry for <code>&lt;source&gt;@&lt;version&gt;</code></td></tr>
 </tbody></table>
 </div>
-<p>Facts is keyed by <code>&lt;source&gt;@&lt;concrete_version&gt;</code> and stores
-<code>{url, strip_prefix, integrity}</code> — historical facts that don't change
-once a module version is published. Only entries for currently-declared
-modules carry across evals; entries for removed modules prune naturally.</p>
+<p>Two kinds of fact are kept. <code>&lt;source&gt;@&lt;concrete_version&gt;</code> stores
+<code>{url, strip_prefix, integrity}</code> and the module's own external references:
+historical facts that don't change once a version is published.
+<code>resolve:&lt;registry&gt;/&lt;source&gt;@&lt;constraint&gt;</code> stores the version a constraint
+resolved to, which is a choice rather than a property, and is only
+revisited under <code>RULES_TERRAFORM_UPGRADE</code>. Only entries for
+currently-declared modules carry across evals; entries for removed modules
+prune naturally.</p>
 </details>
 <h3 id="local--in-repo-modules"><a class="header" href="#local--in-repo-modules">Local / in-repo modules</a></h3>
 <p>Modules living inside your monorepo don't need a lock file — Bazel's
@@ -784,44 +797,39 @@ parent's package.</p>
 <h3 id="update-workflow--one-page-summary"><a class="header" href="#update-workflow--one-page-summary">Update workflow — one-page summary</a></h3>
 <div class="table-wrapper"><table><thead><tr><th>Change</th><th>What to do</th></tr></thead><tbody>
 <tr><td>Bump / add a provider</td><td>Update <code>required_providers { }</code>; regenerate <code>.terraform.lock.hcl</code> with <code>bazel run</code> on the module's <code>terraform_providers_lock</code> target</td></tr>
-<tr><td>Bump / add a registry module</td><td>Edit the <code>module { source = "…" version = "…" }</code> block and make sure its directory is in a <code>deps</code> tag's <code>roots</code>. Live-resolved on the next <code>bazel fetch</code>; regenerate <code>MODULE.bazel.lock</code> if you have it enabled.</td></tr>
+<tr><td>Bump / add a registry module</td><td>Edit the <code>module { source = "…" version = "…" }</code> block and make sure its directory is in a <code>deps</code> tag's <code>roots</code>. A changed block resolves on the next <code>bazel fetch</code>; to move an unchanged <code>~&gt;</code> constraint to a newer release, run <code>RULES_TERRAFORM_UPGRADE=1 bazel fetch //...</code>. Commit the <code>MODULE.bazel.lock</code> diff either way.</td></tr>
 <tr><td>Bump / add a git module</td><td>Edit the <code>?ref=</code> in the <code>module { source = "git::…" }</code> block to the new tag or commit id. Branch names are refused. A tag is looked up once and what it names is recorded in <code>MODULE.bazel.lock</code>.</td></tr>
 <tr><td>Add / rename a local module</td><td>Write the <code>module { source = "…" }</code> block and add the child to the parent's <code>deps</code>; no lock file involved</td></tr>
 <tr><td>Verify everything</td><td><code>bazel test //...</code> — runs validate, fmt, tftest, and every lock drift check in one shot</td></tr>
 </tbody></table>
 </div>
 <h2 id="reproducibility"><a class="header" href="#reproducibility">Reproducibility</a></h2>
-<p>The state of each bzlmod extension in rules_terraform:</p>
-<div class="table-wrapper"><table><thead><tr><th>Extension</th><th style="text-align: center">Reproducible?</th><th>Why</th></tr></thead><tbody>
-<tr><td><code>toolchain</code> tag</td><td style="text-align: center">✓</td><td>Every URL + integrity is vendored in <code>//&lt;engine&gt;/private:versions.bzl</code>; a tagged release's checksums are fetched once and kept as facts. Identical inputs → identical repo declarations.</td></tr>
-<tr><td><code>deps</code> tag, <code>lock</code> half</td><td style="text-align: center">✓</td><td>Reads a checked-in <code>.terraform.lock.hcl</code>; never resolves version constraints. Registry API is called to look up download URLs, but the version and hash come from the lock.</td></tr>
-<tr><td><code>deps</code> tag, <code>roots</code> half</td><td style="text-align: center">✗</td><td>Live version-constraint resolution against the Registry API, and a git tag looked up once and recorded as a fact. <code>MODULE.bazel.lock</code> is the capture layer that closes the gap — see below.</td></tr>
+<p>Every bzlmod extension in rules_terraform is <code>reproducible = True</code>: given
+the same tags, the same files, and the same facts, it declares the same
+repositories.</p>
+<div class="table-wrapper"><table><thead><tr><th>Part</th><th>Where its answers come from</th></tr></thead><tbody>
+<tr><td><code>toolchain</code> tag</td><td>URL and integrity vendored in <code>//&lt;engine&gt;/private:versions.bzl</code>; a tagged release's checksums fetched once and kept as facts.</td></tr>
+<tr><td><code>deps</code> tag, <code>lock</code> half</td><td>The checked-in <code>.terraform.lock.hcl</code> pins versions and hashes; the registry is asked only where each archive lives, and that answer is a fact.</td></tr>
+<tr><td><code>deps</code> tag, <code>roots</code> half</td><td>A version constraint or git ref is resolved once; the version or commit it named is a fact, and so are the archive's URL and integrity.</td></tr>
 </tbody></table>
 </div>
 <h3 id="the-role-of-modulebazellock"><a class="header" href="#the-role-of-modulebazellock">The role of <code>MODULE.bazel.lock</code></a></h3>
-<p>The modules extension is the only piece of rules_terraform that
-depends on <code>MODULE.bazel.lock</code> for both reproducibility AND performance.
-The <code>toolchain</code> tag and the <code>lock</code> half of a <code>deps</code> tag read fully vendored state and produce
-deterministic output without any lockfile involvement. The modules
-extension is different in two related ways:</p>
+<p>Facts live in the lockfile. That is what turns "resolved once" into
+"resolved once per repository" rather than once per machine:</p>
 <ol>
 <li>
-<p><strong>Reproducibility.</strong> Without the lockfile, <code>~&gt; 5.0</code> can resolve to
-<code>5.7.1</code> today and <code>5.7.2</code> tomorrow. With the lockfile enabled,
-bzlmod captures the extension's resolved output and reuses it on
-every subsequent eval — the extension is <code>reproducible = False</code>
-under Bazel's contract, but the lockfile makes builds
-byte-identical across time in practice.</p>
+<p><strong>Reproducibility.</strong> <code>~&gt; 5.0</code> resolves to <code>5.7.1</code> today and would
+resolve to <code>5.7.2</code> tomorrow. The first evaluation records <code>5.7.1</code> as a
+fact; every evaluation after that, on any machine, declares <code>5.7.1</code>
+until someone asks for an upgrade. The choice is in the lockfile, in
+the diff, and in review.</p>
 </li>
 <li>
-<p><strong>Performance.</strong> Every <code>.tf</code> edit invalidates the extension (bzlmod
-tracks each <code>module_ctx.read()</code>). Without any cache, every re-eval
-hits the Registry API three times per module block, including
-downloading each archive to compute an sha256 — MB per module. The
-extension caches per-<code>(source, version)</code> archive URL + integrity in
-<code>module_ctx.facts</code>; those facts persist through
-<code>MODULE.bazel.lock</code>. Without the lockfile, facts is always empty,
-and every re-eval pays the full cost.</p>
+<p><strong>Performance.</strong> Every <code>.tf</code> edit under a <code>roots</code> directory
+re-evaluates the extension (bzlmod tracks each <code>module_ctx.read()</code>).
+With warm facts a re-evaluation makes no network calls; without the
+lockfile there are no facts, and every re-evaluation resolves and
+downloads from scratch.</p>
 </li>
 </ol>
 <p><strong>Recommended downstream setup</strong> — in your consuming repo's <code>.bazelrc</code>:</p>
@@ -829,59 +837,35 @@ and every re-eval pays the full cost.</p>
 # or, once you're confident in the state:
 common --lockfile_mode=strict
 </code></pre>
-<p>Commit <code>MODULE.bazel.lock</code>. This gives you:</p>
-<ul>
-<li>Deterministic builds regardless of version constraints in <code>.tf</code>.</li>
-<li>Cheap re-evals — cached facts short-circuit metadata calls and
-archive downloads on every re-run.</li>
-<li>A PR-visible diff (<code>MODULE.bazel.lock</code>) whenever a module version
-or archive hash actually changes.</li>
-</ul>
-<p><strong>Bonus: pin exact versions in <code>module { }</code> blocks.</strong> Combined with
-<code>MODULE.bazel.lock</code>, exact pins let the extension skip even the
-<code>/versions</code> API call — bringing warm-cache re-evals to zero network
-calls per module:</p>
-<pre><code class="language-hcl">module "vpc" {
-  source  = "terraform-aws-modules/vpc/aws"
-  version = "5.7.1"   # not "~&gt; 5.0"
-}
-</code></pre>
-<h3 id="rules_terraforms-own-modulebazellock"><a class="header" href="#rules_terraforms-own-modulebazellock">Rules_terraform's own <code>MODULE.bazel.lock</code></a></h3>
-<p>The ruleset commits its lockfile. Its own test fixtures use the modules
-extension, so the lockfile is what keeps <code>bazel test //...</code> here offline
-and repeatable, and a PR that bumps a fixture's module version shows the
+<p>Commit <code>MODULE.bazel.lock</code>. This gives you deterministic module versions
+regardless of how loosely the <code>.tf</code> constraints are written, cheap
+re-evaluations, and a PR-visible diff whenever a resolution changes.</p>
+<p><code>--lockfile_mode=off</code> is the one way to opt out: with nothing to hold
+facts, every evaluation resolves live, exactly as <code>terraform init</code> does.</p>
+<p><strong>Exact pins are still worth writing.</strong> A block pinned to <code>5.7.1</code> skips
+even the first <code>/versions</code> call, and it is the only form the native
+<code>terraform init</code> also treats as fixed, so it is what keeps the Bazel and
+non-Bazel workflows on the same module code.</p>
+<h3 id="upgrading"><a class="header" href="#upgrading">Upgrading</a></h3>
+<p>A recorded resolution is kept on purpose, so a newer release of a module
+does not arrive by itself. To take it:</p>
+<ol>
+<li>Run <code>RULES_TERRAFORM_UPGRADE=1 bazel fetch //...</code> (or
+<code>--repo_env=RULES_TERRAFORM_UPGRADE=1</code>). Every version constraint and
+git ref is resolved again and the facts are rewritten. Facts that are
+properties of a published version, an archive's integrity, are kept.</li>
+<li>Review the <code>MODULE.bazel.lock</code> diff and commit it with any <code>.tf</code>
+change.</li>
+</ol>
+<p>Editing a <code>module</code> block's <code>source</code> or <code>version</code> is itself a new key, so a
+changed block resolves on the next <code>bazel fetch</code> without the switch.</p>
+<h3 id="rules_terraforms-own-modulebazellock"><a class="header" href="#rules_terraforms-own-modulebazellock">rules_terraform's own <code>MODULE.bazel.lock</code></a></h3>
+<p>The ruleset commits its lockfile. Its own test fixtures use the extension,
+so the lockfile is what keeps <code>bazel test //...</code> here offline and
+repeatable, and a PR that bumps a fixture's module version shows the
 resolved archive in the diff. The examples under <code>examples/</code> run with
 <code>--lockfile_mode=off</code> on purpose: they stand in for a downstream user's
 first build, where no facts exist yet.</p>
-<h3 id="update-workflow"><a class="header" href="#update-workflow">Update workflow</a></h3>
-<p>To bump a module version with the lockfile enabled:</p>
-<ol>
-<li>Edit the exact version (or constraint) in the <code>module { }</code> block.</li>
-<li>Run <code>bazel mod deps --lockfile_mode=update</code> (or just
-<code>bazel fetch //...</code>) to regenerate <code>MODULE.bazel.lock</code>.</li>
-<li>Commit both the <code>.tf</code> change AND the lockfile diff — reviewers see
-exactly which archive changed.</li>
-</ol>
-<h3 id="why-not-just-mark-the-extension-reproducible--true"><a class="header" href="#why-not-just-mark-the-extension-reproducible--true">Why not just mark the extension <code>reproducible = True</code>?</a></h3>
-<p>The extension makes live Registry API calls at eval time. Network
-responses CAN vary across invocations (transient 5xx, mirror rotation,
-registry outages, schema changes over years). Claiming
-<code>reproducible = True</code> would be dishonest — same inputs, potentially
-different outputs. <code>MODULE.bazel.lock</code> is Bazel's designed capture
-layer for exactly this shape of extension, and setting
-<code>reproducible = True</code> would tell bzlmod NOT to record the extension
-in the lockfile — the opposite of what we want.</p>
-<h3 id="when-could-reproducible--true-come-back"><a class="header" href="#when-could-reproducible--true-come-back">When could <code>reproducible = True</code> come back?</a></h3>
-<ul>
-<li>If HashiCorp publishes a Terraform-level module lockfile schema that
-captures resolved versions + hashes ahead of extension eval.</li>
-<li>If rules_terraform introduces a mode where the extension consumes a
-user-supplied pinned-version list without hitting the network at all
-(essentially reintroducing a lockfile — the one we deliberately
-removed in favor of live resolution + facts caching).</li>
-</ul>
-<p>Neither is planned. Until then, <code>MODULE.bazel.lock</code> + exact pins covers
-the same ground with Bazel's native machinery.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="terraform-rules"><a class="header" href="#terraform-rules">Terraform Rules</a></h1>
 <h2 id="public-rules"><a class="header" href="#public-rules">Public rules</a></h2>
 <ul>
