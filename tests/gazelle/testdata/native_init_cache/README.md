@@ -1,0 +1,1 @@
+A root next to the cache a native `terraform init` left behind. The modules the engine downloaded into `.terraform/` are not modules of the repository: nothing is generated for them and nothing resolves to them.

@@ -1,0 +1,18 @@
+load("@gazelle//:def.bzl", "gazelle_binary", "gazelle_generation_test")
+
+# Both engines in one binary, so the tests cover a repository that uses
+# them side by side: each directory goes to one engine, by directive or by
+# its files.
+gazelle_binary(
+    name = "gazelle",
+    languages = [
+        "//terraform/gazelle",
+        "//tofu/gazelle",
+    ],
+)
+
+gazelle_generation_test(
+    name = "generation_test",
+    gazelle_binary = ":gazelle",
+    test_data = glob(["testdata/**"]),
+)
