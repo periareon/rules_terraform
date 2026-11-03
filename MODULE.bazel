@@ -68,6 +68,13 @@ terraform_dev.deps(
     ],
 )
 
+# A version constraint instead of an exact pin: the version it resolves to is
+# recorded as a fact, which is what keeps this fixture on one release.
+terraform_dev.deps(
+    name = "test_constraint_modules",
+    root = "//tests/with_constraint_module:main.tf",
+)
+
 # Git modules: three spellings of one GitHub repository at one tag, including
 # a `//subdir` whose module names a registry module, so the checkout is read
 # for its own references.
@@ -77,6 +84,7 @@ terraform_dev.deps(
 )
 use_repo(
     terraform_dev,
+    "test_constraint_modules",
     "test_git_modules",
     "test_providers_with_modules_ext",
     "test_providers_with_provider",

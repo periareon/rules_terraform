@@ -61,13 +61,14 @@ accumulate.
 
 ## Reproducibility
 
-Extension remains `reproducible = False`: the `/versions` endpoint is
-still called for constraint-based version resolution (`~> 5.0` could
-land on different concrete versions over time as new releases publish).
-Exact-pinned + facts-cached blocks skip every network call, but the
-extension's reproducibility guarantee has to hold for all inputs, and
-we can't statically prove every block is pinned. See
-`docs/src/index.md#reproducibility`.
+The extension is `reproducible = True`. A version constraint (`~> 5.0`)
+would land on a different release as upstream publishes, so the version it
+resolved to is recorded as a fact (`resolve:<registry>/<source>@<constraint>`)
+the first time and reused after that: the answer is a function of the
+inputs and the recorded facts, not of the day. `RULES_TERRAFORM_UPGRADE`
+in the environment makes an evaluation resolve every constraint and git
+ref again, the way `terraform init -upgrade` would, and the new answers
+replace the old facts. See `docs/src/index.md#reproducibility`.
 
 A git tag is in the same position: what it names is looked up once and
 recorded as a fact, as an archive integrity or a commit, and that is what
@@ -405,6 +406,27 @@ def _git_fact_key(remote, subdir, ref):
     """Facts identity of one git-sourced module: remote, module inside it, and ref as written."""
     return "git:{}//{}@{}".format(remote, subdir, ref)
 
+def _resolution_fact_key(registry, source, constraint):
+    """Facts identity of one version constraint's resolution against one registry."""
+    return "resolve:{}/{}@{}".format(registry, source, constraint)
+
+def _resolved_version(module_ctx, registry, source, constraint, existing_facts, new_facts, upgrade):
+    """The concrete version a constraint names, resolved once and then recorded.
+
+    A constraint like `~> 5.0` means something different every time upstream
+    publishes a release, so the first answer is kept as a fact and reused
+    until `upgrade` asks for a fresh one. That is what makes an evaluation a
+    function of its inputs rather than of the day it ran.
+    """
+    key = _resolution_fact_key(registry, source, constraint)
+    cached = existing_facts[key] if existing_facts != None and key in existing_facts else None
+    if not upgrade and type(cached) == "dict" and cached.get("version"):
+        new_facts[key] = cached
+        return cached["version"]
+    version = resolve_version(module_ctx, registry, source, constraint)
+    new_facts[key] = {"version": version}
+    return version
+
 def _ref_key(source, constraint):
     """Worklist identity of an unresolved reference.
 
@@ -503,7 +525,7 @@ def _module_refs(module_ctx, root, subdir):
         for ref in _external_refs(module_ctx, start_path, root)
     ]
 
-def _resolve_git(module_ctx, source, git, constraint, existing_facts, new_facts, pool, checkouts):
+def _resolve_git(module_ctx, source, git, constraint, existing_facts, new_facts, upgrade, pool, checkouts):
     """Resolve one git-sourced reference to a pool target.
 
     A GitHub `https` remote is fetched as an archive and pinned by its
@@ -518,6 +540,7 @@ def _resolve_git(module_ctx, source, git, constraint, existing_facts, new_facts,
         constraint: (str) The block's `version`, which must be empty.
         existing_facts: (Facts|None) The previous eval's facts.
         new_facts: (dict) This eval's facts, mutated in place.
+        upgrade: (bool) Resolve the ref again even if a fact records it.
         pool: (dict) The shared module pool, mutated in place.
         checkouts: (dict) Memo for the fetchers, mutated in place.
 
@@ -534,7 +557,7 @@ def _resolve_git(module_ctx, source, git, constraint, existing_facts, new_facts,
 
     key = _git_fact_key(git.remote, git.subdir, git.ref)
     cached = existing_facts[key] if existing_facts != None and key in existing_facts else None
-    if type(cached) != "dict" or "deps" not in cached:
+    if upgrade or type(cached) != "dict" or "deps" not in cached:
         cached = None
 
     if _is_github_https(git.remote):
@@ -588,7 +611,7 @@ def _resolve_git(module_ctx, source, git, constraint, existing_facts, new_facts,
     target = _claim_target(pool[pool_key]["modules"], source, git.subdir)
     return "@{}//:{}".format(pool_key, target), deps
 
-def resolve_registry_modules(module_ctx, *, name, roots, registry, existing_facts, new_facts, pool):
+def resolve_registry_modules(module_ctx, *, name, roots, registry, existing_facts, new_facts, upgrade, pool):
     """Resolve the registry modules named under `roots` for one `deps` tag.
 
     Declares nothing. Archives are recorded in `pool`, and the hub's members
@@ -605,6 +628,9 @@ def resolve_registry_modules(module_ctx, *, name, roots, registry, existing_fact
         new_facts: (dict) Mutable dict of facts to write on this eval.
             Populated with entries for every currently-declared module,
             whether cached or freshly resolved.
+        upgrade: (bool) Ignore recorded resolutions and ask the registry or
+            git host again, the way `terraform init -upgrade` would. Facts
+            that are properties of a published version are kept.
         pool: (dict) Shared across tags, mutated in place. Maps pool
             repository name to a dict describing the archive and the
             `subdirs` requested of it so far.
@@ -670,7 +696,7 @@ def resolve_registry_modules(module_ctx, *, name, roots, registry, existing_fact
             if source in resolved:
                 continue
             resolved[source] = True
-            member, deps = _resolve_git(module_ctx, source, git, constraint, existing_facts, new_facts, pool, checkouts)
+            member, deps = _resolve_git(module_ctx, source, git, constraint, existing_facts, new_facts, upgrade, pool, checkouts)
             for dep in deps:
                 if _ref_key(dep["source"], dep["version"]) in queued:
                     continue
@@ -689,11 +715,14 @@ def resolve_registry_modules(module_ctx, *, name, roots, registry, existing_fact
         # it back canonicalized (no `= ` prefix, no leading `v`) so it
         # can be used as a registry URL segment and fact key.
         pinned = _exact_pin_version(constraint)
-        version = pinned if pinned else resolve_version(
+        version = pinned if pinned else _resolved_version(
             module_ctx,
             registry,
             base_source,
             constraint,
+            existing_facts,
+            new_facts,
+            upgrade,
         )
         key = _fact_key(source, version)
 

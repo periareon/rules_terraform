@@ -28,6 +28,8 @@ load(":toolchain_extension.bzl", "declare_toolchains")
 
 visibility(["//engine/...", "//terraform/...", "//tofu/..."])
 
+UPGRADE_ENV = "RULES_TERRAFORM_UPGRADE"
+
 def run_extension(module_ctx, *, engine):
     """Evaluate every `toolchain` and `deps` tag and declare their repositories.
 
@@ -40,13 +42,18 @@ def run_extension(module_ctx, *, engine):
             their rules from.
 
     Returns:
-        (extension_metadata) `reproducible = False`, carrying this
-        evaluation's facts: release checksums, provider lookups and module
-        archives alike.
+        (extension_metadata) `reproducible = True`, carrying this
+        evaluation's facts: release checksums, provider lookups, module
+        archives, and the version each constraint and git ref resolved to.
     """
     supports_facts = hasattr(module_ctx, "facts")
     existing_facts = module_ctx.facts if supports_facts else None
     new_facts = {}
+
+    # `terraform init -upgrade`, for the resolutions this extension records:
+    # set to re-resolve every version constraint and git ref. Read through
+    # the context so toggling it is an input change and the extension runs.
+    upgrade = bool(module_ctx.getenv(UPGRADE_ENV))
 
     declare_toolchains(module_ctx, config = engine, existing_facts = existing_facts, new_facts = new_facts)
 
@@ -89,6 +96,7 @@ def run_extension(module_ctx, *, engine):
                     registry = registry,
                     existing_facts = existing_facts,
                     new_facts = new_facts,
+                    upgrade = upgrade,
                     pool = module_pool,
                 )
 
@@ -113,12 +121,12 @@ def run_extension(module_ctx, *, engine):
             hub_bzl = engine.hub_bzl,
         )
 
-    # `reproducible = False` — module version constraints (`~> 5.0`) resolve
-    # against the live Registry API and can pick different versions over
-    # time. Pin every `module {}` block to an exact version to make
-    # resolution deterministic; MODULE.bazel.lock captures the result either
-    # way.
-    kwargs = {"reproducible": False}
+    # Reproducible: every answer that came from the network is a fact now,
+    # the resolution of a version constraint or git ref included, so the same
+    # inputs and the same facts declare the same repositories. The first
+    # evaluation of a new reference is the only live one; the next is read
+    # from `MODULE.bazel.lock`, until `RULES_TERRAFORM_UPGRADE` asks again.
+    kwargs = {"reproducible": True}
     if supports_facts:
         kwargs["facts"] = new_facts
     return module_ctx.extension_metadata(**kwargs)
