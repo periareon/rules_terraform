@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 )
 
@@ -28,7 +29,11 @@ var (
 	sourceAttrRE             = regexp.MustCompile(`^\s*source\s*=\s*"([^"]+)"`)
 	versionAttrRE            = regexp.MustCompile(`^\s*version\s*=\s*"([^"]+)"`)
 	requiredProvidersBlockRE = regexp.MustCompile(`^\s*required_providers\s*\{`)
-	providerLabelRE          = regexp.MustCompile(`^\s*([A-Za-z_][A-Za-z0-9_-]*)\s*=\s*\{`)
+	// A block that names a provider by its local name: `resource "aws_vpc"`
+	// and `data "aws_ami"` through the type's prefix, `provider "aws"` and
+	// `ephemeral "aws_secretsmanager_secret_version"` likewise.
+	providerUsageRE = regexp.MustCompile(`^\s*(resource|data|ephemeral|provider)\s+"([^"]+)"`)
+	providerLabelRE = regexp.MustCompile(`^\s*([A-Za-z_][A-Za-z0-9_-]*)\s*=\s*\{`)
 )
 
 // ParseFile scans a single .tf file for module blocks.
@@ -117,6 +122,63 @@ func ParseFiles(paths []string) ([]ModuleBlock, error) {
 			return nil, err
 		}
 		out = append(out, blocks...)
+	}
+	return out, nil
+}
+
+// ConfigFiles lists the configuration files directly in dir, the ones the
+// engine loads as one module: `.tf` and `.tofu`. JSON-syntax files are not
+// read by this package.
+func ConfigFiles(dir string) ([]string, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, fmt.Errorf("read %s: %w", dir, err)
+	}
+	var out []string
+	for _, e := range entries {
+		if !e.IsDir() && IsConfigFile(e.Name()) {
+			out = append(out, filepath.Join(dir, e.Name()))
+		}
+	}
+	sort.Strings(out)
+	return out, nil
+}
+
+// ParseProviderUsageFromFiles returns the local provider names the given
+// files use: the prefix of every `resource` / `data` / `ephemeral` type and
+// the name of every `provider` block. A local name resolves through the
+// module's `required_providers` block, or to `hashicorp/<name>` when that
+// block does not mention it, which is how the engine requires a provider
+// nobody declared.
+func ParseProviderUsageFromFiles(paths []string) ([]string, error) {
+	seen := map[string]bool{}
+	var out []string
+	for _, p := range paths {
+		f, err := os.Open(p)
+		if err != nil {
+			return nil, fmt.Errorf("open %s: %w", p, err)
+		}
+		scanner := bufio.NewScanner(f)
+		scanner.Buffer(make([]byte, 64*1024), 1024*1024)
+		for scanner.Scan() {
+			m := providerUsageRE.FindStringSubmatch(scanner.Text())
+			if m == nil {
+				continue
+			}
+			name := m[2]
+			if m[1] != "provider" {
+				name = strings.SplitN(name, "_", 2)[0]
+			}
+			if !seen[name] {
+				seen[name] = true
+				out = append(out, name)
+			}
+		}
+		err = scanner.Err()
+		f.Close()
+		if err != nil {
+			return nil, fmt.Errorf("read %s: %w", p, err)
+		}
 	}
 	return out, nil
 }

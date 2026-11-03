@@ -21,8 +21,10 @@ Rules:
 * `terraform_providers_lock` / `tofu_providers_lock` — `bazel run`
   updater for `.terraform.lock.hcl`. Runs real `<engine> providers lock
   -platform=<all>` under the toolchain-fetched binary.
-* `terraform_providers_lock_test` — network-free presence check for
-  `.terraform.lock.hcl` vs `required_providers { ... }` blocks.
+* `terraform_providers_lock_test` — network-free check that
+  `.terraform.lock.hcl` covers what the module tree requires, read from the
+  directory the init aspect built: every module in it, declared and implied
+  providers alike.
 
 External Terraform registry modules are resolved live by the
 `terraform.modules(...)` / `tofu.modules(...)` bzlmod extensions
@@ -30,8 +32,9 @@ themselves — no lock file, no `bazel run` updater. See
 `//engine:modules_extension.bzl`.
 """
 
+load(":init.bzl", "terraform_init_aspect")
 load(":providers.bzl", "TerraformInfo")
-load(":util.bzl", "common_ancestor", "rlocationpath", "tree_relative")
+load(":util.bzl", "common_ancestor", "module_dir", "rlocationpath", "tree_relative")
 
 # Default multi-platform set used when a `terraform_providers_lock` target
 # doesn't specify `platforms`. Matches the platforms the extension fetches
@@ -45,26 +48,6 @@ _DEFAULT_LOCK_PLATFORMS = [
 ]
 
 visibility(["//engine/...", "//terraform/...", "//tofu/..."])
-
-def _collect_tf_srcs(target_info):
-    """Return a de-duplicated list of source .tf files reachable from target_info."""
-    files = []
-    seen = {}
-    stack = [target_info]
-    for _ in range(1000):  # bounded to avoid runaway iteration
-        if not stack:
-            break
-        info = stack.pop()
-        for src in info.srcs.to_list():
-            if not src.is_source:
-                continue
-            if src.path in seen:
-                continue
-            seen[src.path] = True
-            files.append(src)
-        for dep in info.deps.to_list():
-            stack.append(dep)
-    return files
 
 def _write_args_file(ctx, args, name):
     args.set_param_file_format("multiline")
@@ -82,20 +65,20 @@ def _symlink_executable(ctx, tool):
     return executable
 
 def _build_lockcheck(ctx, tidy_hint):
-    target_info = ctx.attr.target[TerraformInfo]
-    srcs = _collect_tf_srcs(target_info)
+    module_directory = module_dir(ctx.attr.target)
+    if not module_directory:
+        fail("{}: terraform_init_aspect produced no module directory for '{}'".format(ctx.label, ctx.attr.target.label))
     lock_file = ctx.file.lock
 
     args = ctx.actions.args()
     args.add("-lock=" + rlocationpath(lock_file, ctx.workspace_name))
+    args.add("-module-dir=" + rlocationpath(module_directory, ctx.workspace_name))
     args.add("-tidy-hint=" + tidy_hint)
-    for src in srcs:
-        args.add("-src=" + rlocationpath(src, ctx.workspace_name))
 
     args_file = _write_args_file(ctx, args, "lockcheck")
     executable = _symlink_executable(ctx, ctx.executable._lockcheck)
 
-    runfiles = ctx.runfiles(files = [ctx.executable._lockcheck, args_file, lock_file] + srcs)
+    runfiles = ctx.runfiles(files = [ctx.executable._lockcheck, args_file, lock_file, module_directory])
     runfiles = runfiles.merge(ctx.attr._lockcheck[DefaultInfo].default_runfiles)
 
     return [
@@ -109,9 +92,12 @@ def _terraform_providers_lock_test_impl(ctx):
     return _build_lockcheck(ctx, "bazel run the terraform_providers_lock / tofu_providers_lock target for this module to regenerate the lock")
 
 terraform_providers_lock_test = rule(
-    doc = """Fails the test if `.terraform.lock.hcl` doesn't cover every provider
-    declared in `terraform { required_providers { ... } }` blocks reachable
-    from `target` (and vice versa). Network-free presence check.""",
+    doc = """Fails when `.terraform.lock.hcl` does not match what the module
+    tree requires: every module the init aspect placed, root, local children
+    and installed external ones, and in each the providers `required_providers`
+    declares plus the ones `resource`, `data`, `ephemeral` and `provider`
+    blocks imply. A provider the configuration needs but the lock lacks fails,
+    and so does a lock entry nothing needs. Network-free; no engine runs.""",
     implementation = _terraform_providers_lock_test_impl,
     attrs = {
         "lock": attr.label(
@@ -120,8 +106,9 @@ terraform_providers_lock_test = rule(
             mandatory = True,
         ),
         "target": attr.label(
-            doc = "The terraform_module whose transitive sources are being checked.",
+            doc = "The terraform_module whose module tree is being checked.",
             providers = [TerraformInfo],
+            aspects = [terraform_init_aspect],
             mandatory = True,
         ),
         "_lockcheck": attr.label(

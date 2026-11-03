@@ -60,6 +60,19 @@ func readWorkdir(treeRoot string) (string, error) {
 	return workdir, nil
 }
 
+// WorkDir returns the engine's working directory inside a built tree: the
+// tree root itself, or the subdirectory the tree's marker names.
+func WorkDir(treeRoot string) (string, error) {
+	workdir, err := readWorkdir(treeRoot)
+	if err != nil {
+		return "", err
+	}
+	if workdir == "" {
+		return treeRoot, nil
+	}
+	return filepath.Join(treeRoot, filepath.FromSlash(workdir)), nil
+}
+
 // ProvidersDir returns the provider install root. Its layout below this point
 // (`<host>/<namespace>/<name>/<version>/<platform>`) is Terraform's, and is
 // what the engine expects behind `-plugin-dir`.

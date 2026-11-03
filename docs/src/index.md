@@ -473,9 +473,12 @@ produces hashes for every platform at once — the engine's own `init`
 locks the platform it runs on only.
 
 **Drift check.** [`terraform_providers_lock_test`](./terraform/terraform_providers_lock_test.md)
-fails if any provider declared in a `required_providers { … }` block
-isn't in the lock file (or vice-versa). Pure text comparison — no
-network. The lock's own hashes are enforced elsewhere: the extension
+fails if the lock file does not match what the module tree requires. It
+reads the directory the init aspect built, every module in it including
+installed registry and git modules, and counts both the providers a
+`required_providers { … }` block declares and the ones `resource`, `data`,
+`ephemeral` and `provider` blocks imply, the way the engine does. No
+network, no engine. The lock's own hashes are enforced elsewhere: the extension
 refuses an archive whose checksum is not among the lock's `zh:` entries,
 and the engine verifies each installed provider directory against the
 `h1:` the init aspect wrote.
