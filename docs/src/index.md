@@ -340,7 +340,7 @@ is a fully-populated module directory.
 | Dependency type          | Fetched from                     | Lock file                       | Refresh via                                              |
 |--------------------------|----------------------------------|---------------------------------|----------------------------------------------------------|
 | Providers                | Terraform Registry v1 API        | `.terraform.lock.hcl`           | `bazel run //path:providers_lock.update` (a [`terraform_providers_lock`](./terraform/terraform_providers_lock.md) target) — see below |
-| Registry modules         | Terraform Registry v1 API        | none — live-resolved from the `roots` of a `deps` tag | Automatic on `bazel fetch`. See "External registry modules" below for the tradeoff. |
+| Registry modules         | Terraform Registry v1 API        | none in Terraform; the version each constraint resolved to is a fact in `MODULE.bazel.lock` | A changed `module` block resolves on the next `bazel fetch`. To move an unchanged constraint to a newer release: `RULES_TERRAFORM_UPGRADE=1 bazel fetch //...`, then commit the lockfile diff. |
 | Git modules              | GitHub archives over https; the host's `git` for any other remote | none — the `?ref=` must be a tag or commit; what a tag names is recorded in `MODULE.bazel.lock` | Change the `?ref=`. See "Git modules" below. |
 | Local / in-repo modules  | Bazel target graph               | none                            | Edit `deps` on the parent `terraform_module` |
 
@@ -500,9 +500,12 @@ it cannot check against one.
 
 ### External registry modules
 
-There is **no lock file** for registry modules — the extension resolves
-them live against the Registry API on every fresh evaluation. Terraform
-users load the extension from the terraform side:
+Terraform has no lock file for modules, so the extension keeps its own
+record: each `module` block's constraint is resolved against the Registry
+API once, and the version it chose is written as a fact to
+`MODULE.bazel.lock`. Every later evaluation declares that version until an
+upgrade is asked for. Terraform users load the extension from the terraform
+side:
 
 ```python
 terraform.deps(
@@ -657,12 +660,18 @@ matches, the same way it places a registry module.
 `.terraform/modules/<key>/` and adds a corresponding entry to
 Terraform's `modules.json` manifest.
 
-**Reproducibility and caching.** The extension is
-`reproducible = False` and every `.tf` edit in the root module
-directory invalidates it (bzlmod tracks each `module_ctx.read()`).
-Re-eval cost is cached across runs via `module_ctx.facts` — but that
-cache only persists when `MODULE.bazel.lock` is enabled. See
-[Reproducibility](#reproducibility) for the full recipe and the
+**Reproducibility and caching.** The extension is `reproducible = True`:
+every answer it ever took from the network, a constraint's resolved
+version, a tag's commit, an archive's URL and integrity, is a fact in
+`MODULE.bazel.lock`, so the same inputs and facts declare the same
+repositories. Every `.tf` edit in a root directory still re-evaluates it
+(bzlmod tracks each `module_ctx.read()`), but a re-evaluation with warm
+facts makes no network calls. Facts persist only while the lockfile is
+enabled. To re-resolve on purpose, set `RULES_TERRAFORM_UPGRADE=1` in the
+environment of one `bazel fetch` (or pass
+`--repo_env=RULES_TERRAFORM_UPGRADE=1`); the extension sees the variable
+through `module_ctx.getenv`, so setting and clearing it each count as an
+input change. See [Reproducibility](#reproducibility) and the
 `Implementation detail: network calls per eval` note below.
 
 **Non-default registries.** Pass `registry = "…"` on the tag if you're
@@ -677,14 +686,18 @@ API requests, cached across evals via `module_ctx.facts`:
 
 | Call                                              | Purpose                                                          | Cost                 | Skipped when                                                          |
 |---------------------------------------------------|------------------------------------------------------------------|----------------------|-----------------------------------------------------------------------|
-| `GET /v1/modules/<source>/versions`               | Resolve `version` constraint to a concrete SemVer                | Small JSON           | `version` is already an exact-pinned SemVer                            |
+| `GET /v1/modules/<source>/versions`               | Resolve `version` constraint to a concrete SemVer                | Small JSON           | `version` is an exact pin, or facts hold `resolve:<registry>/<source>@<constraint>` and no upgrade was asked for |
 | `GET /v1/modules/<source>/<version>`              | Read `source` (git URL) + `tag` to build the archive URL         | Small JSON           | Facts cache has an entry for `<source>@<version>`                     |
 | `GET <archive URL>`                               | Stream the archive body to compute an sha256 integrity           | **MB per module**    | Facts cache has an entry for `<source>@<version>`                     |
 
-Facts is keyed by `<source>@<concrete_version>` and stores
-`{url, strip_prefix, integrity}` — historical facts that don't change
-once a module version is published. Only entries for currently-declared
-modules carry across evals; entries for removed modules prune naturally.
+Two kinds of fact are kept. `<source>@<concrete_version>` stores
+`{url, strip_prefix, integrity}` and the module's own external references:
+historical facts that don't change once a version is published.
+`resolve:<registry>/<source>@<constraint>` stores the version a constraint
+resolved to, which is a choice rather than a property, and is only
+revisited under `RULES_TERRAFORM_UPGRADE`. Only entries for
+currently-declared modules carry across evals; entries for removed modules
+prune naturally.
 
 </details>
 
@@ -741,44 +754,39 @@ parent's package.
 | Change                                | What to do                                                                                                    |
 |---------------------------------------|---------------------------------------------------------------------------------------------------------------|
 | Bump / add a provider                 | Update `required_providers { }`; regenerate `.terraform.lock.hcl` with `bazel run` on the module's `terraform_providers_lock` target |
-| Bump / add a registry module          | Edit the `module { source = "…" version = "…" }` block and make sure its directory is in a `deps` tag's `roots`. Live-resolved on the next `bazel fetch`; regenerate `MODULE.bazel.lock` if you have it enabled. |
+| Bump / add a registry module          | Edit the `module { source = "…" version = "…" }` block and make sure its directory is in a `deps` tag's `roots`. A changed block resolves on the next `bazel fetch`; to move an unchanged `~>` constraint to a newer release, run `RULES_TERRAFORM_UPGRADE=1 bazel fetch //...`. Commit the `MODULE.bazel.lock` diff either way. |
 | Bump / add a git module               | Edit the `?ref=` in the `module { source = "git::…" }` block to the new tag or commit id. Branch names are refused. A tag is looked up once and what it names is recorded in `MODULE.bazel.lock`. |
 | Add / rename a local module           | Write the `module { source = "…" }` block and add the child to the parent's `deps`; no lock file involved |
 | Verify everything                     | `bazel test //...` — runs validate, fmt, tftest, and every lock drift check in one shot                       |
 
 ## Reproducibility
 
-The state of each bzlmod extension in rules_terraform:
+Every bzlmod extension in rules_terraform is `reproducible = True`: given
+the same tags, the same files, and the same facts, it declares the same
+repositories.
 
-| Extension                                          | Reproducible? | Why                                                                                                                                             |
-|----------------------------------------------------|:-------------:|-------------------------------------------------------------------------------------------------------------------------------------------------|
-| `toolchain` tag                                    | ✓             | Every URL + integrity is vendored in `//<engine>/private:versions.bzl`; a tagged release's checksums are fetched once and kept as facts. Identical inputs → identical repo declarations. |
-| `deps` tag, `lock` half                            | ✓             | Reads a checked-in `.terraform.lock.hcl`; never resolves version constraints. Registry API is called to look up download URLs, but the version and hash come from the lock. |
-| `deps` tag, `roots` half                           | ✗             | Live version-constraint resolution against the Registry API, and a git tag looked up once and recorded as a fact. `MODULE.bazel.lock` is the capture layer that closes the gap — see below. |
+| Part                        | Where its answers come from                                                                                              |
+|-----------------------------|--------------------------------------------------------------------------------------------------------------------------|
+| `toolchain` tag             | URL and integrity vendored in `//<engine>/private:versions.bzl`; a tagged release's checksums fetched once and kept as facts. |
+| `deps` tag, `lock` half     | The checked-in `.terraform.lock.hcl` pins versions and hashes; the registry is asked only where each archive lives, and that answer is a fact. |
+| `deps` tag, `roots` half    | A version constraint or git ref is resolved once; the version or commit it named is a fact, and so are the archive's URL and integrity. |
 
 ### The role of `MODULE.bazel.lock`
 
-The modules extension is the only piece of rules_terraform that
-depends on `MODULE.bazel.lock` for both reproducibility AND performance.
-The `toolchain` tag and the `lock` half of a `deps` tag read fully vendored state and produce
-deterministic output without any lockfile involvement. The modules
-extension is different in two related ways:
+Facts live in the lockfile. That is what turns "resolved once" into
+"resolved once per repository" rather than once per machine:
 
-1. **Reproducibility.** Without the lockfile, `~> 5.0` can resolve to
-   `5.7.1` today and `5.7.2` tomorrow. With the lockfile enabled,
-   bzlmod captures the extension's resolved output and reuses it on
-   every subsequent eval — the extension is `reproducible = False`
-   under Bazel's contract, but the lockfile makes builds
-   byte-identical across time in practice.
+1. **Reproducibility.** `~> 5.0` resolves to `5.7.1` today and would
+   resolve to `5.7.2` tomorrow. The first evaluation records `5.7.1` as a
+   fact; every evaluation after that, on any machine, declares `5.7.1`
+   until someone asks for an upgrade. The choice is in the lockfile, in
+   the diff, and in review.
 
-2. **Performance.** Every `.tf` edit invalidates the extension (bzlmod
-   tracks each `module_ctx.read()`). Without any cache, every re-eval
-   hits the Registry API three times per module block, including
-   downloading each archive to compute an sha256 — MB per module. The
-   extension caches per-`(source, version)` archive URL + integrity in
-   `module_ctx.facts`; those facts persist through
-   `MODULE.bazel.lock`. Without the lockfile, facts is always empty,
-   and every re-eval pays the full cost.
+2. **Performance.** Every `.tf` edit under a `roots` directory
+   re-evaluates the extension (bzlmod tracks each `module_ctx.read()`).
+   With warm facts a re-evaluation makes no network calls; without the
+   lockfile there are no facts, and every re-evaluation resolves and
+   downloads from scratch.
 
 **Recommended downstream setup** — in your consuming repo's `.bazelrc`:
 
@@ -788,64 +796,38 @@ common --lockfile_mode=update
 common --lockfile_mode=strict
 ```
 
-Commit `MODULE.bazel.lock`. This gives you:
+Commit `MODULE.bazel.lock`. This gives you deterministic module versions
+regardless of how loosely the `.tf` constraints are written, cheap
+re-evaluations, and a PR-visible diff whenever a resolution changes.
 
-- Deterministic builds regardless of version constraints in `.tf`.
-- Cheap re-evals — cached facts short-circuit metadata calls and
-  archive downloads on every re-run.
-- A PR-visible diff (`MODULE.bazel.lock`) whenever a module version
-  or archive hash actually changes.
+`--lockfile_mode=off` is the one way to opt out: with nothing to hold
+facts, every evaluation resolves live, exactly as `terraform init` does.
 
-**Bonus: pin exact versions in `module { }` blocks.** Combined with
-`MODULE.bazel.lock`, exact pins let the extension skip even the
-`/versions` API call — bringing warm-cache re-evals to zero network
-calls per module:
+**Exact pins are still worth writing.** A block pinned to `5.7.1` skips
+even the first `/versions` call, and it is the only form the native
+`terraform init` also treats as fixed, so it is what keeps the Bazel and
+non-Bazel workflows on the same module code.
 
-```hcl
-module "vpc" {
-  source  = "terraform-aws-modules/vpc/aws"
-  version = "5.7.1"   # not "~> 5.0"
-}
-```
+### Upgrading
 
-### Rules_terraform's own `MODULE.bazel.lock`
+A recorded resolution is kept on purpose, so a newer release of a module
+does not arrive by itself. To take it:
 
-The ruleset commits its lockfile. Its own test fixtures use the modules
-extension, so the lockfile is what keeps `bazel test //...` here offline
-and repeatable, and a PR that bumps a fixture's module version shows the
+1. Run `RULES_TERRAFORM_UPGRADE=1 bazel fetch //...` (or
+   `--repo_env=RULES_TERRAFORM_UPGRADE=1`). Every version constraint and
+   git ref is resolved again and the facts are rewritten. Facts that are
+   properties of a published version, an archive's integrity, are kept.
+2. Review the `MODULE.bazel.lock` diff and commit it with any `.tf`
+   change.
+
+Editing a `module` block's `source` or `version` is itself a new key, so a
+changed block resolves on the next `bazel fetch` without the switch.
+
+### rules_terraform's own `MODULE.bazel.lock`
+
+The ruleset commits its lockfile. Its own test fixtures use the extension,
+so the lockfile is what keeps `bazel test //...` here offline and
+repeatable, and a PR that bumps a fixture's module version shows the
 resolved archive in the diff. The examples under `examples/` run with
 `--lockfile_mode=off` on purpose: they stand in for a downstream user's
 first build, where no facts exist yet.
-
-### Update workflow
-
-To bump a module version with the lockfile enabled:
-
-1. Edit the exact version (or constraint) in the `module { }` block.
-2. Run `bazel mod deps --lockfile_mode=update` (or just
-   `bazel fetch //...`) to regenerate `MODULE.bazel.lock`.
-3. Commit both the `.tf` change AND the lockfile diff — reviewers see
-   exactly which archive changed.
-
-### Why not just mark the extension `reproducible = True`?
-
-The extension makes live Registry API calls at eval time. Network
-responses CAN vary across invocations (transient 5xx, mirror rotation,
-registry outages, schema changes over years). Claiming
-`reproducible = True` would be dishonest — same inputs, potentially
-different outputs. `MODULE.bazel.lock` is Bazel's designed capture
-layer for exactly this shape of extension, and setting
-`reproducible = True` would tell bzlmod NOT to record the extension
-in the lockfile — the opposite of what we want.
-
-### When could `reproducible = True` come back?
-
-- If HashiCorp publishes a Terraform-level module lockfile schema that
-  captures resolved versions + hashes ahead of extension eval.
-- If rules_terraform introduces a mode where the extension consumes a
-  user-supplied pinned-version list without hitting the network at all
-  (essentially reintroducing a lockfile — the one we deliberately
-  removed in favor of live resolution + facts caching).
-
-Neither is planned. Until then, `MODULE.bazel.lock` + exact pins covers
-the same ground with Bazel's native machinery.
