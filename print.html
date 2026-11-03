@@ -1635,6 +1635,69 @@ globally in <code>.bazelrc</code>, per invocation via
 <code>--@rules_terraform//tofu/settings:version=1.9.1</code>, or per target
 with a Starlark configuration transition. The corresponding archive is
 fetched lazily on first use.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="gazelle"><a class="header" href="#gazelle">Gazelle</a></h1>
+<p>rules_terraform ships a <a href="https://github.com/bazel-contrib/bazel-gazelle">Gazelle</a>
+language per engine. It writes the BUILD files the rules need from the
+configuration itself: one module target per directory of <code>.tf</code> files, with
+<code>deps</code> kept in step with the <code>module</code> blocks, and the binary and lock targets
+for a root.</p>
+<h2 id="setup-1"><a class="header" href="#setup-1">Setup</a></h2>
+<pre><code class="language-python"># BUILD.bazel at the repository root
+load("@gazelle//:def.bzl", "gazelle", "gazelle_binary")
+
+gazelle_binary(
+    name = "gazelle_bin",
+    languages = [
+        "@rules_terraform//terraform/gazelle",
+        # "@rules_terraform//tofu/gazelle",  # for OpenTofu directories
+    ],
+)
+
+gazelle(
+    name = "gazelle",
+    gazelle = ":gazelle_bin",
+)
+</code></pre>
+<p><code>bazel run //:gazelle</code> then writes or updates BUILD files; <code>bazel run //:gazelle -- -mode diff</code> shows what it would change, which is what a CI
+check runs.</p>
+<h2 id="what-a-directory-becomes"><a class="header" href="#what-a-directory-becomes">What a directory becomes</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>The directory</th><th>Generated</th></tr></thead><tbody>
+<tr><td>has configuration files</td><td><code>terraform_module(name = &lt;directory name&gt;, srcs = [...], data = [...], deps = [...])</code></td></tr>
+<tr><td>also declares a <code>backend</code> or <code>cloud</code> block</td><td>plus <code>terraform_binary(name = "terraform")</code> and <code>terraform_providers_lock(name = "providers_lock.update")</code></td></tr>
+<tr><td>also has a <code>.terraform.lock.hcl</code></td><td>plus <code>terraform_providers_lock_test(name = "providers_lock")</code></td></tr>
+<tr><td>holds <code>.tofu</code> files</td><td>the <code>tofu_*</code> kinds instead</td></tr>
+</tbody></table>
+</div>
+<p><code>srcs</code> are the files the engine loads, <code>.tf</code> and <code>.tf.json</code>, plus <code>.tofu</code>
+and <code>.tofu.json</code> under OpenTofu. <code>data</code> is everything else a native run in
+that directory could read: the remaining files, and the contents of
+subdirectories that are not packages of their own. Build files, the lock,
+state, and dotfiles are left out, as is anything under <code>.terraform/</code>.</p>
+<p><code>deps</code> has two parts. Every <code>module</code> block with a local source (<code>./…</code> or
+<code>../…</code>) resolves to the module target in that directory; a directory nothing
+generates a target for is reported. Then the dependency hubs: the ones a
+<code>tf_deps_hub</code> directive names, or, for a root with a lock file and no
+directive, <code>@tf_&lt;path&gt;</code> with <code>/</code> and <code>-</code> replaced by <code>_</code>.</p>
+<p>Rules are merged, not overwritten: a hand-written <code>tags</code>, <code>visibility</code>, or
+<code>disposable_state</code> stays, comments stay, and an attribute written as a <code>glob()</code>
+is left alone with a warning, since a list cannot be merged into it. Delete
+the glob to let Gazelle write the list.</p>
+<h2 id="directives"><a class="header" href="#directives">Directives</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Directive</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code># gazelle:tf_engine terraform|tofu</code></td><td>Which engine's rules a directory tree gets. Unset, a directory with <code>.tofu</code> files is OpenTofu's, the rest Terraform's.</td></tr>
+<tr><td><code># gazelle:tf_kind root|module|auto</code></td><td>Force a root (binary and lock targets) or a library. <code>auto</code>, the default, reads the configuration for a backend.</td></tr>
+<tr><td><code># gazelle:tf_deps_hub NAME...</code></td><td>The hubs (<code>@NAME</code>) modules under the directory depend on. An empty value clears an inherited one.</td></tr>
+<tr><td><code># gazelle:tf_default_visibility LABEL...</code></td><td>Visibility written on new library modules under the directory. An existing rule keeps its own.</td></tr>
+</tbody></table>
+</div>
+<p>Directives inherit down the tree, so one <code>tf_deps_hub</code> on a module library's
+parent directory covers every module in it, and one <code>tf_engine tofu</code> at the
+repository root makes an OpenTofu-only repository.</p>
+<h2 id="what-it-does-not-do"><a class="header" href="#what-it-does-not-do">What it does not do</a></h2>
+<p>It does not write <code>.terraform.lock.hcl</code>; that is <code>providers_lock.update</code>.
+It does not declare the <code>deps</code> tags in <code>MODULE.bazel</code>; the hub names it
+writes are the names those tags must have. And it does not read expressions:
+a <code>module</code> block whose <code>source</code> is not a literal is not resolved.</p>
 
                     </main>
 
