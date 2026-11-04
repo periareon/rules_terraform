@@ -15,13 +15,28 @@ _MODULE_REPO_BUILD_HEADER = """\
 load("{hub_bzl}", "terraform_external_module")
 """
 
+# Every file of the whole archive or checkout, whichever module inside it the
+# target serves: a module reads templates and other data next to its `.tf`
+# files, and a `../sibling` source inside a published submodule climbs into
+# the rest of the repository, so the engine installs the repository and points
+# the module at `subdir` within it. The init aspect lays it out the same way.
 _MODULE_REPO_TARGET = """
 terraform_external_module(
     name = "{target}",
     source = "{source}",
     version = "{version}",
+    subdir = "{subdir}",
     srcs = glob(
-        [{globs}],
+        ["**"],
+        exclude = [
+            ".git/**",
+            "BUILD",
+            "BUILD.bazel",
+            "MODULE.bazel",
+            "REPO.bazel",
+            "WORKSPACE",
+            "WORKSPACE.bazel",
+        ],
         allow_empty = True,
     ),
     visibility = ["//visibility:public"],
@@ -44,16 +59,11 @@ def module_target_name(subdir):
     return "module_" + subdir.replace("/", "_").replace("-", "_").replace(".", "_")
 
 def _module_target(target, source, version, subdir):
-    prefix = subdir + "/" if subdir else ""
-    globs = ", ".join([
-        '"{}**/*.{}"'.format(prefix, ext)
-        for ext in ("tf", "tf.json", "tofu", "tofu.json")
-    ])
     return _MODULE_REPO_TARGET.format(
         target = target,
         source = source,
         version = version,
-        globs = globs,
+        subdir = subdir,
     )
 
 def _module_repo_build_file(source, version, subdirs, hub_bzl):

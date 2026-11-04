@@ -539,6 +539,7 @@ def _terraform_external_module_impl(ctx):
         ),
         TerraformExternalModuleInfo(
             source = ctx.attr.source,
+            subdir = ctx.attr.subdir,
             version = ctx.attr.version,
             files = all_files,
         ),
@@ -564,8 +565,17 @@ list the target in the consuming `terraform_module`'s `deps`.""",
             mandatory = True,
         ),
         "srcs": attr.label_list(
-            doc = "Module source files.",
+            doc = """Every file of the module's repository or archive, not only the
+            module's own: templates and other data the configuration reads, and
+            the siblings a `../` source inside it names.""",
             allow_files = True,
+        ),
+        "subdir": attr.string(
+            doc = """The module's directory inside `srcs`: the `//subdir` of the
+            source, empty for the archive root. The init aspect installs all of
+            `srcs` under the module's key and points the engine at this
+            directory within them, as `terraform init` lays out a `//subdir`
+            source.""",
         ),
         "version": attr.string(
             doc = """The module's version, for a registry module. The init

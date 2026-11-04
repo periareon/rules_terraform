@@ -53,6 +53,9 @@ TerraformExternalModuleInfo = provider(
         "files": "depset[File]: All files in the downloaded module.",
         "source": """str: The `source` string as `module` blocks write it, subdir
             suffix included (e.g., 'terraform-aws-modules/eks/aws//modules/karpenter').""",
+        "subdir": """str: The module's directory inside `files`, the `//subdir` of the
+            source, or `""` for the root. The init aspect installs all of `files`
+            and points the engine at this directory within them.""",
         "version": "str: Module version.",
     },
 )

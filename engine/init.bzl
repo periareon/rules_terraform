@@ -162,6 +162,7 @@ def _terraform_init_aspect_impl(target, ctx):
                         "external module {}".format(ext_mod.source),
                     ),
                     "source": ext_mod.source,
+                    "subdir": ext_mod.subdir,
                     "version": ext_mod.version,
                 })
         if ext_mod_list:
