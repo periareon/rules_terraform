@@ -98,9 +98,13 @@ type ProviderInfo struct {
 // decided by the `module` block that references it, not by the Bazel dep that
 // supplied it — see `externalRef`.
 type ExternalModuleInfo struct {
-	Source  string      `json:"source"`
-	Version string      `json:"version"`
-	Files   []FileEntry `json:"files"`
+	Source  string `json:"source"`
+	Version string `json:"version"`
+	// Subdir is the module's directory inside Files, the `//subdir` of the
+	// source, or "" for the root. Files is the whole repository or archive,
+	// installed as such, so a `../sibling` source in the module resolves.
+	Subdir string      `json:"subdir"`
+	Files  []FileEntry `json:"files"`
 }
 
 // LocalModuleInfo is one `terraform_module` dep, offered to resolveLocalModules
@@ -845,7 +849,7 @@ func generateModulesManifest(moduleDir string, available []ExternalModuleInfo) e
 			}
 			next = append(next, walkRoot{
 				prefix:  ref.Key,
-				dir:     path.Join(".terraform", "modules", ref.Key),
+				dir:     records[i].Dir,
 				sources: sources,
 			})
 		}
@@ -895,11 +899,10 @@ func generateModulesManifest(moduleDir string, available []ExternalModuleInfo) e
 // the normal case, not a mistake to report.
 //
 // `module` blocks *inside* a fetched module are handled by the caller, which
-// walks each install directory once this has placed it. Not handled there: a
-// `../`-relative source inside a fetched module that climbs out of its own
-// install directory. Nothing places those, because the dep that would supply
-// them is a `terraform_module` resolved against the staged tree, not against
-// `.terraform/modules`.
+// walks each install directory once this has placed it. The whole repository
+// a module came from is installed under its key, and the module's own
+// directory is the `Subdir` within it, so a `../sibling` source inside a
+// published submodule resolves the way it does after a native `init`.
 func installExternalModules(moduleDir string, refs []externalRef, available []ExternalModuleInfo) ([]moduleRecord, error) {
 	var out []moduleRecord
 	for _, ref := range refs {
@@ -931,7 +934,7 @@ func installExternalModules(moduleDir string, refs []externalRef, available []Ex
 			// `filepath.ToSlash` when serializing modules.json, and on
 			// Windows a backslash-formatted Dir has been observed to make
 			// the engine miss the installed module. Match the canonical form.
-			Dir:     path.Join(".terraform", "modules", ref.Key),
+			Dir:     path.Join(".terraform", "modules", ref.Key, mod.Subdir),
 			Version: mod.Version,
 		})
 	}
