@@ -184,7 +184,7 @@ check runs.</p>
 <div class="table-wrapper"><table><thead><tr><th>The directory</th><th>Generated</th></tr></thead><tbody>
 <tr><td>has configuration files</td><td><code>terraform_module(name = &lt;directory name&gt;, srcs = [...], data = [...], deps = [...])</code></td></tr>
 <tr><td>also declares a <code>backend</code> or <code>cloud</code> block</td><td>plus <code>terraform_binary(name = "terraform")</code> and <code>terraform_providers_lock(name = "providers_lock.update")</code></td></tr>
-<tr><td>also has a <code>.terraform.lock.hcl</code></td><td>plus <code>terraform_providers_lock_test(name = "providers_lock")</code></td></tr>
+<tr><td>also has a <code>.terraform.lock.hcl</code></td><td>plus <code>terraform_providers_lock_test(name = "providers_lock")</code>, and the updater if the directory is not a root</td></tr>
 <tr><td>holds <code>.tofu</code> files</td><td>the <code>tofu_*</code> kinds instead</td></tr>
 </tbody></table>
 </div>
