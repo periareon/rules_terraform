@@ -354,11 +354,15 @@ def _fetch_git(module_ctx, remote, ref, checkouts):
     if not is_commit(ref):
         _git_tag_commit(module_ctx, remote, ref)
 
+    # A checkout left by an earlier evaluation is reused rather than removed:
+    # `module_ctx` cannot delete, and a repository already initialised only
+    # needs its remote pointed at the right place.
     path = module_ctx.path("git_{}_{}".format(_remote_name(remote), _sanitize_name(ref)))
-    if path.exists:
-        module_ctx.delete(path)
-    _git(module_ctx, ["init", "-q", str(path)], remote, ref)
-    _git(module_ctx, ["-C", str(path), "remote", "add", "origin", remote], remote, ref)
+    if path.get_child(".git").exists:
+        _git(module_ctx, ["-C", str(path), "remote", "set-url", "origin", remote], remote, ref)
+    else:
+        _git(module_ctx, ["init", "-q", str(path)], remote, ref)
+        _git(module_ctx, ["-C", str(path), "remote", "add", "origin", remote], remote, ref)
 
     # One commit's worth of history is all that is read. A commit named by
     # id can be fetched that way only where the server allows it; GitHub and
