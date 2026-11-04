@@ -1,0 +1,85 @@
+###############################################################################
+## Bazel Configuration Flags
+##
+## `.bazelrc` is a Bazel configuration file.
+## https://bazel.build/docs/best-practices#bazelrc-file
+###############################################################################
+
+# Skip building runfiles links for faster builds.
+build --nobuild_runfile_links
+
+# https://bazel.build/reference/command-line-reference#flag--enable_platform_specific_config
+common --enable_platform_specific_config
+
+# Enable the only currently supported report type
+# https://bazel.build/reference/command-line-reference#flag--combined_report
+coverage --combined_report=lcov
+
+# Avoid fully cached builds reporting no coverage and failing CI
+# https://bazel.build/reference/command-line-reference#flag--experimental_fetch_all_coverage_outputs
+coverage --experimental_fetch_all_coverage_outputs
+coverage --experimental_split_coverage_postprocessing
+
+# Required for some of the tests
+# https://bazel.build/reference/command-line-reference#flag--experimental_cc_shared_library
+common --experimental_cc_shared_library
+
+# Disable network access in sandboxes by default.
+build --sandbox_default_allow_network=false
+
+###############################################################################
+## Incompatibility flags
+###############################################################################
+
+# https://github.com/bazelbuild/bazel/issues/8195
+build --incompatible_disallow_empty_glob=true
+
+# https://github.com/bazelbuild/bazel/issues/12821
+build --nolegacy_external_runfiles
+
+# https://github.com/bazelbuild/bazel/issues/23043.
+build --incompatible_autoload_externally=
+
+###############################################################################
+## Bzlmod
+###############################################################################
+
+# Disable the bzlmod lockfile, so we don't accidentally commit MODULE.bazel.lock
+common --lockfile_mode=off
+
+###############################################################################
+## Aspect-based checks (`bazel build --config=terraform_checks //...`)
+##
+## Attaches the `fmt` and `validate` aspects for the named engine and
+## requests their output-group markers. `bazel build //...` then runs
+## `terraform fmt -check` and `terraform validate` against every
+## `terraform_module` in the graph — no per-target `terraform_fmt_test` /
+## `terraform_validate_test` needed.
+##
+## Downstream users copy these lines into their own `.bazelrc` to opt in.
+## Per-target opt-out: add `tags = ["no_terraform_format"]` or
+## `["no_validate"]` to the module.
+##
+## Both engines share the same `terraform_fmt_checks` /
+## `terraform_validate_checks` output-group names, so a single
+## `--output_groups=…` line covers whichever aspects were attached.
+###############################################################################
+
+build:terraform_fmt --aspects=@rules_terraform//terraform:terraform_fmt_aspect.bzl%terraform_fmt_aspect
+build:terraform_fmt --output_groups=+terraform_fmt_checks
+build:terraform_validate --aspects=@rules_terraform//terraform:terraform_validate_aspect.bzl%terraform_validate_aspect
+build:terraform_validate --output_groups=+terraform_validate_checks
+build:terraform_checks --config=terraform_fmt
+build:terraform_checks --config=terraform_validate
+
+test --config=terraform_checks
+
+###############################################################################
+## Custom user flags
+##
+## This should always be the last thing in the `.bazelrc` file to ensure
+## consistent behavior when setting flags in that file as `.bazelrc` files are
+## evaluated top to bottom.
+###############################################################################
+
+try-import %workspace%/user.bazelrc

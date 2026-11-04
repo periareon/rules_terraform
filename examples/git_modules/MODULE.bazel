@@ -1,0 +1,31 @@
+"""rules_terraform git modules example.
+
+Modules fetched from git repositories rather than a registry. rules_terraform
+is resolved via `local_path_override`; a real consumer would drop the
+override and pin a version from the Bazel Central Registry:
+
+    bazel_dep(name = "rules_terraform", version = "x.y.z")
+"""
+
+module(
+    name = "rules_terraform_example_git_modules",
+    version = "0.0.0",
+)
+
+bazel_dep(name = "rules_terraform", version = "0.0.0")
+local_path_override(
+    module_name = "rules_terraform",
+    path = "../..",
+)
+
+# One hub: the providers the lock pins, and the git modules `main.tf` names.
+# The extension reads the `module` blocks, resolves each source (a tag, a
+# branch, or the remote's default branch when no `?ref=` is given) to a
+# commit, and fetches the repository whole.
+terraform = use_extension("@rules_terraform//terraform:extensions.bzl", "terraform")
+terraform.deps(
+    name = "app",
+    lock = "//:.terraform.lock.hcl",
+    root = "//:main.tf",
+)
+use_repo(terraform, "app")

@@ -1,0 +1,51 @@
+"""Example: modules fetched from git.
+
+The same workflow rules as `examples/terraform`, over a root whose `module`
+blocks name git repositories: a `//subdir` at a tag, a branch, and a source
+with no ref. What each exercises is written next to its block in `main.tf`.
+"""
+
+load("@rules_terraform//terraform:terraform_binary.bzl", "terraform_binary")
+load("@rules_terraform//terraform:terraform_fmt_test.bzl", "terraform_fmt_test")
+load("@rules_terraform//terraform:terraform_module.bzl", "terraform_module")
+load("@rules_terraform//terraform:terraform_providers_lock.bzl", "terraform_providers_lock")
+load("@rules_terraform//terraform:terraform_providers_lock_test.bzl", "terraform_providers_lock_test")
+load("@rules_terraform//terraform:terraform_validate_test.bzl", "terraform_validate_test")
+
+terraform_module(
+    name = "example",
+    srcs = glob(["*.tf"]),
+    # `@app` carries the providers the lock pins and the three git modules.
+    deps = ["@app"],
+)
+
+terraform_binary(
+    name = "terraform",
+    root = ":example",
+)
+
+# Passing is the proof: validate installs every module with its templates
+# and runs the engine over the result.
+terraform_validate_test(
+    name = "validate",
+    target = ":example",
+)
+
+terraform_fmt_test(
+    name = "fmt",
+    target = ":example",
+)
+
+# The lock covers what the git modules require too (cloudinit and null from
+# the user-data module), not only this file's own blocks.
+terraform_providers_lock_test(
+    name = "providers_lock",
+    lock = ".terraform.lock.hcl",
+    target = ":example",
+)
+
+terraform_providers_lock(
+    name = "providers_lock.update",
+    output = ".terraform.lock.hcl",
+    target = ":example",
+)
