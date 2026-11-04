@@ -1,0 +1,18 @@
+load("@rules_terraform//terraform:defs.bzl", "terraform_module", "terraform_providers_lock", "terraform_providers_lock_test")
+
+terraform_module(
+    name = "shared",
+    srcs = ["main.tf"],
+)
+
+terraform_providers_lock_test(
+    name = "providers_lock",
+    lock = ".terraform.lock.hcl",
+    target = ":shared",
+)
+
+terraform_providers_lock(
+    name = "providers_lock.update",
+    output = ".terraform.lock.hcl",
+    target = ":shared",
+)

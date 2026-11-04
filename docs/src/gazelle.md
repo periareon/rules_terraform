@@ -36,7 +36,7 @@ check runs.
 |------------------------------------------------|----------------------------------------------------------------------------------------------------|
 | has configuration files                        | `terraform_module(name = <directory name>, srcs = [...], data = [...], deps = [...])`              |
 | also declares a `backend` or `cloud` block     | plus `terraform_binary(name = "terraform")` and `terraform_providers_lock(name = "providers_lock.update")` |
-| also has a `.terraform.lock.hcl`               | plus `terraform_providers_lock_test(name = "providers_lock")`                                        |
+| also has a `.terraform.lock.hcl`               | plus `terraform_providers_lock_test(name = "providers_lock")`, and the updater if the directory is not a root |
 | holds `.tofu` files                            | the `tofu_*` kinds instead                                                                         |
 
 `srcs` are the files the engine loads, `.tf` and `.tf.json`, plus `.tofu`

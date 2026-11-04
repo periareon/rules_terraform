@@ -156,15 +156,19 @@ func (l *tfLang) GenerateRules(args language.GenerateArgs) language.GenerateResu
 		binary.SetAttr("root", ":"+name)
 		gen = append(gen, binary)
 		genImports = append(genImports, nil)
-
-		if hasLock {
-			lockTest := rule.NewRule(l.engine.ProvidersLockTestKind, providersLockTestName)
-			lockTest.SetAttr("lock", lockFileName)
-			lockTest.SetAttr("target", ":"+name)
-			gen = append(gen, lockTest)
-			genImports = append(genImports, nil)
-		}
-
+	}
+	// A lock file belongs to the directory, root or not: a library that
+	// validates on its own against a shared lock keeps that lock with the
+	// same two targets a root does. The updater also comes with being a
+	// root, since that is where a first lock gets written from.
+	if hasLock {
+		lockTest := rule.NewRule(l.engine.ProvidersLockTestKind, providersLockTestName)
+		lockTest.SetAttr("lock", lockFileName)
+		lockTest.SetAttr("target", ":"+name)
+		gen = append(gen, lockTest)
+		genImports = append(genImports, nil)
+	}
+	if hasLock || kind == kindRoot {
 		update := rule.NewRule(l.engine.ProvidersLockKind, providersLockUpdateName)
 		update.SetAttr("output", lockFileName)
 		update.SetAttr("target", ":"+name)
