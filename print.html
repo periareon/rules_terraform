@@ -565,9 +565,12 @@ back into <code>$BUILD_WORKSPACE_DIRECTORY</code>. This is the only path that
 produces hashes for every platform at once — the engine's own <code>init</code>
 locks the platform it runs on only.</p>
 <p><strong>Drift check.</strong> <a href="./terraform/terraform_providers_lock_test.html"><code>terraform_providers_lock_test</code></a>
-fails if any provider declared in a <code>required_providers { … }</code> block
-isn't in the lock file (or vice-versa). Pure text comparison — no
-network. The lock's own hashes are enforced elsewhere: the extension
+fails if the lock file does not match what the module tree requires. It
+reads the directory the init aspect built, every module in it including
+installed registry and git modules, and counts both the providers a
+<code>required_providers { … }</code> block declares and the ones <code>resource</code>, <code>data</code>,
+<code>ephemeral</code> and <code>provider</code> blocks imply, the way the engine does. No
+network, no engine. The lock's own hashes are enforced elsewhere: the extension
 refuses an archive whose checksum is not among the lock's <code>zh:</code> entries,
 and the engine verifies each installed provider directory against the
 <code>h1:</code> the init aspect wrote.</p>
@@ -1072,9 +1075,11 @@ resolve for the current build.</p>
 </tbody></table>
 </div><div style="break-before: page; page-break-before: always;"></div><!-- Generated with Stardoc: http://skydoc.bazel.build -->
 <p>terraform_providers_lock_test — drift check for <code>.terraform.lock.hcl</code>.</p>
-<p>Fails if the lock file doesn't cover every provider named in the
-<code>required_providers</code> blocks reachable from a module, or locks one nothing
-names. Reads HCL text only; no engine binary is invoked.</p>
+<p>Fails if the lock file doesn't cover every provider the module tree
+requires, declared in <code>required_providers</code> or implied by the resources it
+uses, local and installed external modules included, or locks one nothing
+requires. Reads the directory the init aspect built; no engine binary is
+invoked.</p>
 <h2 id="rules-5"><a class="header" href="#rules-5">Rules</a></h2>
 <ul>
 <li><a href="terraform/terraform_providers_lock_test.html#terraform_providers_lock_test">terraform_providers_lock_test</a></li>
@@ -1086,14 +1091,17 @@ load("@rules_terraform//terraform:terraform_providers_lock_test.bzl", "terraform
 
 terraform_providers_lock_test(<a href="terraform/terraform_providers_lock_test.html#terraform_providers_lock_test-name">name</a>, <a href="terraform/terraform_providers_lock_test.html#terraform_providers_lock_test-lock">lock</a>, <a href="terraform/terraform_providers_lock_test.html#terraform_providers_lock_test-target">target</a>)
 </pre>
-<p>Fails the test if <code>.terraform.lock.hcl</code> doesn't cover every provider
-declared in <code>terraform { required_providers { ... } }</code> blocks reachable
-from <code>target</code> (and vice versa). Network-free presence check.</p>
+<p>Fails when <code>.terraform.lock.hcl</code> does not match what the module
+tree requires: every module the init aspect placed, root, local children
+and installed external ones, and in each the providers <code>required_providers</code>
+declares plus the ones <code>resource</code>, <code>data</code>, <code>ephemeral</code> and <code>provider</code>
+blocks imply. A provider the configuration needs but the lock lacks fails,
+and so does a lock entry nothing needs. Network-free; no engine runs.</p>
 <p><strong>ATTRIBUTES</strong></p>
 <div class="table-wrapper"><table><thead><tr><th style="text-align: left">Name</th><th style="text-align: left">Description</th><th style="text-align: left">Type</th><th style="text-align: left">Mandatory</th><th style="text-align: left">Default</th></tr></thead><tbody>
 <tr><td style="text-align: left"><a id="terraform_providers_lock_test-name"></a>name</td><td style="text-align: left">A unique name for this target.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels#target-names">Name</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
 <tr><td style="text-align: left"><a id="terraform_providers_lock_test-lock"></a>lock</td><td style="text-align: left">The .terraform.lock.hcl file being verified.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">Label</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
-<tr><td style="text-align: left"><a id="terraform_providers_lock_test-target"></a>target</td><td style="text-align: left">The terraform_module whose transitive sources are being checked.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">Label</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
+<tr><td style="text-align: left"><a id="terraform_providers_lock_test-target"></a>target</td><td style="text-align: left">The terraform_module whose module tree is being checked.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">Label</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
 </tbody></table>
 </div><div style="break-before: page; page-break-before: always;"></div><!-- Generated with Stardoc: http://skydoc.bazel.build -->
 <p>terraform_provider</p>
@@ -1435,14 +1443,17 @@ load("@rules_terraform//tofu:tofu_providers_lock_test.bzl", "tofu_providers_lock
 
 tofu_providers_lock_test(<a href="tofu/tofu_providers_lock_test.html#tofu_providers_lock_test-name">name</a>, <a href="tofu/tofu_providers_lock_test.html#tofu_providers_lock_test-lock">lock</a>, <a href="tofu/tofu_providers_lock_test.html#tofu_providers_lock_test-target">target</a>)
 </pre>
-<p>Fails the test if <code>.terraform.lock.hcl</code> doesn't cover every provider
-declared in <code>terraform { required_providers { ... } }</code> blocks reachable
-from <code>target</code> (and vice versa). Network-free presence check.</p>
+<p>Fails when <code>.terraform.lock.hcl</code> does not match what the module
+tree requires: every module the init aspect placed, root, local children
+and installed external ones, and in each the providers <code>required_providers</code>
+declares plus the ones <code>resource</code>, <code>data</code>, <code>ephemeral</code> and <code>provider</code>
+blocks imply. A provider the configuration needs but the lock lacks fails,
+and so does a lock entry nothing needs. Network-free; no engine runs.</p>
 <p><strong>ATTRIBUTES</strong></p>
 <div class="table-wrapper"><table><thead><tr><th style="text-align: left">Name</th><th style="text-align: left">Description</th><th style="text-align: left">Type</th><th style="text-align: left">Mandatory</th><th style="text-align: left">Default</th></tr></thead><tbody>
 <tr><td style="text-align: left"><a id="tofu_providers_lock_test-name"></a>name</td><td style="text-align: left">A unique name for this target.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels#target-names">Name</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
 <tr><td style="text-align: left"><a id="tofu_providers_lock_test-lock"></a>lock</td><td style="text-align: left">The .terraform.lock.hcl file being verified.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">Label</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
-<tr><td style="text-align: left"><a id="tofu_providers_lock_test-target"></a>target</td><td style="text-align: left">The terraform_module whose transitive sources are being checked.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">Label</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
+<tr><td style="text-align: left"><a id="tofu_providers_lock_test-target"></a>target</td><td style="text-align: left">The terraform_module whose module tree is being checked.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">Label</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
 </tbody></table>
 </div><div style="break-before: page; page-break-before: always;"></div><!-- Generated with Stardoc: http://skydoc.bazel.build -->
 <p>tofu_module</p>

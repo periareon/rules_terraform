@@ -564,9 +564,12 @@ back into <code>$BUILD_WORKSPACE_DIRECTORY</code>. This is the only path that
 produces hashes for every platform at once — the engine's own <code>init</code>
 locks the platform it runs on only.</p>
 <p><strong>Drift check.</strong> <a href="./terraform/terraform_providers_lock_test.html"><code>terraform_providers_lock_test</code></a>
-fails if any provider declared in a <code>required_providers { … }</code> block
-isn't in the lock file (or vice-versa). Pure text comparison — no
-network. The lock's own hashes are enforced elsewhere: the extension
+fails if the lock file does not match what the module tree requires. It
+reads the directory the init aspect built, every module in it including
+installed registry and git modules, and counts both the providers a
+<code>required_providers { … }</code> block declares and the ones <code>resource</code>, <code>data</code>,
+<code>ephemeral</code> and <code>provider</code> blocks imply, the way the engine does. No
+network, no engine. The lock's own hashes are enforced elsewhere: the extension
 refuses an archive whose checksum is not among the lock's <code>zh:</code> entries,
 and the engine verifies each installed provider directory against the
 <code>h1:</code> the init aspect wrote.</p>

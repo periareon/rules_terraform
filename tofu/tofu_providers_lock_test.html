@@ -171,14 +171,17 @@ load("@rules_terraform//tofu:tofu_providers_lock_test.bzl", "tofu_providers_lock
 
 tofu_providers_lock_test(<a href="#tofu_providers_lock_test-name">name</a>, <a href="#tofu_providers_lock_test-lock">lock</a>, <a href="#tofu_providers_lock_test-target">target</a>)
 </pre>
-<p>Fails the test if <code>.terraform.lock.hcl</code> doesn't cover every provider
-declared in <code>terraform { required_providers { ... } }</code> blocks reachable
-from <code>target</code> (and vice versa). Network-free presence check.</p>
+<p>Fails when <code>.terraform.lock.hcl</code> does not match what the module
+tree requires: every module the init aspect placed, root, local children
+and installed external ones, and in each the providers <code>required_providers</code>
+declares plus the ones <code>resource</code>, <code>data</code>, <code>ephemeral</code> and <code>provider</code>
+blocks imply. A provider the configuration needs but the lock lacks fails,
+and so does a lock entry nothing needs. Network-free; no engine runs.</p>
 <p><strong>ATTRIBUTES</strong></p>
 <div class="table-wrapper"><table><thead><tr><th style="text-align: left">Name</th><th style="text-align: left">Description</th><th style="text-align: left">Type</th><th style="text-align: left">Mandatory</th><th style="text-align: left">Default</th></tr></thead><tbody>
 <tr><td style="text-align: left"><a id="tofu_providers_lock_test-name"></a>name</td><td style="text-align: left">A unique name for this target.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels#target-names">Name</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
 <tr><td style="text-align: left"><a id="tofu_providers_lock_test-lock"></a>lock</td><td style="text-align: left">The .terraform.lock.hcl file being verified.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">Label</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
-<tr><td style="text-align: left"><a id="tofu_providers_lock_test-target"></a>target</td><td style="text-align: left">The terraform_module whose transitive sources are being checked.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">Label</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
+<tr><td style="text-align: left"><a id="tofu_providers_lock_test-target"></a>target</td><td style="text-align: left">The terraform_module whose module tree is being checked.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">Label</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
 </tbody></table>
 </div>
                     </main>
