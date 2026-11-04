@@ -521,6 +521,13 @@
         "strip_prefix": "terraform-null-label-488ab91e34a24a86957e397d9f7262ec5925586a",
         "url": "https://github.com/cloudposse/terraform-null-label/archive/488ab91e34a24a86957e397d9f7262ec5925586a.tar.gz"
       },
+      "git:https://github.com/cloudposse/terraform-null-label.git//@HEAD": {
+        "deps": [],
+        "integrity": "sha256-GBznFT7l9lHLg/R1gr/YvNX/ovt7xeOJpp32ne3hCZA=",
+        "pin": "38364d79c1082de13373666252e1276975919543",
+        "strip_prefix": "terraform-null-label-38364d79c1082de13373666252e1276975919543",
+        "url": "https://github.com/cloudposse/terraform-null-label/archive/38364d79c1082de13373666252e1276975919543.tar.gz"
+      },
       "git:https://github.com/cloudposse/terraform-null-label.git//exports@0.25.0": {
         "deps": [
           {

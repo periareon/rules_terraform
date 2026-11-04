@@ -609,12 +609,15 @@ The three spellings Terraform accepts are all recognised: a forced
 may carry `//subdir` and `?ref=`. A `version` on a git block is an
 error, as it is for Terraform; the ref is the pin.
 
-**The ref must be a tag or a full commit id.** A branch moves, so
-nothing built from one is reproducible: a branch name, or a source with
-no `?ref=` at all, is an error at evaluation time. A commit id is exact
-by construction. A tag is looked up once and what it names is recorded
-in `MODULE.bazel.lock`, so every later evaluation declares the same
-thing even if the tag is moved afterwards.
+**What the ref pins.** A commit id is exact by construction. A tag is
+looked up once and what it names is recorded in `MODULE.bazel.lock`, so
+every later evaluation declares the same thing even if the tag is moved
+afterwards. A branch name, or no `?ref=` at all meaning the remote's
+default branch, is resolved to the commit it points at the first time and
+recorded the same way: it is a choice rather than a property, like a
+version constraint, and only `RULES_TERRAFORM_UPGRADE` moves it. The
+native CLI follows such a source live on every `init`, so a tag or commit
+in the block is still what keeps the two workflows on one revision.
 
 **GitHub over `https`** needs no git at all. The extension fetches the
 archive GitHub serves for the ref (`archive/refs/tags/<tag>.tar.gz` or
@@ -622,14 +625,14 @@ archive GitHub serves for the ref (`archive/refs/tags/<tag>.tar.gz` or
 unpacked once on a facts miss to record its integrity and read the
 module's own external references, then declared as an `http_archive`
 pinned by that integrity, named `rt_git_<host_path>_<ref>`. The tag
-form of the URL is not found for a branch, which is how a branch is
-refused on this path. A moved tag fails the next fresh fetch on
+form of the URL is not found for a branch, so a branch is fetched by the
+commit it resolved to. A moved tag fails the next fresh fetch on
 integrity rather than being followed. The `github.com/org/repo`
 shorthand takes this path.
 
 **Every other remote**, `ssh://` to GitHub included, goes through the
-host's `git`. On a facts miss the extension asks the remote whether the
-ref is a tag (`ls-remote --tags`), refuses it if not, checks the tag or
+host's `git`. On a facts miss the extension asks the remote what the
+ref is (`ls-remote`), resolves a branch or the default branch to a commit, checks the tag or
 commit out one commit deep, records the commit and the module's own
 references, and discards the checkout. The repository Bazel builds
 against is a `new_git_repository` of that exact commit, named
