@@ -58,7 +58,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest, windows-latest]
         bazel: ["7.x", "8.x", "9.x"]
-        example: [terraform, tofu, monorepo]
+        example: [terraform, tofu, monorepo, git_modules]
         # The engine binary each example exposes. `bazel test //...` never
         # builds these — a `terraform_binary` / `tofu_binary` can break
         # while every test still passes — so each one gets run below.
@@ -69,6 +69,8 @@ jobs:
             binary: "//:tofu"
           - example: monorepo
             binary: "//envs/prod/app:terraform"
+          - example: git_modules
+            binary: "//:terraform"
     defaults:
       run:
         working-directory: examples/${{ matrix.example }}
@@ -119,3 +121,28 @@ jobs:
       - uses: pre-commit/action@v3.0.1
         with:
           extra_args: --all-files --show-diff-on-failure
+
+  # The one status branch protection requires. Every job above feeds it, so
+  # matrix entries and jobs can be added or removed without touching the
+  # protection rule. A skipped dependency is fine; a failed or cancelled one
+  # is not.
+  ci-success:
+    name: CI Success
+    if: always()
+    needs:
+      - test
+      - examples
+      - lint
+    runs-on: ubuntu-latest
+    steps:
+    - name: Check the result of every job
+      env:
+        RESULTS: ${{ join(needs.*.result, ' ') }}
+      run: |
+        echo "Job results: ${RESULTS}"
+        for result in ${RESULTS}; do
+          if [[ "${result}" != "success" ]]; then
+            echo "::error::A required job did not succeed (${result})."
+            exit 1
+          fi
+        done
