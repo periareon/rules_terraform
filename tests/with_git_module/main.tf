@@ -41,6 +41,16 @@ module "label_commit" {
   stage     = "ci"
 }
 
+# No ref: the remote's default branch, resolved to a commit once and kept as
+# a fact in MODULE.bazel.lock. `RULES_TERRAFORM_UPGRADE=1` moves it.
+module "label_head" {
+  source = "git::https://github.com/cloudposse/terraform-null-label.git"
+
+  namespace = "test"
+  name      = "rules-terraform"
+  stage     = "ci"
+}
+
 output "id" {
   description = "The label module's canonical id."
   value       = module.label.id

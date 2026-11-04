@@ -82,6 +82,6 @@ duplicate is reported at evaluation time.
 |---|---|---|
 | `name` | `string` (required) | Hub repository name. |
 | `lock` | `label` | A `.terraform.lock.hcl`. Every provider it pins is fetched for every platform the registry publishes. |
-| `roots` | `label_list` | Directories whose `module { source = "…" }` blocks name registry or git modules (`git::…`, `git@…`, `github.com/…`, pinned with `?ref=` to a tag or full commit id; branches are refused), each as any `.tf` file inside it. Every `*.tf` in each directory is scanned; modules composed of other registry or git modules are followed. GitHub `https` remotes are fetched as integrity-pinned archives with no git involved; other remotes go through the host's `git`. |
+| `roots` | `label_list` | Directories whose `module { source = "…" }` blocks name registry or git modules (`git::…`, `git@…`, `github.com/…`, `?ref=` a tag, a full commit id or a branch; a branch, or no ref, resolves to a commit once and is kept as a fact), each as any `.tf` file inside it. Every `*.tf` in each directory is scanned; modules composed of other registry or git modules are followed. GitHub `https` remotes are fetched as integrity-pinned archives with no git involved; other remotes go through the host's `git`. |
 | `root` | `label` | Shorthand for a one-element `roots`. |
 | `registry` | `string` (default empty) | Registry host to query for lock entries and sources that name none. Empty means `registry.terraform.io` from this extension, `registry.opentofu.org` from the OpenTofu one. |

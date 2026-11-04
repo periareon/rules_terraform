@@ -323,6 +323,29 @@ def _git_tag_commit(module_ctx, remote, ref):
               "full commit id; a branch name is not accepted.").format(ref, remote))
     return commit
 
+def _git_pin(module_ctx, remote, ref):
+    """Turn a ref as written into one the fetchers take: a tag name or a commit.
+
+    A tag is returned as itself. A branch, or an empty ref meaning the
+    remote's default branch, is resolved to the commit it points at now.
+    Anything else the remote does not know is an error.
+    """
+    if module_ctx.which("git") == None:
+        fail("module source {} is fetched from git, but no `git` is on PATH".format(remote))
+    patterns = ["HEAD"] if not ref else ["refs/tags/" + ref, "refs/tags/" + ref + "^{}", "refs/heads/" + ref]
+    result = _git(module_ctx, ["ls-remote", remote] + patterns, remote, ref or "HEAD")
+    heads = {}
+    for line in result.stdout.splitlines():
+        parts = line.split("\t")
+        if len(parts) == 2:
+            heads[parts[1]] = parts[0]
+    if ref and ("refs/tags/" + ref in heads or "refs/tags/" + ref + "^{}" in heads):
+        return ref
+    commit = heads.get("refs/heads/" + ref) if ref else heads.get("HEAD")
+    if not commit:
+        fail("ref {} of module source {} is neither a tag nor a branch on the remote".format(repr(ref), remote))
+    return commit
+
 def _fetch_git(module_ctx, remote, ref, checkouts):
     """Check out one git tag or commit during evaluation, at most once per eval.
 
@@ -555,14 +578,18 @@ def _resolve_git(module_ctx, source, git, constraint, existing_facts, new_facts,
     if constraint:
         fail(("module source {} is fetched from git and cannot carry version = {}. " +
               "Pin a git module with `?ref=` in its source instead.").format(source, repr(constraint)))
-    if not git.ref:
-        fail(("module source {} names no `?ref=`. A git module is pinned to a tag or a full " +
-              "commit id; the remote's default branch is not accepted.").format(source))
 
-    key = _git_fact_key(git.remote, git.subdir, git.ref)
+    # A tag or a commit id is the pin as written. A branch, or no ref at all,
+    # names whatever the remote points at today, so it is resolved to a
+    # commit once, recorded under the ref as written, and moved only under
+    # `RULES_TERRAFORM_UPGRADE`, the way a version constraint is.
+    key = _git_fact_key(git.remote, git.subdir, git.ref or "HEAD")
     cached = existing_facts[key] if existing_facts != None and key in existing_facts else None
     if upgrade or type(cached) != "dict" or "deps" not in cached:
         cached = None
+    ref = git.ref
+    if cached == None and not is_commit(ref):
+        ref = _git_pin(module_ctx, git.remote, ref)
 
     if _is_github_https(git.remote):
         if cached and cached.get("url") and cached.get("integrity"):
@@ -575,12 +602,14 @@ def _resolve_git(module_ctx, source, git, constraint, existing_facts, new_facts,
                 "url": cached["url"],
             }
             deps = cached["deps"]
+            ref = cached.get("pin", git.ref)
         else:
-            archive = _fetch_github_archive(module_ctx, git.remote, git.ref, checkouts)
+            archive = _fetch_github_archive(module_ctx, git.remote, ref, checkouts)
             deps = _module_refs(module_ctx, archive.path, git.subdir)
             new_facts[key] = {
                 "deps": deps,
                 "integrity": archive.integrity,
+                "pin": ref,
                 "strip_prefix": archive.strip_prefix,
                 "url": archive.url,
             }
@@ -591,14 +620,14 @@ def _resolve_git(module_ctx, source, git, constraint, existing_facts, new_facts,
                 "strip_prefix": archive.strip_prefix,
                 "url": archive.url,
             }
-        pool_key = _git_pool_key(git.remote, git.ref)
+        pool_key = _git_pool_key(git.remote, ref)
     else:
         if cached and cached.get("commit"):
             new_facts[key] = cached
             commit = cached["commit"]
             deps = cached["deps"]
         else:
-            checkout = _fetch_git(module_ctx, git.remote, git.ref, checkouts)
+            checkout = _fetch_git(module_ctx, git.remote, ref, checkouts)
             commit = checkout.commit
             deps = _module_refs(module_ctx, checkout.path, git.subdir)
             new_facts[key] = {"commit": commit, "deps": deps}
