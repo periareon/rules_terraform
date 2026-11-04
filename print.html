@@ -681,25 +681,28 @@ host rather than the tag's <code>registry</code>.</p>
 <code>git@host:org/repo.git</code>, and the <code>github.com/org/repo</code> shorthand. Each
 may carry <code>//subdir</code> and <code>?ref=</code>. A <code>version</code> on a git block is an
 error, as it is for Terraform; the ref is the pin.</p>
-<p><strong>The ref must be a tag or a full commit id.</strong> A branch moves, so
-nothing built from one is reproducible: a branch name, or a source with
-no <code>?ref=</code> at all, is an error at evaluation time. A commit id is exact
-by construction. A tag is looked up once and what it names is recorded
-in <code>MODULE.bazel.lock</code>, so every later evaluation declares the same
-thing even if the tag is moved afterwards.</p>
+<p><strong>What the ref pins.</strong> A commit id is exact by construction. A tag is
+looked up once and what it names is recorded in <code>MODULE.bazel.lock</code>, so
+every later evaluation declares the same thing even if the tag is moved
+afterwards. A branch name, or no <code>?ref=</code> at all meaning the remote's
+default branch, is resolved to the commit it points at the first time and
+recorded the same way: it is a choice rather than a property, like a
+version constraint, and only <code>RULES_TERRAFORM_UPGRADE</code> moves it. The
+native CLI follows such a source live on every <code>init</code>, so a tag or commit
+in the block is still what keeps the two workflows on one revision.</p>
 <p><strong>GitHub over <code>https</code></strong> needs no git at all. The extension fetches the
 archive GitHub serves for the ref (<code>archive/refs/tags/&lt;tag&gt;.tar.gz</code> or
 <code>archive/&lt;commit&gt;.tar.gz</code>), exactly as it does for a registry module:
 unpacked once on a facts miss to record its integrity and read the
 module's own external references, then declared as an <code>http_archive</code>
 pinned by that integrity, named <code>rt_git_&lt;host_path&gt;_&lt;ref&gt;</code>. The tag
-form of the URL is not found for a branch, which is how a branch is
-refused on this path. A moved tag fails the next fresh fetch on
+form of the URL is not found for a branch, so a branch is fetched by the
+commit it resolved to. A moved tag fails the next fresh fetch on
 integrity rather than being followed. The <code>github.com/org/repo</code>
 shorthand takes this path.</p>
 <p><strong>Every other remote</strong>, <code>ssh://</code> to GitHub included, goes through the
-host's <code>git</code>. On a facts miss the extension asks the remote whether the
-ref is a tag (<code>ls-remote --tags</code>), refuses it if not, checks the tag or
+host's <code>git</code>. On a facts miss the extension asks the remote what the
+ref is (<code>ls-remote</code>), resolves a branch or the default branch to a commit, checks the tag or
 commit out one commit deep, records the commit and the module's own
 references, and discards the checkout. The repository Bazel builds
 against is a <code>new_git_repository</code> of that exact commit, named
@@ -1259,7 +1262,7 @@ duplicate is reported at evaluation time.</p>
 <div class="table-wrapper"><table><thead><tr><th>Attribute</th><th>Type</th><th>Description</th></tr></thead><tbody>
 <tr><td><code>name</code></td><td><code>string</code> (required)</td><td>Hub repository name.</td></tr>
 <tr><td><code>lock</code></td><td><code>label</code></td><td>A <code>.terraform.lock.hcl</code>. Every provider it pins is fetched for every platform the registry publishes.</td></tr>
-<tr><td><code>roots</code></td><td><code>label_list</code></td><td>Directories whose <code>module { source = "…" }</code> blocks name registry or git modules (<code>git::…</code>, <code>git@…</code>, <code>github.com/…</code>, pinned with <code>?ref=</code> to a tag or full commit id; branches are refused), each as any <code>.tf</code> file inside it. Every <code>*.tf</code> in each directory is scanned; modules composed of other registry or git modules are followed. GitHub <code>https</code> remotes are fetched as integrity-pinned archives with no git involved; other remotes go through the host's <code>git</code>.</td></tr>
+<tr><td><code>roots</code></td><td><code>label_list</code></td><td>Directories whose <code>module { source = "…" }</code> blocks name registry or git modules (<code>git::…</code>, <code>git@…</code>, <code>github.com/…</code>, <code>?ref=</code> a tag, a full commit id or a branch; a branch, or no ref, resolves to a commit once and is kept as a fact), each as any <code>.tf</code> file inside it. Every <code>*.tf</code> in each directory is scanned; modules composed of other registry or git modules are followed. GitHub <code>https</code> remotes are fetched as integrity-pinned archives with no git involved; other remotes go through the host's <code>git</code>.</td></tr>
 <tr><td><code>root</code></td><td><code>label</code></td><td>Shorthand for a one-element <code>roots</code>.</td></tr>
 <tr><td><code>registry</code></td><td><code>string</code> (default empty)</td><td>Registry host to query for lock entries and sources that name none. Empty means <code>registry.terraform.io</code> from this extension, <code>registry.opentofu.org</code> from the OpenTofu one.</td></tr>
 </tbody></table>
