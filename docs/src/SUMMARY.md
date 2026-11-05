@@ -16,7 +16,6 @@
   - [terraform_validate_aspect](./terraform/terraform_validate_aspect.md)
   - [terraform_validate_test](./terraform/terraform_validate_test.md)
   - [extensions](./terraform/extensions.md)
-- [Terraform Settings](./terraform/settings.md)
 - [OpenTofu Rules](./tofu_rules.md)
   - [tofu_binary](./tofu/tofu_binary.md)
   - [tofu_external_module](./tofu/tofu_external_module.md)
@@ -29,5 +28,4 @@
   - [tofu_test](./tofu/tofu_test.md)
   - [tofu_validate_test](./tofu/tofu_validate_test.md)
   - [extensions](./tofu/extensions.md)
-- [OpenTofu Settings](./tofu/settings.md)
 - [Gazelle](./gazelle.md)

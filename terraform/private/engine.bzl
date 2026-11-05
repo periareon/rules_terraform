@@ -8,7 +8,6 @@ visibility(["//terraform/..."])
 TERRAFORM_ENGINE = engine_config(
     name = "terraform",
     toolchain_type = str(Label("//terraform:toolchain_type")),
-    version_flag = str(Label("//terraform/settings:version")),
     hub_bzl = str(Label("//terraform/private:hub.bzl")),
     cli_hub = "terraform",
     registry = "registry.terraform.io",

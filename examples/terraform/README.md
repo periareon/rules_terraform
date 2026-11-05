@@ -59,22 +59,17 @@ so no network access is required.
 
 ## Pinning the Terraform version
 
-rules_terraform ships one toolchain per (Terraform version, platform),
-each guarded by a `config_setting` on `//terraform/settings:version`.
-Pick a specific release with either:
+A build has one Terraform release: the root module's `toolchain` tag, else
+the newest baked into `@rules_terraform//terraform/private:versions.bzl`.
+This example pins one in `MODULE.bazel`:
 
-```
-bazel build //... --@rules_terraform//terraform/settings:version=1.9.8
-```
-
-or a `.bazelrc` line:
-
-```
-build --@rules_terraform//terraform/settings:version=1.9.8
+```python
+terraform = use_extension("@rules_terraform//terraform:extensions.bzl", "terraform")
+terraform.toolchain(version = "1.16.6")
 ```
 
-Defaults to the newest release baked into
-`@rules_terraform//terraform/private:versions.bzl`.
+Any release works there. One outside the shipped table costs a single
+fetch of its `SHA256SUMS`, recorded as a fact in `MODULE.bazel.lock`.
 
 ## Consuming rules_terraform from a real project
 

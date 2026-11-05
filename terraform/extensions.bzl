@@ -2,14 +2,14 @@
 
 One extension, two tag classes:
 
-* `toolchain` — makes a Terraform release available beyond the ones shipped in
-  `//terraform/private:versions.bzl`, and optionally marks it the default.
-  The extension always materializes `@terraform_toolchains`, a hub declaring a
-  toolchain per (version, platform), and `@terraform`, the CLI hub.
+* `toolchain` — pins the Terraform release the build uses, any release,
+  not only the ones shipped in `//terraform/private:versions.bzl`. Root
+  module only; without it the newest shipped release is used. The
+  extension always materializes `@terraform_toolchains`, a hub declaring a
+  toolchain per platform for that release, and `@terraform`, the CLI hub.
   rules_terraform's own `MODULE.bazel` `use_repo`s the toolchain hub and
   `register_toolchains`s it, so downstream users get toolchain resolution
-  for free. `//terraform/settings:version` picks the release; empty means the
-  default.
+  for free.
 * `deps` — the providers a lock file pins and the registry and git modules
   some directories' `module` blocks name, as one hub per tag. Fetched
   archives go into one pool shared by every hub, keyed by what the archive
@@ -27,7 +27,7 @@ def _terraform_impl(module_ctx):
     return run_extension(module_ctx, engine = TERRAFORM_ENGINE)
 
 terraform = module_extension(
-    doc = """The Terraform extension: `toolchain` tags pick engine releases,
+    doc = """The Terraform extension: a `toolchain` tag pins the engine release,
     `deps` tags describe a module's external dependencies. Always
     materializes `@terraform_toolchains` and `@terraform`; `deps` defaults to
     `registry.terraform.io`.""",

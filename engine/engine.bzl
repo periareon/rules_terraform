@@ -13,7 +13,6 @@ def engine_config(
         *,
         name,
         toolchain_type,
-        version_flag,
         hub_bzl,
         cli_hub,
         registry,
@@ -33,7 +32,6 @@ def engine_config(
             `<name>_fmt_checks` / `<name>_validate_checks` output groups,
             action mnemonics, generated file names and lock facts.
         toolchain_type: (str) Label of the engine's `toolchain_type`.
-        version_flag: (str) Label of the engine's `settings:version` flag.
         hub_bzl: (str) Label of the public `.bzl` file the repositories the
             extensions generate (toolchains, provider and module pools, deps
             hubs, the CLI hub) load their rules from. Engine code is not
@@ -47,8 +45,8 @@ def engine_config(
             file in `srcs` at analysis time, so a file the engine would
             silently ignore is an error instead.
         versions: (dict) Shipped releases: version → platform → `{url, integrity}`.
-        default_version: (str) The release used when neither a `version` tag
-            nor the flag picks one.
+        default_version: (str) The release used when the root module has no
+            `toolchain` tag: the newest shipped.
         binary_name: (str) Executable name inside a release archive.
         archive_prefix: (str) Archive file name prefix in `SHA256SUMS`.
         sha256sums_url: (function) version → URL of the release's `SHA256SUMS`.
@@ -64,7 +62,6 @@ def engine_config(
     return struct(
         name = name,
         toolchain_type = toolchain_type,
-        version_flag = version_flag,
         hub_bzl = hub_bzl,
         cli_hub = cli_hub,
         registry = registry,

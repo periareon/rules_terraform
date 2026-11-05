@@ -21,28 +21,23 @@ release shipped in
 [`//tofu/private:versions.bzl`](../../tofu/private/versions.bzl); those
 tables carry the three newest releases of each engine.
 
-Any other release is one tag away. The extension fetches that release's
-`SHA256SUMS` once and records the checksums as facts in
-`MODULE.bazel.lock`, so pinning an older engine needs no change to
-rules_terraform:
+Any other release is one tag away, and a build has exactly one: the
+root module's `toolchain` tag, else the newest shipped. For a release
+outside the table the extension fetches its `SHA256SUMS` once and records
+the checksums as facts in `MODULE.bazel.lock`, so pinning an older engine
+needs no change to rules_terraform:
 
 ```python
 terraform = use_extension("@rules_terraform//terraform:extensions.bzl", "terraform")
-terraform.toolchain(version = "1.9.8", default = True)   # default = True: use it unless the flag says otherwise
+terraform.toolchain(version = "1.9.8")
 
 tofu = use_extension("@rules_terraform//tofu:extensions.bzl", "tofu")
-tofu.toolchain(version = "1.9.1")                        # available, selected by flag
+tofu.toolchain(version = "1.9.1")
 ```
 
-The flags select among the releases the hub knows, shipped or tagged:
-
-```
---@rules_terraform//terraform/settings:version=1.9.8
---@rules_terraform//tofu/settings:version=1.9.1
-```
-
-Left empty they mean "the default": the root module's `default = True`
-tag, else the newest shipped release.
+Changing the release is editing the tag. A `toolchain` tag in a
+dependency is ignored; a module that needs a floor says so in its own
+`required_version`.
 
 Nothing has to be installed on the host: the engine binary, provider
 archives and registry modules are all fetched by Bazel, and every
@@ -157,10 +152,9 @@ bazel run @tofu -- state list        # ≈ tofu state list
 The wrapper `chdir`s to `$BUILD_WORKING_DIRECTORY` (the shell cwd where
 `bazel run` was invoked) before exec-ing the engine, so relative paths
 and any `terraform.tfstate` land in the directory you're standing in —
-just like the native CLI. Version resolution follows the same
-`//terraform/settings:version` / `//tofu/settings:version` flags as
-the rest of the ruleset, so you get one hermetic Terraform release
-across all invocations.
+just like the native CLI. It is the same toolchain release as the rest
+of the ruleset, so you get one hermetic Terraform release across all
+invocations.
 
 It is also how a Terraform maintainer manages dependencies without
 touching Bazel: `bazel run @terraform -- init -upgrade` or
