@@ -233,10 +233,13 @@ below.
 ### Direct `terraform` CLI incompatibility
 
 Once a `terraform_module` has Bazel-managed dependencies, running
-`terraform` (or `tofu`) directly outside Bazel is **not expected to work**:
-the module directory is Bazel's construction, `h1:` hashes are rewritten
-for the installed platform binary, and `modules.json` reflects the Bazel
-target graph — not the source tree.
+`terraform` (or `tofu`) directly outside Bazel is **not expected to work**
+against a bare checkout: the module directory is Bazel's construction,
+`h1:` hashes are rewritten for the installed platform binary, and
+`modules.json` reflects the Bazel target graph — not the source tree.
+[Initializing in place](#initializing-in-place) below is how a source
+directory gets that construction installed, for the times the native CLI
+is the tool you want.
 
 Use `bazel run` to invoke the engine:
 
@@ -283,6 +286,64 @@ the backend as before. The practical consequences: a `terraform_test` on
 a module with a remote backend needs no credentials, and a configuration
 error in one of those subcommands is reported as itself rather than as a
 backend failure.
+
+### Initializing in place
+
+`bazel run //path/to:terraform -- init` is the one subcommand that does
+not run in the temp dir, where its work would be deleted with it. Under
+the binary it means the one thing it usefully can: install what the build
+constructed into the module's source directory, so the native CLI works
+there afterwards.
+
+```bash
+bazel run //envs/prod/app:terraform -- init
+cd envs/prod/app
+terraform plan            # native CLI, providers and modules from the build
+```
+
+The directory is the root module's package under the checkout, wherever
+the command was run from; `BUILD_WORKSPACE_DIRECTORY` and the target
+decide it, not the shell's cwd (that is the `@terraform` hub's job). The
+runner:
+
+1. copies the built `.terraform/providers/` and `.terraform/modules/` over
+   whatever is there, keeping `.terraform/environment` and the saved
+   backend configuration, as a native re-`init` keeps them;
+2. writes `.terraform.lock.hcl` next to the sources only when the module
+   has none of its own (it depends on a shared hub), and says so;
+3. adds the host platform's `h1:` hash to the lock for any installed
+   provider the lock lacks it for, one line each, and says so. An unpacked
+   package can only be verified by its `h1:`, so a lock made on another
+   platform, or natively with fewer `-platform`s than the updater records,
+   would make the engine refuse the package it is standing next to. It is
+   the line `providers lock -platform=<host>` would add; commit it, or
+   regenerate the lock for every platform with the updater;
+4. runs the engine's `init -get=false -plugin-dir=.terraform/providers`
+   in that directory with the remaining arguments appended, which is
+   where the backend gets configured.
+
+Each `init` flag is either the backend's business, which passes through,
+or the build's, which is refused with the Bazel path named:
+
+| Flag | Under the binary | Why |
+|---|---|---|
+| `-backend-config=…`, `-backend=false` | passes through | Backend configuration is the module's, not the build's. |
+| `-reconfigure` | passes through | Re-reads the backend block, ignoring the saved configuration. The staged runs are implicitly always reconfigured, since a fresh copy has none saved; in place it matters. |
+| `-migrate-state`, `-force-copy` | pass through | Moves state from the previously saved backend configuration to the current one. It needs that saved configuration, which only a persisted directory has, so this is the only place under Bazel it can work. |
+| `-input`, `-lock`, `-lock-timeout`, `-no-color`, `-json` | pass through | Plain engine options. |
+| `-upgrade` | refused | Would re-resolve providers against the plugin dir and rewrite the lock. The versions are facts of the build: `bazel run //path/to:providers_lock.update` for providers, `RULES_TERRAFORM_UPGRADE=1 bazel fetch` for modules (see [Upgrading](#upgrading)). |
+| `-get` | refused | The build installs the modules; the manifest is theirs. |
+| `-plugin-dir` | refused | The build's providers are the plugin directory. |
+| `-from-module` | refused | A root module is a `terraform_module` target. |
+| `-lockfile=readonly` | passes through | Forbids every lock write, step 3 included: a lock without the host's hash is then an error naming the updater rather than an edit. |
+| `-chdir` (global) | refused | The target names the module directory. |
+| `-help` | passes through | Answered by the engine, with nothing installed. |
+
+`.terraform/` is the engine's cache and belongs in `.gitignore`; Gazelle
+and the rules ignore it, and a Bazel run never reads it. This is the one
+`bazel run` that writes into the source tree, and only because it was
+asked to. The staged runs and the tests are unchanged by it: the next
+`bazel run //path/to:terraform -- plan` still starts from a fresh copy.
 
 **Workspaces.** The rules add no workspace concept of their own; they use
 Terraform's. `TF_WORKSPACE` in the environment selects one for every

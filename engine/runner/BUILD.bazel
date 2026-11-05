@@ -10,7 +10,9 @@ go_library(
     visibility = ["//visibility:private"],
     deps = [
         "//engine/internal/fsutil",
+        "//engine/internal/lockparse",
         "//engine/internal/moduledir",
+        "//engine/internal/providerhash",
         "//engine/internal/tfparse",
         "@rules_go//go/runfiles",
     ],

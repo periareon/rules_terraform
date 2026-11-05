@@ -78,6 +78,10 @@ mirror the nominal CLI.
 The `.terraform` directory is assembled hermetically by
 `terraform_init_aspect`; providers and modules come from Bazel-managed
 dependencies rather than the network.
+
+`init` is the one subcommand not passed through. It installs that
+`.terraform` directory into the module's source directory and initializes
+the backend there, so the native CLI works in that directory afterwards.
 """.format(engine = name),
         implementation = _binary_impl,
         attrs = RUNNER_ATTRS,

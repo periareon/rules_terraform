@@ -11,7 +11,9 @@ import (
 
 	"github.com/bazelbuild/rules_go/go/runfiles"
 	"rules_terraform/engine/internal/fsutil"
+	"rules_terraform/engine/internal/lockparse"
 	"rules_terraform/engine/internal/moduledir"
+	"rules_terraform/engine/internal/providerhash"
 	"rules_terraform/engine/internal/tfparse"
 )
 
@@ -45,6 +47,12 @@ type ArgsFile struct {
 	// environment carries. Never set for `bazel run`, which follows the
 	// operator's environment.
 	Workspace string `json:"workspace,omitempty"`
+
+	// ModulePackage is the root module's package: the directory under
+	// BUILD_WORKSPACE_DIRECTORY that `init` installs into. Nil for a root
+	// module in another repository, which has no place in the checkout, and
+	// for the test modes.
+	ModulePackage *string `json:"module_package,omitempty"`
 
 	// Plan configures `terraform_plan_test`; nil for the other modes.
 	Plan *PlanArgs `json:"plan,omitempty"`
@@ -243,6 +251,10 @@ func runCommand(e engine, argsFile *ArgsFile, localDir string, userArgs []string
 		args = []string{"--help"}
 	}
 
+	if isInPlaceInit(args) {
+		return runInit(e, argsFile, args), false
+	}
+
 	// Where state goes when there is no backend is decided before anything
 	// runs: the override has to be in place before `init`.
 	hasBackend := tfparse.HasBackend(e.workDir)
@@ -314,6 +326,223 @@ func runCommand(e engine, argsFile *ArgsFile, localDir string, userArgs []string
 		return 0, true
 	}
 	return 0, false
+}
+
+// ---- bazel run: init -----------------------------------------------------------
+
+// isInPlaceInit reports whether the invocation is an `init` to intercept. A
+// help request for it is left to the engine.
+func isInPlaceInit(args []string) bool {
+	if subcommand(args) != "init" {
+		return false
+	}
+	for _, arg := range args {
+		switch arg {
+		case "-h", "-help", "--help":
+			return false
+		}
+	}
+	return true
+}
+
+// initFlagRejections are the `init` flags that name something the Bazel
+// build decides, each with the reason it is refused. `-chdir` is a global
+// flag, before the subcommand, and is refused for the same reason.
+var initFlagRejections = map[string]string{
+	"chdir":       "the target names the module directory",
+	"from-module": "a root module is a terraform_module target",
+	"get":         "the build installs the modules",
+	"plugin-dir":  "the build's providers are the plugin directory",
+	"upgrade":     "providers and modules are what the build installed; change the lock or MODULE.bazel and rebuild",
+}
+
+// rejectedInitFlag returns the first flag of an `init` invocation that the
+// in-place init refuses, with the reason, or "" when every flag passes
+// through.
+func rejectedInitFlag(args []string) (string, string) {
+	for _, arg := range args {
+		if !strings.HasPrefix(arg, "-") {
+			continue
+		}
+		name := strings.TrimLeft(arg, "-")
+		if i := strings.IndexByte(name, '='); i >= 0 {
+			name = name[:i]
+		}
+		if why, ok := initFlagRejections[name]; ok {
+			return arg, why
+		}
+	}
+	return "", ""
+}
+
+// lockfileReadonly reports whether the invocation carries
+// `-lockfile=readonly`, the engine's own way of forbidding lock writes,
+// which the in-place init honours for the hash it would otherwise add.
+func lockfileReadonly(args []string) bool {
+	for i, arg := range args {
+		name := strings.TrimLeft(arg, "-")
+		if name == "lockfile=readonly" {
+			return true
+		}
+		if name == "lockfile" && i+1 < len(args) && args[i+1] == "readonly" {
+			return true
+		}
+	}
+	return false
+}
+
+// runInit is `bazel run //pkg:terraform -- init`. Passed through, `init`
+// would run in the staged copy and its work would be deleted with it, so
+// under the binary it means the one thing it usefully can: install the
+// Bazel-built `.terraform/` into the module's source directory and
+// initialize the backend there. After it the native CLI works in that
+// directory with no network for providers or modules.
+//
+// The directory is the root module's package under
+// BUILD_WORKSPACE_DIRECTORY, wherever the command was run from. The
+// providers and modules are replaced; `.terraform/environment` and the
+// backend state are kept, as a native re-`init` keeps them. The lock is
+// written only when the module has none of its own, so a native `init`
+// does not create one next to the sources, and gains the host platform's
+// `h1:` hash when it lacks one, since the engine cannot verify an unpacked
+// package by anything else and would refuse to reuse it. The remaining
+// arguments go to the in-place `init`, which is how `-reconfigure`,
+// `-migrate-state` and `-backend-config` reach it.
+func runInit(e engine, argsFile *ArgsFile, args []string) int {
+	if flag, why := rejectedInitFlag(args); flag != "" {
+		fmt.Fprintf(os.Stderr, "Error: `init` under this binary installs the Bazel-built .terraform/ into the module's source directory, so %s has no meaning here: %s.\n", flag, why)
+		return 1
+	}
+	workspaceDir := os.Getenv("BUILD_WORKSPACE_DIRECTORY")
+	if workspaceDir == "" {
+		fmt.Fprintln(os.Stderr, "Error: `init` installs into the checkout, which only `bazel run` knows: BUILD_WORKSPACE_DIRECTORY is not set.")
+		return 1
+	}
+	if argsFile.ModulePackage == nil {
+		fmt.Fprintln(os.Stderr, "Error: the root module lives in another repository; there is no directory in this checkout to initialize.")
+		return 1
+	}
+	dst := filepath.Join(workspaceDir, filepath.FromSlash(*argsFile.ModulePackage))
+	if !moduledir.HasConfig(dst) {
+		fmt.Fprintf(os.Stderr, "Error: %s holds no configuration files; expected the root module's sources there.\n", dst)
+		return 1
+	}
+
+	for _, sub := range []string{"providers", "modules"} {
+		src := filepath.Join(moduledir.TerraformDir(e.workDir), sub)
+		target := filepath.Join(moduledir.TerraformDir(dst), sub)
+		if _, err := os.Stat(src); os.IsNotExist(err) {
+			if err := os.RemoveAll(target); err != nil {
+				fmt.Fprintf(os.Stderr, "Error: removing %s: %v\n", target, err)
+				return 1
+			}
+			continue
+		}
+		if err := fsutil.CopyDirectory(src, target); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: installing %s: %v\n", target, err)
+			return 1
+		}
+	}
+
+	lockWritten := false
+	if _, err := os.Stat(moduledir.LockFile(dst)); os.IsNotExist(err) {
+		if _, err := os.Stat(moduledir.LockFile(e.workDir)); err == nil {
+			if err := fsutil.CopyFile(moduledir.LockFile(e.workDir), moduledir.LockFile(dst)); err != nil {
+				fmt.Fprintf(os.Stderr, "Error: writing %s: %v\n", moduledir.LockFile(dst), err)
+				return 1
+			}
+			lockWritten = true
+		}
+	}
+
+	added, err := addHostHashes(dst, lockfileReadonly(args))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		return 1
+	}
+
+	initArgs := append([]string{"init", "-get=false", "-plugin-dir=" + moduledir.ProvidersDir(dst)}, args[indexOf(args, "init")+1:]...)
+	code := engine{path: e.path, workDir: dst, env: e.env}.exec(initArgs...)
+	if code != 0 {
+		return code
+	}
+	fmt.Fprintf(os.Stderr, "\nrules_terraform: %s is initialized; the native CLI works there. .terraform/ is the engine's cache and belongs in .gitignore.\n", dst)
+	if lockWritten {
+		fmt.Fprintf(os.Stderr, "rules_terraform: the module had no .terraform.lock.hcl of its own, so the build's was written next to the sources.\n")
+	}
+	for _, line := range added {
+		fmt.Fprintf(os.Stderr, "rules_terraform: .terraform.lock.hcl gained %s, the hash of the installed package, which it lacked for this platform; commit it, or regenerate the lock for every platform with the lock updater.\n", line)
+	}
+	return 0
+}
+
+// addHostHashes records in the module's lock the `h1:` hash of each
+// installed provider package the lock does not already carry, and returns
+// a description of each addition. An unpacked package can only be verified
+// by its `h1:`, so a lock made on another platform, or natively with fewer
+// `-platform`s than the updater uses, makes the engine refuse the package it
+// is standing next to. The addition is what `providers lock -platform=<host>`
+// would add and nothing else in the file moves. With readonly set, which is
+// the engine's `-lockfile=readonly`, a missing hash is an error instead.
+func addHostHashes(moduleDir string, readonly bool) ([]string, error) {
+	lockPath := moduledir.LockFile(moduleDir)
+	entries, err := lockparse.ReadProviderLock(lockPath)
+	if err != nil {
+		return nil, err
+	}
+	if entries == nil {
+		// No lock: the engine writes one from the installed packages.
+		return nil, nil
+	}
+	content, err := os.ReadFile(lockPath)
+	if err != nil {
+		return nil, err
+	}
+
+	var added []string
+	// `<host>/<namespace>/<name>/<version>/<platform>` under the providers
+	// directory; the tree holds the host platform only.
+	packages, _ := filepath.Glob(filepath.Join(moduledir.ProvidersDir(moduleDir), "*", "*", "*", "*", "*"))
+	for _, pkg := range packages {
+		rel, err := filepath.Rel(moduledir.ProvidersDir(moduleDir), pkg)
+		if err != nil {
+			return nil, err
+		}
+		parts := strings.Split(filepath.ToSlash(rel), "/")
+		host, source, version, platform := parts[0], parts[1]+"/"+parts[2], parts[3], parts[4]
+		var entry *lockparse.ProviderEntry
+		for i := range entries {
+			if entries[i].RegistryHost == host && entries[i].Source == source && entries[i].Version == version {
+				entry = &entries[i]
+			}
+		}
+		if entry == nil {
+			// Not the lock's provider at all; the engine reports that itself.
+			continue
+		}
+		hash, err := providerhash.H1(pkg)
+		if err != nil {
+			return nil, err
+		}
+		if indexOf(entry.H1Hashes, hash) >= 0 {
+			continue
+		}
+		address := host + "/" + source
+		if readonly {
+			return nil, fmt.Errorf("%s has no h1: hash for %s on %s, and -lockfile=readonly forbids adding one; regenerate the lock for every platform with the lock updater, or drop the flag", lockPath, address, platform)
+		}
+		content, _, err = lockparse.AddH1Hash(content, address, hash)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", lockPath, err)
+		}
+		added = append(added, fmt.Sprintf("%s for %s (%s)", hash, address, platform))
+	}
+	if len(added) > 0 {
+		if err := os.WriteFile(lockPath, content, 0o644); err != nil {
+			return nil, err
+		}
+	}
+	return added, nil
 }
 
 // execroot returns the directory that resolved, a file's location on disk,

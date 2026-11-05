@@ -1,8 +1,14 @@
-load("@rules_go//go:def.bzl", "go_library")
+load("@rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "lockparse",
     srcs = ["lockparse.go"],
     importpath = "rules_terraform/engine/internal/lockparse",
     visibility = ["//engine:__subpackages__"],
+)
+
+go_test(
+    name = "lockparse_test",
+    srcs = ["lockparse_test.go"],
+    embed = [":lockparse"],
 )

@@ -153,6 +153,13 @@ func Stage(src, tempPrefix string) (string, func(), error) {
 	return workDir, cleanup, nil
 }
 
+// HasConfig reports whether dir holds anything Terraform or OpenTofu would
+// load as configuration.
+func HasConfig(dir string) bool {
+	entries, err := os.ReadDir(dir)
+	return err == nil && hasConfigFile(entries)
+}
+
 // hasConfigFile reports whether the directory holds anything Terraform or
 // OpenTofu would load as configuration.
 func hasConfigFile(entries []os.DirEntry) bool {
