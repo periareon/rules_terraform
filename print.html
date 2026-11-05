@@ -171,22 +171,20 @@ release shipped in
 <a href="../../terraform/private/versions.bzl"><code>//terraform/private:versions.bzl</code></a> /
 <a href="../../tofu/private/versions.bzl"><code>//tofu/private:versions.bzl</code></a>; those
 tables carry the three newest releases of each engine.</p>
-<p>Any other release is one tag away. The extension fetches that release's
-<code>SHA256SUMS</code> once and records the checksums as facts in
-<code>MODULE.bazel.lock</code>, so pinning an older engine needs no change to
-rules_terraform:</p>
+<p>Any other release is one tag away, and a build has exactly one: the
+root module's <code>toolchain</code> tag, else the newest shipped. For a release
+outside the table the extension fetches its <code>SHA256SUMS</code> once and records
+the checksums as facts in <code>MODULE.bazel.lock</code>, so pinning an older engine
+needs no change to rules_terraform:</p>
 <pre><code class="language-python">terraform = use_extension("@rules_terraform//terraform:extensions.bzl", "terraform")
-terraform.toolchain(version = "1.9.8", default = True)   # default = True: use it unless the flag says otherwise
+terraform.toolchain(version = "1.9.8")
 
 tofu = use_extension("@rules_terraform//tofu:extensions.bzl", "tofu")
-tofu.toolchain(version = "1.9.1")                        # available, selected by flag
+tofu.toolchain(version = "1.9.1")
 </code></pre>
-<p>The flags select among the releases the hub knows, shipped or tagged:</p>
-<pre><code>--@rules_terraform//terraform/settings:version=1.9.8
---@rules_terraform//tofu/settings:version=1.9.1
-</code></pre>
-<p>Left empty they mean "the default": the root module's <code>default = True</code>
-tag, else the newest shipped release.</p>
+<p>Changing the release is editing the tag. A <code>toolchain</code> tag in a
+dependency is ignored; a module that needs a floor says so in its own
+<code>required_version</code>.</p>
 <p>Nothing has to be installed on the host: the engine binary, provider
 archives and registry modules are all fetched by Bazel, and every
 <code>bazel run</code> / <code>bazel test</code> below uses the toolchain-fetched engine.</p>
@@ -287,10 +285,9 @@ bazel run @tofu -- state list        # ≈ tofu state list
 <p>The wrapper <code>chdir</code>s to <code>$BUILD_WORKING_DIRECTORY</code> (the shell cwd where
 <code>bazel run</code> was invoked) before exec-ing the engine, so relative paths
 and any <code>terraform.tfstate</code> land in the directory you're standing in —
-just like the native CLI. Version resolution follows the same
-<code>//terraform/settings:version</code> / <code>//tofu/settings:version</code> flags as
-the rest of the ruleset, so you get one hermetic Terraform release
-across all invocations.</p>
+just like the native CLI. It is the same toolchain release as the rest
+of the ruleset, so you get one hermetic Terraform release across all
+invocations.</p>
 <p>It is also how a Terraform maintainer manages dependencies without
 touching Bazel: <code>bazel run @terraform -- init -upgrade</code> or
 <code>bazel run @terraform -- providers lock</code> in a module directory writes
@@ -1200,30 +1197,30 @@ terraform_validate_test(<a href="terraform/terraform_validate_test.html#terrafor
 with two tag classes.</p>
 <h2 id="terraformtoolchain"><a class="header" href="#terraformtoolchain"><code>terraform.toolchain</code></a></h2>
 <p>The extension always materializes one hub repo (<code>@terraform_toolchains</code>)
-that declares a toolchain per (version, platform) for the releases shipped in
-<code>//terraform/private:versions.bzl</code> — the three newest when the table was
-generated — and <code>@terraform</code>, the CLI hub. rules_terraform's own
-<code>MODULE.bazel</code> <code>use_repo</code>s the toolchain hub and <code>register_toolchains</code>s it,
-so downstream users get toolchain resolution for free. Per-(version,
-platform) <code>http_archive</code>s are lazy; only the selected combination is fetched.</p>
-<p>A <code>toolchain</code> tag adds any other release. The extension fetches that
-release's <code>SHA256SUMS</code> once and records the checksums as facts in
+that declares a toolchain per platform for one Terraform release, and
+<code>@terraform</code>, the CLI hub. rules_terraform's own <code>MODULE.bazel</code> <code>use_repo</code>s
+the toolchain hub and <code>register_toolchains</code>s it, so downstream users get
+toolchain resolution for free. Per-platform <code>http_archive</code>s are lazy; only
+the resolved platform is fetched.</p>
+<p>The release is the root module's <code>toolchain</code> tag, else the newest shipped
+in <code>//terraform/private:versions.bzl</code> (the three newest when the table was
+generated carry checksums). For any other release the extension fetches
+its <code>SHA256SUMS</code> once and records the checksums as facts in
 <code>MODULE.bazel.lock</code>.</p>
 <pre><code class="language-python"># Nothing to do beyond `bazel_dep` to use the newest shipped release.
 bazel_dep(name = "rules_terraform", version = "...")
 
 # To use another release:
 terraform = use_extension("@rules_terraform//terraform:extensions.bzl", "terraform")
-terraform.toolchain(version = "1.9.8", default = True)
+terraform.toolchain(version = "1.9.8")
 </code></pre>
 <p><code>terraform.toolchain</code></p>
 <div class="table-wrapper"><table><thead><tr><th>Attribute</th><th>Type</th><th>Description</th></tr></thead><tbody>
-<tr><td><code>version</code></td><td><code>string</code> (required)</td><td>The release, e.g. <code>1.9.8</code>. Shipped releases need no tag.</td></tr>
-<tr><td><code>default</code></td><td><code>bool</code> (default <code>False</code>)</td><td>Use this release when <a href="terraform/./settings.html"><code>//terraform/settings:version</code></a> is empty. Root module only; at most one tag may set it.</td></tr>
+<tr><td><code>version</code></td><td><code>string</code> (required)</td><td>The release, e.g. <code>1.9.8</code>.</td></tr>
 </tbody></table>
 </div>
-<p>The hub declares a <code>config_setting</code> per known release, so the flag can
-select any of them: <code>--@rules_terraform//terraform/settings:version=1.9.8</code>.</p>
+<p>Root module only, at most one tag; tags in dependencies are ignored. A
+build has one engine release, and changing it is editing the tag.</p>
 <h2 id="terraformdeps"><a class="header" href="#terraformdeps"><code>terraform.deps</code></a></h2>
 <p>The <code>deps</code> tag class: the providers a lock file pins and the
 registry and git modules some directories' <code>module</code> blocks name, as one
@@ -1266,29 +1263,7 @@ duplicate is reported at evaluation time.</p>
 <tr><td><code>root</code></td><td><code>label</code></td><td>Shorthand for a one-element <code>roots</code>.</td></tr>
 <tr><td><code>registry</code></td><td><code>string</code> (default empty)</td><td>Registry host to query for lock entries and sources that name none. Empty means <code>registry.terraform.io</code> from this extension, <code>registry.opentofu.org</code> from the OpenTofu one.</td></tr>
 </tbody></table>
-</div><div style="break-before: page; page-break-before: always;"></div><!-- Generated with Stardoc: http://skydoc.bazel.build -->
-<p>Public build settings for <code>//terraform</code>.</p>
-<p>Each exported function is named after a build setting in this package and
-its docstring describes what the setting does. The function body returns
-the setting's label so callers can reference it programmatically.</p>
-<p><a id="version"></a></p>
-<h2 id="version"><a class="header" href="#version">version</a></h2>
-<p>Picks which Terraform release the auto-registered toolchains resolve to.</p>
-<p>The <code>terraform</code> extension declares one toolchain per (version, platform)
-for the releases shipped in <code>//terraform/private:versions.bzl</code> — the
-newest three when the table was generated — and for any release a
-<code>terraform.toolchain(version = "…")</code> tag asks for. For a tagged release the
-extension fetches the release's <code>SHA256SUMS</code> once and records the
-checksums as facts in <code>MODULE.bazel.lock</code>, so an older pin costs no
-change to rules_terraform and no network on later evaluations.</p>
-<p>Empty, the default, selects the extension's default: the release the
-root module marked <code>toolchain(…, default = True)</code>, else the newest
-shipped one. Any other value names one of the known releases. Set it
-globally in <code>.bazelrc</code>, per invocation via
-<code>--@rules_terraform//terraform/settings:version=1.9.8</code>, or per target
-with a Starlark configuration transition. The corresponding archive is
-fetched lazily on first use.</p>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="opentofu-rules"><a class="header" href="#opentofu-rules">OpenTofu Rules</a></h1>
+</div><div style="break-before: page; page-break-before: always;"></div><h1 id="opentofu-rules"><a class="header" href="#opentofu-rules">OpenTofu Rules</a></h1>
 <p>Everything under <code>//tofu</code> mirrors <code>//terraform</code> but binds to
 <code>//tofu:toolchain_type</code>. Rule bodies are identical — only the
 resolved toolchain differs — so behavior stays in lockstep between the
@@ -1607,20 +1582,19 @@ tofu_validate_aspect()
 same two tag classes as the <code>terraform</code> extension.</p>
 <h2 id="tofutoolchain"><a class="header" href="#tofutoolchain"><code>tofu.toolchain</code></a></h2>
 <p>The extension always materializes <code>@tofu_toolchains</code>, a hub declaring a
-toolchain for every OpenTofu release shipped in <code>//tofu/private:versions.bzl</code>
-and any a <code>toolchain</code> tag requests, each guarded by a <code>config_setting</code> on
-<a href="tofu/./settings.html"><code>//tofu/settings:version</code></a> that the hub itself declares, and
-<code>@tofu</code>, the CLI hub. rules_terraform's own <code>MODULE.bazel</code> registers the
+toolchain per platform for one OpenTofu release, the root module's
+<code>toolchain</code> tag or else the newest shipped in <code>//tofu/private:versions.bzl</code>,
+and <code>@tofu</code>, the CLI hub. rules_terraform's own <code>MODULE.bazel</code> registers the
 hub so downstream users get toolchain resolution for free.</p>
 <pre><code class="language-python"># Nothing to do beyond `bazel_dep` to use the newest shipped release.
 bazel_dep(name = "rules_terraform", version = "...")
 
 # To use another release:
 tofu = use_extension("@rules_terraform//tofu:extensions.bzl", "tofu")
-tofu.toolchain(version = "1.9.1", default = True)
+tofu.toolchain(version = "1.9.1")
 </code></pre>
-<p><code>tofu.toolchain</code> takes the same <code>version</code> and <code>default</code> attributes as the
-Terraform extension's tag; see
+<p><code>tofu.toolchain</code> takes the same <code>version</code> attribute as the Terraform
+extension's tag, with the same root-only rule; see
 <a href="tofu/../terraform/extensions.html">the Terraform page</a>. For a tagged release the
 extension fetches that release's <code>SHA256SUMS</code> once and records the
 checksums as facts in <code>MODULE.bazel.lock</code>.</p>
@@ -1647,28 +1621,6 @@ resolved against it. Write the lock with the module's
 <p>Each extension pools its own archives. A repository using both engines
 against the same dependencies should declare them through one extension
 rather than both, or the same archive is fetched twice.</p>
-<div style="break-before: page; page-break-before: always;"></div><!-- Generated with Stardoc: http://skydoc.bazel.build -->
-<p>Public build settings for <code>//tofu</code>.</p>
-<p>Each exported function is named after a build setting in this package and
-its docstring describes what the setting does. The function body returns
-the setting's label so callers can reference it programmatically.</p>
-<p><a id="version"></a></p>
-<h2 id="version-1"><a class="header" href="#version-1">version</a></h2>
-<p>Picks which OpenTofu release the auto-registered toolchains resolve to.</p>
-<p>The <code>tofu</code> extension declares one toolchain per (version, platform)
-for the releases shipped in <code>//tofu/private:versions.bzl</code> — the
-newest three when the table was generated — and for any release a
-<code>tofu.toolchain(version = "…")</code> tag asks for. For a tagged release the
-extension fetches the release's <code>SHA256SUMS</code> once and records the
-checksums as facts in <code>MODULE.bazel.lock</code>, so an older pin costs no
-change to rules_terraform and no network on later evaluations.</p>
-<p>Empty, the default, selects the extension's default: the release the
-root module marked <code>toolchain(…, default = True)</code>, else the newest
-shipped one. Any other value names one of the known releases. Set it
-globally in <code>.bazelrc</code>, per invocation via
-<code>--@rules_terraform//tofu/settings:version=1.9.1</code>, or per target
-with a Starlark configuration transition. The corresponding archive is
-fetched lazily on first use.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="gazelle"><a class="header" href="#gazelle">Gazelle</a></h1>
 <p>rules_terraform ships a <a href="https://github.com/bazel-contrib/bazel-gazelle">Gazelle</a>
 language per engine. It writes the BUILD files the rules need from the

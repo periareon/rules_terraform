@@ -160,30 +160,30 @@
 with two tag classes.</p>
 <h2 id="terraformtoolchain"><a class="header" href="#terraformtoolchain"><code>terraform.toolchain</code></a></h2>
 <p>The extension always materializes one hub repo (<code>@terraform_toolchains</code>)
-that declares a toolchain per (version, platform) for the releases shipped in
-<code>//terraform/private:versions.bzl</code> — the three newest when the table was
-generated — and <code>@terraform</code>, the CLI hub. rules_terraform's own
-<code>MODULE.bazel</code> <code>use_repo</code>s the toolchain hub and <code>register_toolchains</code>s it,
-so downstream users get toolchain resolution for free. Per-(version,
-platform) <code>http_archive</code>s are lazy; only the selected combination is fetched.</p>
-<p>A <code>toolchain</code> tag adds any other release. The extension fetches that
-release's <code>SHA256SUMS</code> once and records the checksums as facts in
+that declares a toolchain per platform for one Terraform release, and
+<code>@terraform</code>, the CLI hub. rules_terraform's own <code>MODULE.bazel</code> <code>use_repo</code>s
+the toolchain hub and <code>register_toolchains</code>s it, so downstream users get
+toolchain resolution for free. Per-platform <code>http_archive</code>s are lazy; only
+the resolved platform is fetched.</p>
+<p>The release is the root module's <code>toolchain</code> tag, else the newest shipped
+in <code>//terraform/private:versions.bzl</code> (the three newest when the table was
+generated carry checksums). For any other release the extension fetches
+its <code>SHA256SUMS</code> once and records the checksums as facts in
 <code>MODULE.bazel.lock</code>.</p>
 <pre><code class="language-python"># Nothing to do beyond `bazel_dep` to use the newest shipped release.
 bazel_dep(name = "rules_terraform", version = "...")
 
 # To use another release:
 terraform = use_extension("@rules_terraform//terraform:extensions.bzl", "terraform")
-terraform.toolchain(version = "1.9.8", default = True)
+terraform.toolchain(version = "1.9.8")
 </code></pre>
 <p><code>terraform.toolchain</code></p>
 <div class="table-wrapper"><table><thead><tr><th>Attribute</th><th>Type</th><th>Description</th></tr></thead><tbody>
-<tr><td><code>version</code></td><td><code>string</code> (required)</td><td>The release, e.g. <code>1.9.8</code>. Shipped releases need no tag.</td></tr>
-<tr><td><code>default</code></td><td><code>bool</code> (default <code>False</code>)</td><td>Use this release when <a href="./settings.html"><code>//terraform/settings:version</code></a> is empty. Root module only; at most one tag may set it.</td></tr>
+<tr><td><code>version</code></td><td><code>string</code> (required)</td><td>The release, e.g. <code>1.9.8</code>.</td></tr>
 </tbody></table>
 </div>
-<p>The hub declares a <code>config_setting</code> per known release, so the flag can
-select any of them: <code>--@rules_terraform//terraform/settings:version=1.9.8</code>.</p>
+<p>Root module only, at most one tag; tags in dependencies are ignored. A
+build has one engine release, and changing it is editing the tag.</p>
 <h2 id="terraformdeps"><a class="header" href="#terraformdeps"><code>terraform.deps</code></a></h2>
 <p>The <code>deps</code> tag class: the providers a lock file pins and the
 registry and git modules some directories' <code>module</code> blocks name, as one
@@ -235,7 +235,7 @@ duplicate is reported at evaluation time.</p>
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
-                            <a rel="next prefetch" href="../terraform/settings.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../tofu_rules.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <i class="fa fa-angle-right"></i>
                             </a>
 
@@ -249,7 +249,7 @@ duplicate is reported at evaluation time.</p>
                         <i class="fa fa-angle-left"></i>
                     </a>
 
-                    <a rel="next prefetch" href="../terraform/settings.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../tofu_rules.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <i class="fa fa-angle-right"></i>
                     </a>
             </nav>

@@ -160,20 +160,19 @@
 same two tag classes as the <code>terraform</code> extension.</p>
 <h2 id="tofutoolchain"><a class="header" href="#tofutoolchain"><code>tofu.toolchain</code></a></h2>
 <p>The extension always materializes <code>@tofu_toolchains</code>, a hub declaring a
-toolchain for every OpenTofu release shipped in <code>//tofu/private:versions.bzl</code>
-and any a <code>toolchain</code> tag requests, each guarded by a <code>config_setting</code> on
-<a href="./settings.html"><code>//tofu/settings:version</code></a> that the hub itself declares, and
-<code>@tofu</code>, the CLI hub. rules_terraform's own <code>MODULE.bazel</code> registers the
+toolchain per platform for one OpenTofu release, the root module's
+<code>toolchain</code> tag or else the newest shipped in <code>//tofu/private:versions.bzl</code>,
+and <code>@tofu</code>, the CLI hub. rules_terraform's own <code>MODULE.bazel</code> registers the
 hub so downstream users get toolchain resolution for free.</p>
 <pre><code class="language-python"># Nothing to do beyond `bazel_dep` to use the newest shipped release.
 bazel_dep(name = "rules_terraform", version = "...")
 
 # To use another release:
 tofu = use_extension("@rules_terraform//tofu:extensions.bzl", "tofu")
-tofu.toolchain(version = "1.9.1", default = True)
+tofu.toolchain(version = "1.9.1")
 </code></pre>
-<p><code>tofu.toolchain</code> takes the same <code>version</code> and <code>default</code> attributes as the
-Terraform extension's tag; see
+<p><code>tofu.toolchain</code> takes the same <code>version</code> attribute as the Terraform
+extension's tag, with the same root-only rule; see
 <a href="../terraform/extensions.html">the Terraform page</a>. For a tagged release the
 extension fetches that release's <code>SHA256SUMS</code> once and records the
 checksums as facts in <code>MODULE.bazel.lock</code>.</p>
@@ -209,7 +208,7 @@ rather than both, or the same archive is fetched twice.</p>
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
-                            <a rel="next prefetch" href="../tofu/settings.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../gazelle.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <i class="fa fa-angle-right"></i>
                             </a>
 
@@ -223,7 +222,7 @@ rather than both, or the same archive is fetched twice.</p>
                         <i class="fa fa-angle-left"></i>
                     </a>
 
-                    <a rel="next prefetch" href="../tofu/settings.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../gazelle.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <i class="fa fa-angle-right"></i>
                     </a>
             </nav>
