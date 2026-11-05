@@ -11,10 +11,10 @@ bazel_dep(name = "rules_go", version = "0.59.0")
 bazel_dep(name = "gazelle", version = "0.43.0")
 bazel_dep(name = "bazel_lib", version = "3.1.0")
 
-# One extension per engine. Without tags each materializes its toolchain hub,
-# declaring one toolchain per (version, platform) for the releases shipped in
-# `//<engine>/private:versions.bzl`, and the `@<engine>` CLI hub.
-# `//<engine>/settings:version` picks a release; empty means the default.
+# One extension per engine. Each materializes its toolchain hub, declaring
+# one toolchain per platform for the release the root module's `toolchain`
+# tag names, else the newest shipped in `//<engine>/private:versions.bzl`,
+# and the `@<engine>` CLI hub. No tag here: the tests run on the newest.
 terraform = use_extension("//terraform:extensions.bzl", "terraform")
 use_repo(terraform, "terraform", "terraform_toolchains")
 
@@ -25,17 +25,12 @@ use_repo(tofu, "tofu", "tofu_toolchains")
 
 register_toolchains("@tofu_toolchains//:all")
 
-# Dev-only usages: nothing below reaches a downstream consumer.
-#
-# Releases outside the shipped table, requested the way a downstream user
-# would. They exercise the SHA256SUMS-to-facts path (see the `terraform@…`
-# and `tofu@…` entries in MODULE.bazel.lock) and are selectable with the
-# version flag, but neither is the default.
+# Dev-only usages: nothing below reaches a downstream consumer. A release
+# outside the shipped table, and with it the SHA256SUMS-to-facts path, is
+# exercised by `examples/terraform` and `examples/tofu`, which pin one.
 terraform_dev = use_extension("//terraform:extensions.bzl", "terraform", dev_dependency = True)
-terraform_dev.toolchain(version = "1.12.2")
 
 tofu_dev = use_extension("//tofu:extensions.bzl", "tofu", dev_dependency = True)
-tofu_dev.toolchain(version = "1.9.1")
 
 # Dependencies for the in-repo test fixtures. One `deps` tag per hub: `lock`
 # brings the providers a lock pins, `roots` brings the registry modules some

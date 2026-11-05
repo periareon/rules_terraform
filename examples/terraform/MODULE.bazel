@@ -19,18 +19,16 @@ local_path_override(
 )
 
 # Toolchains for both terraform and tofu are auto-registered by
-# rules_terraform's own MODULE.bazel. Pick a Terraform release with:
-#
-#   terraform = use_extension("@rules_terraform//terraform:extensions.bzl", "terraform")
-#   terraform.toolchain(version = "1.9.8", default = True)
-#
-# or select among the known releases per invocation with
-#   --@rules_terraform//terraform/settings:version=1.9.8
+# rules_terraform's own MODULE.bazel. Without a `toolchain` tag the build
+# uses the newest release rules_terraform ships. This pins one instead, the
+# way a project would; a release outside the shipped table costs one fetch
+# of its SHA256SUMS, recorded as a fact in MODULE.bazel.lock.
 #
 # The `terraform` extension fetches every provider named in the checked-in
 # `.terraform.lock.hcl`. Providers land in an external repo — you reference
 # them from `terraform_module.deps` as `@example_providers//<namespace>_<name>`.
 terraform = use_extension("@rules_terraform//terraform:extensions.bzl", "terraform")
+terraform.toolchain(version = "1.16.6")
 terraform.deps(
     name = "app",
     lock = "//:.terraform.lock.hcl",

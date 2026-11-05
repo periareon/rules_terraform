@@ -6,15 +6,16 @@ with two tag classes.
 ## `terraform.toolchain`
 
 The extension always materializes one hub repo (`@terraform_toolchains`)
-that declares a toolchain per (version, platform) for the releases shipped in
-`//terraform/private:versions.bzl` — the three newest when the table was
-generated — and `@terraform`, the CLI hub. rules_terraform's own
-`MODULE.bazel` `use_repo`s the toolchain hub and `register_toolchains`s it,
-so downstream users get toolchain resolution for free. Per-(version,
-platform) `http_archive`s are lazy; only the selected combination is fetched.
+that declares a toolchain per platform for one Terraform release, and
+`@terraform`, the CLI hub. rules_terraform's own `MODULE.bazel` `use_repo`s
+the toolchain hub and `register_toolchains`s it, so downstream users get
+toolchain resolution for free. Per-platform `http_archive`s are lazy; only
+the resolved platform is fetched.
 
-A `toolchain` tag adds any other release. The extension fetches that
-release's `SHA256SUMS` once and records the checksums as facts in
+The release is the root module's `toolchain` tag, else the newest shipped
+in `//terraform/private:versions.bzl` (the three newest when the table was
+generated carry checksums). For any other release the extension fetches
+its `SHA256SUMS` once and records the checksums as facts in
 `MODULE.bazel.lock`.
 
 ```python
@@ -23,18 +24,17 @@ bazel_dep(name = "rules_terraform", version = "...")
 
 # To use another release:
 terraform = use_extension("@rules_terraform//terraform:extensions.bzl", "terraform")
-terraform.toolchain(version = "1.9.8", default = True)
+terraform.toolchain(version = "1.9.8")
 ```
 
 `terraform.toolchain`
 
 | Attribute | Type | Description |
 |---|---|---|
-| `version` | `string` (required) | The release, e.g. `1.9.8`. Shipped releases need no tag. |
-| `default` | `bool` (default `False`) | Use this release when [`//terraform/settings:version`](./settings.md) is empty. Root module only; at most one tag may set it. |
+| `version` | `string` (required) | The release, e.g. `1.9.8`. |
 
-The hub declares a `config_setting` per known release, so the flag can
-select any of them: `--@rules_terraform//terraform/settings:version=1.9.8`.
+Root module only, at most one tag; tags in dependencies are ignored. A
+build has one engine release, and changing it is editing the tag.
 
 ## `terraform.deps`
 

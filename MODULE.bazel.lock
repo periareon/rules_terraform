@@ -601,21 +601,6 @@
       },
       "resolve:registry.terraform.io/cloudposse/label/null@~> 0.24": {
         "version": "0.25.0"
-      },
-      "terraform@1.12.2": {
-        "darwin_amd64": "c65aa74bed1dbb1c48ba4bbab11f08e7f7eeb54a422146561490275340468f19",
-        "darwin_arm64": "1ca02f336ff4f993d6441806d38a0bcc0bbca0e3c877b84c9c2dc80cfcd0dc8b",
-        "freebsd_386": "1775139ffda321f730f91c0ce2bb2364c8eafe32c0d3950788086302d49d3005",
-        "freebsd_amd64": "4a72a9770e971ad0fead17221b9488f4552d1a58a860b2a6b2c66ca15376b40e",
-        "freebsd_arm": "3ec3d8028b4e2977853cbf8f3119e2bbebb14c5bfa3542d90f0d32cac1b0df7d",
-        "linux_386": "73b380f262324985e911323ecc446066343ffe78add6570a122b7444b04b120b",
-        "linux_amd64": "1eaed12ca41fcfe094da3d76a7e9aa0639ad3409c43be0103ee9f5a1ff4b7437",
-        "linux_arm": "4d5d39d57755a45b7bb6c6ad7301ac3c301eba44b647e2d0ca79c117cb817259",
-        "linux_arm64": "f8a0347dc5e68e6d60a9fa2db361762e7943ed084a773f28a981d988ceb6fdc9",
-        "openbsd_386": "f92bbb5c7f2141d5b28a69d16770fd8b6afff5ff1b8ab0cfaab32e833b793b41",
-        "openbsd_amd64": "7dc9bbfcf814386f3d680dc86d5f99eca78d2560863c0be219f9627c863ee903",
-        "windows_386": "5503656530278ff63741fd74609e847e181969ee96dd76fb722e11da40e19063",
-        "windows_amd64": "0a1565ace9da37c2778868c2e97452d8fc25e40e530bafbbab97231e69b0a201"
       }
     },
     "//tofu:extensions.bzl%tofu": {
@@ -624,21 +609,6 @@
         "integrity": "sha256-sI4Uk4ZMbtx07nkBRF1QHEPYi81dOIIwPrOAkgZQJ3c=",
         "strip_prefix": "terraform-null-label-488ab91e34a24a86957e397d9f7262ec5925586a",
         "url": "https://github.com/cloudposse/terraform-null-label/archive/488ab91e34a24a86957e397d9f7262ec5925586a.tar.gz"
-      },
-      "tofu@1.9.1": {
-        "darwin_amd64": "c31fb27137cfee7d965e347e3270e932efac08a2acbbc5d36fdaf1b50f404522",
-        "darwin_arm64": "4245801ef0a6b8edb79df1fb7eaabf65eae9b5be6796330c7bf71647b75568cc",
-        "freebsd_386": "49f63161ffc4b006b0c6a34c00a884a1f55cf0fcadb657b641b4039d94dffb0f",
-        "freebsd_amd64": "dbb86da69a01398cca6cbc3ee036411d3233aa9a6f5c79ad3ce8a25a64d4e1fd",
-        "freebsd_arm": "b44bafd25968d221d4f231180b3c08b3192716b3388d1473636241eec4897bb7",
-        "linux_386": "391ce077caa513d8c0bc6cffc05a6e7fcb1c3ede00981128a76f20f797cbec6c",
-        "linux_amd64": "19eda43eaa45bef3e21d87c58f31a6df73e8534ea30e78619a463bdfdb889cd2",
-        "linux_arm": "f6ca41f1f48fc9539b4f1431e419248992b6a772fbca5d4071544f6cc2037835",
-        "linux_arm64": "733f41baef5923178385c1fc441140988aa98ba41e7669def97e3418347b4ed6",
-        "openbsd_386": "a726b9d0ce9ca135d281932f600434db29ea9d6e90b464b31d2a6d1cf914c76b",
-        "openbsd_amd64": "a1dd5efa9b0afa7ac6f71a29049a2415660af57ab46c3db6ea2124e94ac5aad0",
-        "windows_386": "4fb83b23de21eff40291723e8ac53ec75d907a065c9e66fafef2ef7b5598d03f",
-        "windows_amd64": "8b384e1724c098bbd6e3329d3121ffd5f3a24c5daab483168b1308f50d2a2279"
       }
     },
     "@@rules_go+//go:extensions.bzl%go_sdk": {

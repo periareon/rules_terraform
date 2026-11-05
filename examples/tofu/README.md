@@ -43,8 +43,8 @@ examples/tofu/
   `tofu_test`, `tofu_validate_test`, and `tofu_fmt_test`
   require `//tofu:toolchain_type`. Bazel resolves the `tofu` binary
   fetched by the `tofu` extension's toolchain hub.
-- **Version flag is `//tofu/settings:version`.** Independent of
-  Terraform's version flag, so a monorepo can pin different versions per
+- **Its own release.** `tofu.toolchain(version = …)` pins OpenTofu
+  independently of Terraform's tag, so a monorepo can pin a release per
   engine.
 - **OpenTofu registry.** `tofu.deps(...)` defaults to
   `registry.opentofu.org`; it is the `terraform` extension's tag class with
@@ -56,18 +56,14 @@ examples/tofu/
 
 ## Pinning the OpenTofu version
 
-```
-bazel build //... --@rules_terraform//tofu/settings:version=1.9.1
-```
+A build has one OpenTofu release: the root module's `toolchain` tag, else
+the newest baked into `@rules_terraform//tofu/private:versions.bzl`. This
+example pins one in `MODULE.bazel`:
 
-or in `.bazelrc`:
-
+```python
+tofu = use_extension("@rules_terraform//tofu:extensions.bzl", "tofu")
+tofu.toolchain(version = "1.13.1")
 ```
-build --@rules_terraform//tofu/settings:version=1.9.1
-```
-
-Defaults to the newest release baked into
-`@rules_terraform//tofu/private:versions.bzl`.
 
 ## Consuming rules_terraform from a real project
 

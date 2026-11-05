@@ -1,4 +1,3 @@
-load("@bazel_skylib//:bzl_library.bzl", "bzl_library")
 load("@rules_rust_mdbook//:defs.bzl", "mdbook", "mdbook_server")
 load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
 load("@stardoc//stardoc:stardoc.bzl", "stardoc")
@@ -58,39 +57,6 @@ _TOFU_RULE_DOCS = [
     for name in _TOFU_RULE_DOCS
 ]
 
-# Settings pages: render each engine's `settings.bzl` using a custom
-# per-function template that treats each function as documentation for
-# the same-named build setting.
-bzl_library(
-    name = "terraform_settings_bzl",
-    srcs = ["//terraform/settings:settings.bzl"],
-    deps = ["//terraform/private:bzl_lib"],
-)
-
-bzl_library(
-    name = "tofu_settings_bzl",
-    srcs = ["//tofu/settings:settings.bzl"],
-    deps = ["//tofu/private:bzl_lib"],
-)
-
-stardoc(
-    name = "terraform_settings",
-    out = "src/terraform/settings.md",
-    func_template = "templates/settings_func.vm",
-    input = "//terraform/settings:settings.bzl",
-    tags = ["manual"],
-    deps = [":terraform_settings_bzl"],
-)
-
-stardoc(
-    name = "tofu_settings",
-    out = "src/tofu/settings.md",
-    func_template = "templates/settings_func.vm",
-    input = "//tofu/settings:settings.bzl",
-    tags = ["manual"],
-    deps = [":tofu_settings_bzl"],
-)
-
 mdbook(
     name = "book",
     srcs = glob(["src/**/*.md"]) + [
@@ -99,9 +65,6 @@ mdbook(
     ] + [
         ":tofu_{}".format(name)
         for name in _TOFU_RULE_DOCS
-    ] + [
-        ":terraform_settings",
-        ":tofu_settings",
     ],
     book = "book.toml",
     target_compatible_with = select({

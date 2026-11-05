@@ -19,13 +19,10 @@ local_path_override(
 )
 
 # Toolchains for both terraform and tofu are auto-registered by
-# rules_terraform's own MODULE.bazel. Pick an OpenTofu release with:
-#
-#   tofu = use_extension("@rules_terraform//tofu:extensions.bzl", "tofu")
-#   tofu.toolchain(version = "1.9.1", default = True)
-#
-# or select among the known releases per invocation with
-#   --@rules_terraform//tofu/settings:version=1.9.1
+# rules_terraform's own MODULE.bazel. Without a `toolchain` tag the build
+# uses the newest release rules_terraform ships. This pins one instead, the
+# way a project would; a release outside the shipped table costs one fetch
+# of its SHA256SUMS, recorded as a fact in MODULE.bazel.lock.
 #
 # Providers and registry modules come through the `tofu` extension, which is
 # the `terraform` extension with `registry.opentofu.org` as its default. That
@@ -34,6 +31,7 @@ local_path_override(
 # file has to be written by `tofu` (`bazel run //:providers_lock.update`) and
 # resolved against the same registry.
 tofu = use_extension("@rules_terraform//tofu:extensions.bzl", "tofu")
+tofu.toolchain(version = "1.13.1")
 
 # One tag, both halves: the providers the lock pins and the registry module
 # `main.tf` names. `@app` carries all of it.

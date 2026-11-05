@@ -6,10 +6,9 @@ same two tag classes as the `terraform` extension.
 ## `tofu.toolchain`
 
 The extension always materializes `@tofu_toolchains`, a hub declaring a
-toolchain for every OpenTofu release shipped in `//tofu/private:versions.bzl`
-and any a `toolchain` tag requests, each guarded by a `config_setting` on
-[`//tofu/settings:version`](./settings.md) that the hub itself declares, and
-`@tofu`, the CLI hub. rules_terraform's own `MODULE.bazel` registers the
+toolchain per platform for one OpenTofu release, the root module's
+`toolchain` tag or else the newest shipped in `//tofu/private:versions.bzl`,
+and `@tofu`, the CLI hub. rules_terraform's own `MODULE.bazel` registers the
 hub so downstream users get toolchain resolution for free.
 
 ```python
@@ -18,11 +17,11 @@ bazel_dep(name = "rules_terraform", version = "...")
 
 # To use another release:
 tofu = use_extension("@rules_terraform//tofu:extensions.bzl", "tofu")
-tofu.toolchain(version = "1.9.1", default = True)
+tofu.toolchain(version = "1.9.1")
 ```
 
-`tofu.toolchain` takes the same `version` and `default` attributes as the
-Terraform extension's tag; see
+`tofu.toolchain` takes the same `version` attribute as the Terraform
+extension's tag, with the same root-only rule; see
 [the Terraform page](../terraform/extensions.md). For a tagged release the
 extension fetches that release's `SHA256SUMS` once and records the
 checksums as facts in `MODULE.bazel.lock`.

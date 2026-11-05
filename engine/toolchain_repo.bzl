@@ -77,23 +77,11 @@ def terraform_toolchain_repository(*, name, version, platform, url, integrity, s
 
     return name
 
-# One per version the hub knows, matching the engine's `version` flag. The
-# default version gets a second `toolchain()` matching the flag's empty
-# default, since a `toolchain()` cannot say "this setting or that one".
-_CONFIG_SETTING_TEMPLATE = """
-config_setting(
-    name = "{name}",
-    flag_values = {{"{flag}": "{value}"}},
-    visibility = ["//visibility:public"],
-)
-"""
-
 _BUILD_FILE_FOR_TOOLCHAIN_HUB_TEMPLATE = """
 toolchain(
     name = "{name}",
     exec_compatible_with = {exec_constraint_sets_serialized},
     target_compatible_with = {target_constraint_sets_serialized},
-    target_settings = {target_settings_serialized},
     toolchain = "{toolchain}",
     toolchain_type = "{toolchain_type}",
     visibility = ["//visibility:public"],
@@ -105,42 +93,17 @@ def _BUILD_for_toolchain_hub(
         toolchain_labels,
         target_compatible_with,
         exec_compatible_with,
-        target_settings,
-        toolchain_type,
-        version_flag,
-        versions,
-        default_version):
-    parts = []
-    for version in versions:
-        parts.append(_CONFIG_SETTING_TEMPLATE.format(
-            name = "version_" + version.replace(".", "_"),
-            flag = version_flag,
-            value = version,
-        ))
-    if default_version:
-        parts.append(_CONFIG_SETTING_TEMPLATE.format(name = "version_default", flag = version_flag, value = ""))
-
-    default_setting = ":version_" + default_version.replace(".", "_") if default_version else None
-    for toolchain_name in toolchain_names:
-        settings = target_settings.get(toolchain_name, [])
-        parts.append(_BUILD_FILE_FOR_TOOLCHAIN_HUB_TEMPLATE.format(
+        toolchain_type):
+    return "\n".join([
+        _BUILD_FILE_FOR_TOOLCHAIN_HUB_TEMPLATE.format(
             name = toolchain_name,
             exec_constraint_sets_serialized = json.encode(exec_compatible_with[toolchain_name]),
             target_constraint_sets_serialized = json.encode(target_compatible_with.get(toolchain_name, [])),
-            target_settings_serialized = json.encode(settings),
             toolchain = toolchain_labels[toolchain_name],
             toolchain_type = toolchain_type,
-        ))
-        if default_setting and default_setting in settings:
-            parts.append(_BUILD_FILE_FOR_TOOLCHAIN_HUB_TEMPLATE.format(
-                name = toolchain_name + "_default",
-                exec_constraint_sets_serialized = json.encode(exec_compatible_with[toolchain_name]),
-                target_constraint_sets_serialized = json.encode(target_compatible_with.get(toolchain_name, [])),
-                target_settings_serialized = json.encode([":version_default"]),
-                toolchain = toolchain_labels[toolchain_name],
-                toolchain_type = toolchain_type,
-            ))
-    return "\n".join(parts)
+        )
+        for toolchain_name in toolchain_names
+    ])
 
 def _terraform_toolchain_repository_hub_impl(repository_ctx):
     repository_ctx.file("WORKSPACE.bazel", """workspace(name = "{}")""".format(
@@ -152,30 +115,21 @@ def _terraform_toolchain_repository_hub_impl(repository_ctx):
         toolchain_labels = repository_ctx.attr.toolchain_labels,
         target_compatible_with = repository_ctx.attr.target_compatible_with,
         exec_compatible_with = repository_ctx.attr.exec_compatible_with,
-        target_settings = repository_ctx.attr.target_settings,
         toolchain_type = repository_ctx.attr.toolchain_type,
-        version_flag = repository_ctx.attr.version_flag,
-        versions = repository_ctx.attr.versions,
-        default_version = repository_ctx.attr.default_version,
     ))
 
 terraform_toolchain_repository_hub = repository_rule(
     doc = (
         "Generates a toolchain-bearing repository that declares a set of toolchains from other " +
-        "repositories. Used for both Terraform and OpenTofu — the caller picks `toolchain_type`."
+        "repositories, one release across every platform. Used for both Terraform and " +
+        "OpenTofu — the caller picks `toolchain_type`."
     ),
     attrs = {
-        "default_version": attr.string(
-            doc = "Version whose toolchains also match the flag's empty default.",
-        ),
         "exec_compatible_with": attr.string_list_dict(
             mandatory = True,
         ),
         "target_compatible_with": attr.string_list_dict(
             mandatory = True,
-        ),
-        "target_settings": attr.string_list_dict(
-            doc = "config_setting labels attached to each toolchain via `target_settings`.",
         ),
         "toolchain_labels": attr.string_dict(
             mandatory = True,
@@ -186,12 +140,6 @@ terraform_toolchain_repository_hub = repository_rule(
         "toolchain_type": attr.string(
             doc = "Fully-qualified label of the toolchain_type to bind to.",
             mandatory = True,
-        ),
-        "version_flag": attr.string(
-            doc = "Label of the `string_flag` the generated `config_setting`s match.",
-        ),
-        "versions": attr.string_list(
-            doc = "Versions to generate a `version_<v>` config_setting for.",
         ),
     },
     implementation = _terraform_toolchain_repository_hub_impl,

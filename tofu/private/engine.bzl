@@ -8,7 +8,6 @@ visibility(["//tofu/..."])
 TOFU_ENGINE = engine_config(
     name = "tofu",
     toolchain_type = str(Label("//tofu:toolchain_type")),
-    version_flag = str(Label("//tofu/settings:version")),
     hub_bzl = str(Label("//tofu/private:hub.bzl")),
     cli_hub = "tofu",
     registry = "registry.opentofu.org",
