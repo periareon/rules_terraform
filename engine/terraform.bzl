@@ -430,6 +430,11 @@ def build_runner(ctx, toolchain_type, *, mode):
     }
     if test_mode and ctx.attr.workspace:
         args_data["workspace"] = ctx.attr.workspace
+    if not test_mode and not root_label.workspace_root:
+        # `init` under the binary installs into the checkout, at the root
+        # module's package under BUILD_WORKSPACE_DIRECTORY. A root in another
+        # repository has no such place, and the runner says so.
+        args_data["module_package"] = root_label.package
     if mode == "plan":
         args_data["plan"] = {
             "args": ctx.attr.plan_args,

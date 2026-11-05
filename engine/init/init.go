@@ -1,23 +1,20 @@
 package main
 
 import (
-	"crypto/sha256"
-	"encoding/base64"
 	"encoding/json"
 	"flag"
 	"fmt"
-	"io"
 	"os"
 	"path"
 	"path/filepath"
 	"regexp"
-	"sort"
 	"strings"
 
 	"rules_terraform/engine/internal/argsjson"
 	"rules_terraform/engine/internal/fsutil"
 	"rules_terraform/engine/internal/lockparse"
 	"rules_terraform/engine/internal/moduledir"
+	"rules_terraform/engine/internal/providerhash"
 	"rules_terraform/engine/internal/semver"
 	"rules_terraform/engine/internal/tfparse"
 )
@@ -561,56 +558,6 @@ func copyManifestEntry(installDir string, entry FileEntry) (string, error) {
 	return destPath, nil
 }
 
-// computeProviderH1Hash computes the h1: hash for a provider directory,
-// using the same algorithm as Terraform's getproviders.PackageHashV1.
-// Paths are normalized to forward slashes so hashes computed on Windows
-// and POSIX match — Terraform's canonical form uses `/`.
-func computeProviderH1Hash(providerDir string) (string, error) {
-	// Map of forward-slash relpath -> native filesystem path, so we can
-	// sort by canonical form but still open files portably.
-	type entry struct{ rel, full string }
-	var entries []entry
-
-	err := filepath.Walk(providerDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		if info.IsDir() {
-			return nil
-		}
-		rel, err := filepath.Rel(providerDir, path)
-		if err != nil {
-			return err
-		}
-		entries = append(entries, entry{rel: filepath.ToSlash(rel), full: path})
-		return nil
-	})
-	if err != nil {
-		return "", fmt.Errorf("failed to walk provider directory: %w", err)
-	}
-
-	sort.Slice(entries, func(i, j int) bool { return entries[i].rel < entries[j].rel })
-
-	h := sha256.New()
-	for _, e := range entries {
-		rel := e.rel
-		fullPath := e.full
-		f, err := os.Open(fullPath)
-		if err != nil {
-			return "", fmt.Errorf("failed to open %s: %w", fullPath, err)
-		}
-		fileHash := sha256.New()
-		if _, err := io.Copy(fileHash, f); err != nil {
-			f.Close()
-			return "", fmt.Errorf("failed to hash %s: %w", fullPath, err)
-		}
-		f.Close()
-		fmt.Fprintf(h, "%x  %s\n", fileHash.Sum(nil), rel)
-	}
-
-	return "h1:" + base64.StdEncoding.EncodeToString(h.Sum(nil)), nil
-}
-
 // rewriteLockFileHashes replaces h1: hashes in the lock file content with
 // hashes computed from the actual installed provider binaries.
 func rewriteLockFileHashes(lockContent []byte, moduleDir string, providers []ProviderInfo, providerHosts map[string]string) ([]byte, error) {
@@ -631,7 +578,7 @@ func rewriteLockFileHashes(lockContent []byte, moduleDir string, providers []Pro
 		providerDir := filepath.Join(moduledir.ProvidersDir(moduleDir), host,
 			namespace, name, provider.Version, provider.Platform)
 
-		hash, err := computeProviderH1Hash(providerDir)
+		hash, err := providerhash.H1(providerDir)
 		if err != nil {
 			return nil, fmt.Errorf("failed to compute h1 hash for %s: %w", provider.Source, err)
 		}

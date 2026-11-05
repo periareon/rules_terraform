@@ -1,3 +1,4 @@
+load("@rules_go//go:def.bzl", "go_test")
 load("//terraform:terraform_binary.bzl", "terraform_binary")
 load("//terraform:terraform_fmt_test.bzl", "terraform_fmt_test")
 load("//terraform:terraform_module.bzl", "terraform_module")
@@ -60,3 +61,34 @@ tofu_fmt_test(
     name = "with_provider_tofu_fmt_test",
     target = ":with_provider",
 )
+
+# `bazel run :terraform -- init` installs the built `.terraform/` into the
+# module's source directory. The test stands in a temp checkout for
+# BUILD_WORKSPACE_DIRECTORY and then plans there with the native engine.
+filegroup(
+    name = "init_in_place_srcs",
+    srcs = glob(["*.tf"]) + [".terraform.lock.hcl"],
+)
+
+[
+    go_test(
+        name = "init_in_place_{}_test".format(engine),
+        srcs = ["init_in_place_test.go"],
+        data = [
+            ":init_in_place_srcs",
+            ":" + engine,
+            toolchain,
+        ],
+        env = {
+            "ENGINE": engine,
+            "ENGINE_FILES": "$(rlocationpaths {})".format(toolchain),
+            "RUNNER": "$(rlocationpath :{})".format(engine),
+            "SRCS": "$(rlocationpaths :init_in_place_srcs)",
+        },
+        deps = ["@rules_go//go/runfiles"],
+    )
+    for engine, toolchain in [
+        ("terraform", "//terraform:current_terraform_toolchain"),
+        ("tofu", "//tofu:current_tofu_toolchain"),
+    ]
+]

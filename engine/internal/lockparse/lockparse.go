@@ -91,3 +91,52 @@ func ReadProviderLock(path string) ([]ProviderEntry, error) {
 
 	return out, nil
 }
+
+// AddH1Hash returns content with hash added to the `hashes` list of the
+// provider block for address (`<host>/<namespace>/<name>`), or content
+// unchanged when the hash is already recorded. The line goes in sorted
+// position among the block's `h1:` entries, which is where `terraform
+// providers lock` would put it, and everything else in the file is kept
+// byte for byte. The second result reports whether anything was added.
+func AddH1Hash(content []byte, address, hash string) ([]byte, bool, error) {
+	lines := strings.Split(string(content), "\n")
+	inBlock := false
+	inHashes := false
+	indent := "    "
+	for i, line := range lines {
+		if !inBlock {
+			if m := providerBlockRE.FindStringSubmatch(line); m != nil && m[1] == address {
+				inBlock = true
+			}
+			continue
+		}
+		trimmed := strings.TrimSpace(line)
+		if !inHashes {
+			if strings.HasPrefix(trimmed, "hashes") && strings.HasSuffix(trimmed, "[") {
+				inHashes = true
+			} else if trimmed == "}" {
+				return nil, false, fmt.Errorf("provider %q has no hashes list", address)
+			}
+			continue
+		}
+		if strings.Contains(line, "\""+hash+"\"") {
+			return content, false, nil
+		}
+		isH1 := strings.Contains(line, "\"h1:")
+		if isH1 {
+			indent = line[:len(line)-len(strings.TrimLeft(line, " \t"))]
+		}
+		// Insert before the first entry that sorts after it, before the
+		// first `zh:` entry, or before the closing bracket.
+		if (isH1 && strings.TrimSpace(line) > "\""+hash+"\",") || strings.Contains(line, "\"zh:") || strings.HasPrefix(trimmed, "]") {
+			if !isH1 && strings.HasPrefix(trimmed, "]") && indent == "    " {
+				indent = line[:len(line)-len(strings.TrimLeft(line, " \t"))] + "  "
+			}
+			out := append([]string{}, lines[:i]...)
+			out = append(out, indent+"\""+hash+"\",")
+			out = append(out, lines[i:]...)
+			return []byte(strings.Join(out, "\n")), true, nil
+		}
+	}
+	return nil, false, fmt.Errorf("provider %q not found in the lock file", address)
+}

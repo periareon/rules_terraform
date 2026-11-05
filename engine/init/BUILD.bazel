@@ -10,6 +10,7 @@ go_library(
         "//engine/internal/fsutil",
         "//engine/internal/lockparse",
         "//engine/internal/moduledir",
+        "//engine/internal/providerhash",
         "//engine/internal/semver",
         "//engine/internal/tfparse",
     ],

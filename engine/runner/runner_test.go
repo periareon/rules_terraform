@@ -246,3 +246,73 @@ func TestChangesWorkspaceSelection(t *testing.T) {
 		}
 	}
 }
+
+func TestIsInPlaceInit(t *testing.T) {
+	for _, tc := range []struct {
+		args []string
+		want bool
+	}{
+		{[]string{"init"}, true},
+		{[]string{"init", "-reconfigure", "-input=false"}, true},
+		{[]string{"-chdir=x", "init"}, true},
+		// A help request is the engine's to answer.
+		{[]string{"init", "-help"}, false},
+		{[]string{"init", "--help"}, false},
+		{[]string{"plan"}, false},
+		{[]string{"--help"}, false},
+		{nil, false},
+	} {
+		if got := isInPlaceInit(tc.args); got != tc.want {
+			t.Errorf("isInPlaceInit(%q) = %v, want %v", tc.args, got, tc.want)
+		}
+	}
+}
+
+func TestRejectedInitFlag(t *testing.T) {
+	for _, tc := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"init", "-upgrade"}, "-upgrade"},
+		{[]string{"init", "-upgrade=true"}, "-upgrade=true"},
+		{[]string{"init", "--get=false"}, "--get=false"},
+		{[]string{"init", "-plugin-dir=/x"}, "-plugin-dir=/x"},
+		{[]string{"init", "-from-module=./y"}, "-from-module=./y"},
+		{[]string{"-chdir=envs/dev", "init"}, "-chdir=envs/dev"},
+		// The first refused flag is the one named.
+		{[]string{"init", "-reconfigure", "-get=false", "-upgrade"}, "-get=false"},
+
+		// Backend flags, and `-lock` next to `-lockfile`, pass through.
+		{[]string{"init", "-reconfigure"}, ""},
+		{[]string{"init", "-migrate-state", "-force-copy"}, ""},
+		{[]string{"init", "-backend-config=bucket=x", "-input=false"}, ""},
+		{[]string{"init", "-lock=false", "-lock-timeout=5s"}, ""},
+		{[]string{"init", "-lockfile=readonly"}, ""},
+		{[]string{"init"}, ""},
+	} {
+		got, why := rejectedInitFlag(tc.args)
+		if got != tc.want {
+			t.Errorf("rejectedInitFlag(%q) = %q, want %q", tc.args, got, tc.want)
+		}
+		if (got != "") != (why != "") {
+			t.Errorf("rejectedInitFlag(%q): flag %q with reason %q", tc.args, got, why)
+		}
+	}
+}
+
+func TestLockfileReadonly(t *testing.T) {
+	for _, tc := range []struct {
+		args []string
+		want bool
+	}{
+		{[]string{"init", "-lockfile=readonly"}, true},
+		{[]string{"init", "--lockfile=readonly"}, true},
+		{[]string{"init", "-lockfile", "readonly"}, true},
+		{[]string{"init", "-lock=false"}, false},
+		{[]string{"init"}, false},
+	} {
+		if got := lockfileReadonly(tc.args); got != tc.want {
+			t.Errorf("lockfileReadonly(%q) = %v, want %v", tc.args, got, tc.want)
+		}
+	}
+}

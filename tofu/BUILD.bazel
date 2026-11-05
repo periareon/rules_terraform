@@ -1,5 +1,5 @@
 load("@bazel_skylib//:bzl_library.bzl", "bzl_library")
-load("//tofu/private:engine_rules.bzl", "tofu_formatter")
+load("//tofu/private:engine_rules.bzl", "current_tofu_toolchain", "tofu_formatter")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -24,6 +24,10 @@ exports_files([
 # side-by-side with Terraform and pick per-target which engine runs.
 toolchain_type(
     name = "toolchain_type",
+)
+
+current_tofu_toolchain(
+    name = "current_tofu_toolchain",
 )
 
 # `bazel run //tofu:format` rewrites every module's .tf files with `tofu fmt`.
