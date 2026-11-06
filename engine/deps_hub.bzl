@@ -118,6 +118,8 @@ def _terraform_deps_hub_impl(repository_ctx):
     for subpackage_name, content in subpackages.items():
         repository_ctx.file("{}/BUILD.bazel".format(subpackage_name), content)
 
+    return repository_ctx.repo_metadata(reproducible = True)
+
 terraform_deps_hub = repository_rule(
     doc = "The hub a `deps` tag produces: a dependency group over pooled provider and module archives, plus the lock.",
     attrs = {

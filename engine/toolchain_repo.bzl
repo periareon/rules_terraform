@@ -118,6 +118,8 @@ def _terraform_toolchain_repository_hub_impl(repository_ctx):
         toolchain_type = repository_ctx.attr.toolchain_type,
     ))
 
+    return repository_ctx.repo_metadata(reproducible = True)
+
 terraform_toolchain_repository_hub = repository_rule(
     doc = (
         "Generates a toolchain-bearing repository that declares a set of toolchains from other " +

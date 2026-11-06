@@ -80,6 +80,8 @@ def _cli_hub_impl(repository_ctx):
         name = repository_ctx.attr.target_name,
     ))
 
+    return repository_ctx.repo_metadata(reproducible = True)
+
 cli_hub = repository_rule(
     doc = "Materializes a one-target hub repository whose top-level target is the CLI wrapper.",
     implementation = _cli_hub_impl,
