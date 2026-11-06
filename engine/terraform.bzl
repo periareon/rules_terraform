@@ -222,26 +222,26 @@ def _terraform_provider_impl(ctx):
     ]
 
 terraform_provider = rule(
-    doc = "Defines a Terraform provider that can be used as a dependency in terraform_module targets.",
+    doc = """A provider built in this repository, for a `terraform_module`'s
+`deps`. Registry providers come from a `deps` tag's hub instead.""",
     implementation = _terraform_provider_impl,
     attrs = {
         "files": attr.label_list(
-            doc = "The provider binary files.",
+            doc = "The provider binary and any files shipped with it.",
             allow_files = True,
             mandatory = True,
         ),
         "platform": attr.string(
-            doc = """Platform string (e.g., 'linux_amd64', 'darwin_arm64').
-            Set by the generated repositories for registry providers. Leave it
-            empty for a provider built in this repo: it is then taken from the
-            target platform of the configuration the provider is built in.""",
+            doc = """The platform, as `linux_amd64`. Leave it empty for a provider
+            built here: it is taken from the configuration the provider is built
+            in.""",
         ),
         "source": attr.string(
-            doc = "Provider source (e.g., 'hashicorp/null').",
+            doc = "The provider address as `required_providers` writes it, e.g. `hashicorp/null`.",
             mandatory = True,
         ),
         "version": attr.string(
-            doc = "Provider version (e.g., '3.2.4').",
+            doc = "The provider version, e.g. `3.2.4`.",
             mandatory = True,
         ),
         "_platform_constraints": attr.label_list(
@@ -312,7 +312,7 @@ def make_module_rule(engine):
     """
     extensions = ", ".join(["`{}`".format(ext) for ext in engine.source_extensions])
     return rule(
-        doc = "Defines a {} module that can be used as a dependency in other Terraform targets.".format(engine.name),
+        doc = "One directory of {} configuration: a root module, or a child that another module's `module` block names.".format(engine.name),
         implementation = _terraform_module_impl,
         attrs = {
             "data": attr.label_list(
@@ -320,17 +320,14 @@ def make_module_rule(engine):
                 allow_files = True,
             ),
             "deps": attr.label_list(
-                doc = """Other module targets, a dependency hub (`@<name>` from a
-                `deps` tag, or its `//:providers` / `//:modules` halves), individual
-                `@<name>//<namespace>_<name>` providers, `terraform_provider`, or
-                `terraform_external_module` targets this module depends on.
-
-                A module dep is the Bazel half of a `module` block, the way a
-                `py_library` dep is the Bazel half of an `import`: the `.tf`
-                file names the path, `deps` says which target supplies it. A dep
-                whose package already nests under this module's directory lands at
-                that relative path; anything else is matched to a `module` block
-                whose `source` ends with the dep's package name.""",
+                doc = """What the configuration references: child `terraform_module`s
+                for its local `module` blocks, a dependency hub (`@<name>` from a
+                `deps` tag, or its `//:providers` / `//:modules` halves) or single
+                `@<name>//<namespace>_<name>` providers, and `terraform_provider`
+                or `terraform_external_module` targets. The `module` block names a
+                child's path; `deps` says which target supplies it. A child in a
+                package under this one lands at its relative path; any other is
+                matched to the block whose `source` ends with its package name.""",
                 providers = [
                     [TerraformInfo],
                     [TerraformProviderInfo],
@@ -339,36 +336,29 @@ def make_module_rule(engine):
                     [TerraformModuleGroupInfo],
                 ],
             ),
+            # True is the default because a run reads nothing a previous run
+            # left behind and writes nothing outside its temp copy; the one
+            # opt-in to persistence lives under bazel-out, never in the source
+            # tree, so state can neither leak into a `data` glob nor silently
+            # steer the next run. The runner implements both (engine/runner).
             "disposable_state": attr.bool(
                 default = True,
-                doc = """Whether this module's local state may go with the run, for a
-                module with no `backend` or `cloud` block.
-
-                `bazel run` executes the engine in a staged copy that is deleted
-                when the command finishes. True, the default, leaves the engine
-                to keep state where it natively would, its working directory, so
-                the state goes with the copy: right for demos, sandboxes and
-                anything `plan`-only. A run that did write state is kept and its
-                path printed, so nothing vanishes silently. False points the
-                engine's local backend at `terraform.tfstate` (and
-                `terraform.tfstate.d/` for workspaces) in a per-module directory
-                under `bazel-out/rules_terraform/`, where it outlives the run.
-                That directory is private to the machine and `bazel clean`
-                deletes it; state that must outlast that belongs in a backend.
-                An error when the module declares a backend, whose state is the
-                backend's.""",
+                doc = """Whether local state may go with the run, for a module with
+                no `backend` or `cloud` block. True, the default: the engine keeps
+                state in the run's temp directory, which is deleted afterwards; a
+                run that wrote state is kept and its path printed. False: state is
+                kept under `bazel-out/rules_terraform/` across runs, until
+                `bazel clean`. An error when the module declares a backend.""",
             ),
             "lock": attr.label(
-                doc = "An optional `.terraform.lock.hcl` file.",
+                doc = """The module's `.terraform.lock.hcl`. Not needed when `deps`
+                names a dependency hub, which carries its lock.""",
                 allow_single_file = [".terraform.lock.hcl"],
             ),
             "srcs": attr.label_list(
-                doc = """The configuration files that make up this module: {}.
-                Any other file is an error, since {} would not load it.
-
-                All of them must live directly in this target's package: a module
-                is a single directory. Put nested configuration files in their own
-                module target and reference it with a `module` block.""".format(extensions, engine.name),
+                doc = """The configuration files of this module: {}, all directly in
+                this target's package. A nested directory of configuration is its
+                own module target, named by a `module` block.""".format(extensions),
                 allow_files = engine.source_extensions,
             ),
         },
@@ -494,12 +484,10 @@ RUNNER_ATTRS = {
 
 WORKSPACE_ATTR = {
     "workspace": attr.string(
-        doc = """Run in this Terraform workspace: `TF_WORKSPACE` is set to it
-        for the engine, over anything in the test environment. Unset, the
-        workspace is whatever the environment selects (`--test_env`), else
-        `default`. One test target per workspace is how a root whose
-        configuration is keyed on `terraform.workspace` gets every
-        workspace checked.""",
+        doc = """Run in this Terraform workspace, over anything `--test_env`
+        sets. Unset, the environment's `TF_WORKSPACE` applies, else
+        `default`. One test per workspace is how a root keyed on
+        `terraform.workspace` gets each one checked.""",
     ),
 }
 
@@ -508,22 +496,16 @@ TEST_ATTRS = dict(RUNNER_ATTRS, **WORKSPACE_ATTR)
 PLAN_TEST_ATTRS = dict(TEST_ATTRS, **{
     "expect_no_changes": attr.bool(
         default = False,
-        doc = """Fail when the plan proposes any change. Off by default:
-        a plan that applies cleanly is the usual thing to check, and
-        whether it is empty depends on what has been applied.""",
+        doc = "Fail when the plan proposes any change.",
     ),
     "lock": attr.bool(
         default = False,
-        doc = """Take the backend's state lock while planning. Off by
-        default so a test cannot block on, or be blocked by, an operator's
-        apply; a plan does not write state.""",
+        doc = """Take the backend's state lock while planning. Off by default
+        so a test never blocks, or is blocked by, an operator's apply.""",
     ),
     "plan_args": attr.string_list(
-        doc = """Extra arguments for `plan`, after the ones the rule
-        sets (`-input=false`, `-detailed-exitcode`, `-out`, and
-        `-lock=false` unless `lock` is set). `-var` and `-target` go
-        here. Named `plan_args` because `args` is Bazel's own test
-        attribute, which this rule ignores.""",
+        doc = """Extra arguments for `plan`, such as `-var` and `-target`,
+        after the ones the rule sets. Bazel's own `args` is ignored.""",
     ),
 })
 
@@ -553,20 +535,16 @@ def _terraform_external_module_impl(ctx):
 terraform_external_module = rule(
     doc = """A module whose files come from outside the workspace.
 
-The `terraform.modules(...)` extension declares one of these per registry
-module it resolves. Declare one yourself, in the `build_file_content` of an
-`http_archive` or `git_repository`, to supply a module the extension cannot
-fetch: a module hosted somewhere other than a public registry, or a plain
-`git::` / `https://` source. Match `source` to the `module` block verbatim and
-list the target in the consuming `terraform_module`'s `deps`.""",
+The `deps` tag declares one per registry or git module it resolves. Declare
+one yourself, in the `build_file_content` of an `http_archive` or
+`git_repository`, for a module the extension cannot fetch. `source` must
+match the `module` block verbatim; list the target in the consuming
+`terraform_module`'s `deps`.""",
     implementation = _terraform_external_module_impl,
     attrs = {
         "source": attr.string(
-            doc = """The `source` string exactly as `module` blocks write it:
-            a registry address (`terraform-aws-modules/vpc/aws`, with any
-            `//subdir`), or any other address Terraform accepts, such as
-            `git::https://…?ref=v1.2.0`. The init aspect installs this
-            module under every `module` block whose `source` matches.""",
+            doc = """The `source` string exactly as the `module` blocks write it.
+            The module is installed under every block whose `source` matches.""",
             mandatory = True,
         ),
         "srcs": attr.label_list(
@@ -577,18 +555,12 @@ list the target in the consuming `terraform_module`'s `deps`.""",
         ),
         "subdir": attr.string(
             doc = """The module's directory inside `srcs`: the `//subdir` of the
-            source, empty for the archive root. The init aspect installs all of
-            `srcs` under the module's key and points the engine at this
-            directory within them, as `terraform init` lays out a `//subdir`
-            source.""",
+            source, empty for the archive root.""",
         ),
         "version": attr.string(
-            doc = """The module's version, for a registry module. The init
-            aspect records it in the module manifest and uses it to pick
-            between two versions of one module. Leave it empty for a git or
-            other non-registry source: Terraform rejects a manifest entry
-            whose version is not a semantic version, and a commit id or tag
-            name is not one.""",
+            doc = """The module's version, for a registry module. Leave it empty
+            for a git or other source: the manifest only accepts a semantic
+            version.""",
         ),
     },
     provides = [TerraformExternalModuleInfo],

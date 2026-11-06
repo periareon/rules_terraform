@@ -22,12 +22,14 @@
    the pool. The hub itself is declared by `extension_impl.bzl`.
 
 A git-shaped source (`git::…`, `git@…`, `github.com/…`; see
-`git_source.bzl`) goes through the same worklist with a different fetch,
-and its `?ref=` must be a tag or a full commit id: a branch moves, so a
-branch name, or no ref at all, is an error. A GitHub `https` remote is
-fetched as the archive GitHub serves for the ref, exactly like a registry
-module: unpacked once on a facts miss to record its integrity and read its
-own references, then declared as an `http_archive`, with no git involved.
+`git_source.bzl`) goes through the same worklist with a different fetch.
+A commit id is exact and a tag is looked up once; a branch, or no ref at
+all meaning the default branch, is resolved to the commit it points at
+and recorded as a fact, so it moves only under `RULES_TERRAFORM_UPGRADE`.
+A GitHub `https` remote is fetched as the archive GitHub serves for the
+resolved ref, exactly like a registry module: unpacked once on a facts
+miss to record its integrity and read its own references, then declared
+as an `http_archive`, with no git involved.
 Any other remote, `ssh://` to GitHub included, is checked out with the
 host's `git` on a facts miss, the commit it names is recorded, and the
 pool entry is a `new_git_repository` at that exact commit, so a private
@@ -264,7 +266,7 @@ def _fetch_github_archive(module_ctx, remote, ref, checkouts):
             remote,
             ref,
             url,
-            "The ref is not a tag. A git module is pinned to a tag or a full commit id; a branch name is not accepted." if not is_commit(ref) else "Check that the commit exists and that GitHub is reachable from this machine.",
+            "The ref is not a tag GitHub serves an archive for." if not is_commit(ref) else "Check that the commit exists and that GitHub is reachable from this machine.",
         ))
 
     # GitHub names the directory inside after the repository and ref, with
@@ -303,8 +305,8 @@ def _git_tag_commit(module_ctx, remote, ref):
     """The commit a tag names on the remote, or a failure if `ref` is not a tag.
 
     `ls-remote --tags` lists the tag and, for an annotated tag, its peeled
-    commit as `<name>^{}`. A branch appears in neither form, so a branch
-    name is refused here before anything is fetched.
+    commit as `<name>^{}`. A branch appears in neither form; `_git_pin`
+    resolves one before anything reaches here.
     """
     result = _git(module_ctx, ["ls-remote", "--tags", remote, ref], remote, ref)
     tag_commit = None
@@ -319,8 +321,7 @@ def _git_tag_commit(module_ctx, remote, ref):
             tag_commit = parts[0]
     commit = peeled_commit if peeled_commit else tag_commit
     if not commit:
-        fail(("ref {} of module source {} is not a tag. A git module is pinned to a tag or a " +
-              "full commit id; a branch name is not accepted.").format(ref, remote))
+        fail("ref {} of module source {} is not a tag on the remote.".format(ref, remote))
     return commit
 
 def _git_pin(module_ctx, remote, ref):

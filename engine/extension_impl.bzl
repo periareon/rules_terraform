@@ -150,9 +150,8 @@ def deps_tag_class(default_registry):
         `@<name>//<namespace>_<name>` are the parts.""",
         attrs = {
             "lock": attr.label(
-                doc = """A `.terraform.lock.hcl`. Every provider it pins is fetched,
-                for every platform the registry publishes, and the lock itself
-                travels with the hub so the engine can verify the install.""",
+                doc = """A `.terraform.lock.hcl`. Every provider it pins is fetched
+                for every platform the registry publishes.""",
                 allow_single_file = [".terraform.lock.hcl"],
             ),
             "name": attr.string(
@@ -170,25 +169,19 @@ def deps_tag_class(default_registry):
                 doc = "Shorthand for a one-element `roots`.",
                 allow_single_file = [".tf"],
             ),
+            # Only each label's package is read, never the target, so the
+            # files need no `exports_files` and a module there keeps its
+            # `visibility`. Fetches are pooled across hubs and the init aspect
+            # installs only what a module's own blocks name, so a wide `roots`
+            # costs nothing at build time.
             "roots": attr.label_list(
-                doc = """The directories whose `module { source = "…" }` blocks
-                name registry or git modules (`git::…`, `git@…`, `github.com/…`,
-                pinned with `?ref=` to a tag or full commit id; a branch is
-                refused), each given as any `.tf` file inside it.
-                The file gets no special treatment: every `*.tf` in its
-                directory is read, and a sibling would behave identically. Root
-                modules and shared library modules both belong here, since a
-                library's own `module` blocks are what reach the registry.
-
-                Modules composed of other registry or git modules are
-                followed. Fetches are pooled across every hub, and a module
-                depending on a hub depends on a candidate pool from which the
-                init aspect installs only what its own `module` blocks name,
-                so listing many directories in one hub costs nothing.
-
-                The files need no `exports_files`. Only each label's package is
-                read, so nothing resolves them as targets and a module in that
-                package keeps whatever `visibility` it declares.""",
+                doc = """Directories whose `module { source = "…" }` blocks name
+                registry or git modules, each given as any `.tf` file inside it;
+                every `.tf` in the directory is read. List root modules and shared
+                libraries alike; modules composed of other registry or git modules
+                are followed. A git source is pinned by its `?ref=`: a tag or
+                commit as written, a branch or no ref resolved to a commit once
+                and kept as a fact.""",
                 allow_files = [".tf"],
             ),
         },

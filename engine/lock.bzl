@@ -195,18 +195,15 @@ def build_providers_lock(ctx, toolchain_type):
 
 PROVIDERS_LOCK_ATTRS = {
     "output": attr.string(
-        doc = """Where to write the multi-platform `.terraform.lock.hcl`,
-        relative to this BUILD file's package. Diff-test companions
-        should point `golden = "<same-path>"`.""",
+        doc = "Where to write the lock, relative to this package: `.terraform.lock.hcl`.",
         mandatory = True,
     ),
     "platforms": attr.string_list(
-        doc = "os_arch platforms to record hashes for. Defaults to the common set.",
+        doc = "Platforms to record hashes for, as `linux_amd64`. Default: {}.".format(", ".join(_DEFAULT_LOCK_PLATFORMS)),
     ),
     "target": attr.label(
-        doc = """The terraform_module whose .tf sources drive the lock
-        resolution. Its local child modules come along, so
-        `required_providers` blocks anywhere in the tree count.""",
+        doc = """The `terraform_module` the lock covers, its local child modules
+        included.""",
         providers = [TerraformInfo],
         mandatory = True,
     ),
