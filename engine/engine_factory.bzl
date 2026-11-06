@@ -70,18 +70,14 @@ def make_engine_rules(*, engine):
 
     binary = rule(
         doc = """\
-Wraps the {engine} binary for a `terraform_module` root. Invoke via
-`bazel run` — any subcommand and args are passed straight through, so
-`bazel run //x:{engine} -- plan`, `... -- apply`, `... -- state list`, etc.
-mirror the nominal CLI.
+Runs {engine} on a `terraform_module` root. Arguments pass through:
+`bazel run //x:{engine} -- plan`, `-- apply`, `-- state list`. The engine
+runs in a temp copy of the built module directory, providers and modules
+already installed, so nothing is fetched at run time.
 
-The `.terraform` directory is assembled hermetically by
-`terraform_init_aspect`; providers and modules come from Bazel-managed
-dependencies rather than the network.
-
-`init` is the one subcommand not passed through. It installs that
-`.terraform` directory into the module's source directory and initializes
-the backend there, so the native CLI works in that directory afterwards.
+`init` is the exception: it installs that directory into the module's
+source directory and initializes the backend there, so the native CLI
+works in that directory afterwards.
 """.format(engine = name),
         implementation = _binary_impl,
         attrs = RUNNER_ATTRS,
@@ -89,21 +85,14 @@ the backend there, so the native CLI works in that directory afterwards.
         toolchains = [toolchain_type],
     )
 
+    # OpenTofu has no `-junit-xml`; the runner builds the JUnit report from
+    # `-json-into` instead (engine/runner/junit.go) and keeps that stream.
     test = rule(
         doc = """\
-Runs {engine}'s native HCL test framework (`{engine} test`) on the root
-module as a Bazel test. Test cases live in `.tftest.hcl` files. Fully
-hermetic — the .terraform directory is assembled by the init aspect from
-Bazel-managed deps.
-
-Each `run` block is reported as a JUnit test case through Bazel's
-`XML_OUTPUT_FILE` (Terraform writes the report itself; for OpenTofu the
-runner builds it from the `-json-into` event stream, which is also kept).
-The lock file and module manifest the test ran against are saved as
-undeclared test outputs.
-
-Bazel `--test_arg` values are intentionally ignored so the surface stays
-predictable — every run executes the module's `.tftest.hcl` files.
+Runs `{engine} test` on the root module's `.tftest.hcl` files as a Bazel
+test. Each `run` block is a JUnit test case in Bazel's XML report, and the
+lock and module manifest the test ran against are kept as undeclared test
+outputs. `--test_arg` is ignored.
 """.format(engine = name),
         implementation = _test_impl,
         attrs = TEST_ATTRS,
@@ -113,20 +102,12 @@ predictable — every run executes the module's `.tftest.hcl` files.
 
     plan_test = rule(
         doc = """\
-Initializes the backend, runs `{engine} plan`, and keeps the plan as a
-reviewable test output. Passes when the plan succeeds; with
-`expect_no_changes`, only when it is empty.
-
-Undeclared test outputs (`bazel-testlogs/<pkg>/<name>/test.outputs/`):
-`plan.tfplan`, `plan.json` (`show -json`), `plan.txt` (`show`), plus the
-lock file and module manifest the plan ran against.
-
-A plan talks to the backend and, for most providers, to the provider's
-API, so this test needs the network and whatever credentials the provider
-reads from the environment (pass them with `--test_env`). The public
-`{engine}_plan_test` macro tags it `requires-network` for that reason;
-providers that run offline (`null`, `local`, `random`) work without any of
-it. The operator's CLI configuration is disabled, as for every test here.
+Runs `{engine} plan` as a Bazel test and keeps the plan for review:
+`plan.tfplan`, `plan.json` and `plan.txt` under the undeclared test
+outputs. Passes when the plan succeeds, or with `expect_no_changes` only
+when it is empty. A plan reaches the backend and the provider APIs, so
+credentials go through `--test_env`; the `{engine}_plan_test` macro tags
+it `requires-network`.
 """.format(engine = name),
         implementation = _plan_test_impl,
         attrs = PLAN_TEST_ATTRS,
@@ -185,9 +166,10 @@ it. The operator's CLI configuration is disabled, as for every test here.
 
     fmt_test = rule(
         implementation = _fmt_test_impl,
-        doc = "A rule for running `{} fmt` on a Terraform target.".format(name),
+        doc = "Fails when `{} fmt` would change a module's sources.".format(name),
         attrs = {
             "target": attr.label(
+                doc = "The module to check.",
                 providers = [TerraformInfo],
                 mandatory = True,
             ),
@@ -203,11 +185,9 @@ it. The operator's CLI configuration is disabled, as for every test here.
 
     providers_lock = rule(
         doc = """\
-Regenerates `.terraform.lock.hcl` for a `terraform_module` by running
-real `{engine} providers lock -platform=<all>` under the toolchain-fetched
-{engine} binary. `bazel run` writes the multi-platform result back to
-source — the one path that produces hashes for platforms Bazel didn't
-resolve for the current build.
+`bazel run` target that writes a module's `.terraform.lock.hcl` with the
+toolchain {engine}, recording hashes for every platform in `platforms` at
+once, which the engine's own `init` does not do. Needs the network.
 """.format(engine = name),
         implementation = _providers_lock_impl,
         attrs = PROVIDERS_LOCK_ATTRS,
