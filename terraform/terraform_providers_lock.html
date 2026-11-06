@@ -156,11 +156,7 @@
                 <div id="content" class="content">
                     <main>
                         <!-- Generated with Stardoc: http://skydoc.bazel.build -->
-<p>terraform_providers_lock — <code>bazel run</code> updater for <code>.terraform.lock.hcl</code>.</p>
-<p>Runs <code>terraform providers lock -platform=&lt;all&gt;</code> under the toolchain-fetched
-<code>terraform</code> binary and writes the multi-platform lock file back to source.
-No engine needs to be installed on the host. This is the one path that
-produces hashes for platforms Bazel didn't resolve for the current build.</p>
+<p>terraform_providers_lock</p>
 <h2 id="rules"><a class="header" href="#rules">Rules</a></h2>
 <ul>
 <li><a href="#terraform_providers_lock">terraform_providers_lock</a></li>
@@ -172,17 +168,15 @@ load("@rules_terraform//terraform:terraform_providers_lock.bzl", "terraform_prov
 
 terraform_providers_lock(<a href="#terraform_providers_lock-name">name</a>, <a href="#terraform_providers_lock-output">output</a>, <a href="#terraform_providers_lock-platforms">platforms</a>, <a href="#terraform_providers_lock-target">target</a>)
 </pre>
-<p>Regenerates <code>.terraform.lock.hcl</code> for a <code>terraform_module</code> by running
-real <code>terraform providers lock -platform=&lt;all&gt;</code> under the toolchain-fetched
-terraform binary. <code>bazel run</code> writes the multi-platform result back to
-source — the one path that produces hashes for platforms Bazel didn't
-resolve for the current build.</p>
+<p><code>bazel run</code> target that writes a module's <code>.terraform.lock.hcl</code> with the
+toolchain terraform, recording hashes for every platform in <code>platforms</code> at
+once, which the engine's own <code>init</code> does not do. Needs the network.</p>
 <p><strong>ATTRIBUTES</strong></p>
 <div class="table-wrapper"><table><thead><tr><th style="text-align: left">Name</th><th style="text-align: left">Description</th><th style="text-align: left">Type</th><th style="text-align: left">Mandatory</th><th style="text-align: left">Default</th></tr></thead><tbody>
 <tr><td style="text-align: left"><a id="terraform_providers_lock-name"></a>name</td><td style="text-align: left">A unique name for this target.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels#target-names">Name</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
-<tr><td style="text-align: left"><a id="terraform_providers_lock-output"></a>output</td><td style="text-align: left">Where to write the multi-platform <code>.terraform.lock.hcl</code>, relative to this BUILD file's package. Diff-test companions should point <code>golden = "&lt;same-path&gt;"</code>.</td><td style="text-align: left">String</td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
-<tr><td style="text-align: left"><a id="terraform_providers_lock-platforms"></a>platforms</td><td style="text-align: left">os_arch platforms to record hashes for. Defaults to the common set.</td><td style="text-align: left">List of strings</td><td style="text-align: left">optional</td><td style="text-align: left"><code>[]</code></td></tr>
-<tr><td style="text-align: left"><a id="terraform_providers_lock-target"></a>target</td><td style="text-align: left">The terraform_module whose .tf sources drive the lock resolution. Its local child modules come along, so <code>required_providers</code> blocks anywhere in the tree count.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">Label</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
+<tr><td style="text-align: left"><a id="terraform_providers_lock-output"></a>output</td><td style="text-align: left">Where to write the lock, relative to this package: <code>.terraform.lock.hcl</code>.</td><td style="text-align: left">String</td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
+<tr><td style="text-align: left"><a id="terraform_providers_lock-platforms"></a>platforms</td><td style="text-align: left">Platforms to record hashes for, as <code>linux_amd64</code>. Default: linux_amd64, linux_arm64, darwin_amd64, darwin_arm64, windows_amd64.</td><td style="text-align: left">List of strings</td><td style="text-align: left">optional</td><td style="text-align: left"><code>[]</code></td></tr>
+<tr><td style="text-align: left"><a id="terraform_providers_lock-target"></a>target</td><td style="text-align: left">The <code>terraform_module</code> the lock covers, its local child modules included.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">Label</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
 </tbody></table>
 </div>
                     </main>

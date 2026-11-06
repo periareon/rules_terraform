@@ -157,263 +157,142 @@
                 <div id="content" class="content">
                     <main>
                         <h1 id="rules_terraform"><a class="header" href="#rules_terraform">rules_terraform</a></h1>
-<h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
-<p>This repository implements Bazel rules for
-<a href="https://developer.hashicorp.com/terraform">Terraform</a> and
-<a href="https://tofu.org/">OpenTofu</a>.</p>
+<p>Bazel rules for <a href="https://developer.hashicorp.com/terraform">Terraform</a> and
+<a href="https://tofu.org/">OpenTofu</a>. Every <code>terraform_*</code> rule has a <code>tofu_*</code>
+twin that takes the same inputs and runs the other engine; the text below
+says <code>terraform</code> and means both.</p>
 <h2 id="setup"><a class="header" href="#setup">Setup</a></h2>
-<p>Add rules_terraform to your <code>MODULE.bazel</code>:</p>
 <pre><code class="language-python">bazel_dep(name = "rules_terraform", version = "{version}")
 </code></pre>
-<p>Toolchains for both engines are auto-registered — no <code>use_extension</code> or
-<code>register_toolchains</code> call is required. By default a build uses the newest
-release shipped in
+<p>Toolchains for both engines are registered by rules_terraform's own
+<code>MODULE.bazel</code>. A build uses one release per engine: the root module's
+<code>toolchain</code> tag, else the newest shipped in
 <a href="../../terraform/private/versions.bzl"><code>//terraform/private:versions.bzl</code></a> /
-<a href="../../tofu/private/versions.bzl"><code>//tofu/private:versions.bzl</code></a>; those
-tables carry the three newest releases of each engine.</p>
-<p>Any other release is one tag away, and a build has exactly one: the
-root module's <code>toolchain</code> tag, else the newest shipped. For a release
-outside the table the extension fetches its <code>SHA256SUMS</code> once and records
-the checksums as facts in <code>MODULE.bazel.lock</code>, so pinning an older engine
-needs no change to rules_terraform:</p>
+<a href="../../tofu/private/versions.bzl"><code>//tofu/private:versions.bzl</code></a>, which
+carry the three newest releases with their checksums.</p>
 <pre><code class="language-python">terraform = use_extension("@rules_terraform//terraform:extensions.bzl", "terraform")
 terraform.toolchain(version = "1.9.8")
 
 tofu = use_extension("@rules_terraform//tofu:extensions.bzl", "tofu")
 tofu.toolchain(version = "1.9.1")
 </code></pre>
-<p>Changing the release is editing the tag. A <code>toolchain</code> tag in a
-dependency is ignored; a module that needs a floor says so in its own
-<code>required_version</code>.</p>
-<p>Nothing has to be installed on the host: the engine binary, provider
-archives and registry modules are all fetched by Bazel, and every
-<code>bazel run</code> / <code>bazel test</code> below uses the toolchain-fetched engine.</p>
+<p>Any release works there. One outside the shipped table costs a single
+fetch of its <code>SHA256SUMS</code>, recorded as a fact in <code>MODULE.bazel.lock</code>.
+Changing the release is editing the tag; a tag in a dependency is ignored.</p>
+<p>Nothing has to be installed on the host: the engine, provider archives
+and modules are all fetched by Bazel, and every <code>bazel run</code> and
+<code>bazel test</code> below uses the toolchain engine.</p>
 <h2 id="getting-started"><a class="header" href="#getting-started">Getting started</a></h2>
-<p>A root module that is new to Bazel usually has <code>.tf</code> files and nothing
-else. The provider lock file is the one artifact the rules need and the
-source tree may not have yet, so the first steps produce it.</p>
+<p>A root module new to Bazel is a directory of <code>.tf</code> files. Three things get
+added around it: BUILD targets, a provider lock, and a <code>deps</code> tag in
+<code>MODULE.bazel</code> that fetches what the lock and the <code>module</code> blocks name.
+<a href="./gazelle.html">Gazelle</a> writes the BUILD targets.</p>
 <ol>
 <li>
-<p><strong>Declare the module.</strong> A <code>terraform_module</code> is one directory of
-<code>.tf</code> files. No lock, no deps yet:</p>
-<pre><code class="language-python">load("@rules_terraform//terraform:defs.bzl", "terraform_module", "terraform_providers_lock")
+<p><strong>Set up Gazelle</strong> with the rules' language and run it:</p>
+<pre><code class="language-python"># BUILD.bazel at the repository root
+load("@gazelle//:def.bzl", "gazelle", "gazelle_binary")
 
-terraform_module(
-    name = "app",
-    srcs = glob(["*.tf"]),
+gazelle_binary(
+    name = "gazelle_bin",
+    languages = ["@rules_terraform//terraform/gazelle"],
 )
 
-# Writes .terraform.lock.hcl next to this BUILD file, for every platform
-# in the default set, using the toolchain's terraform. Needs network.
-terraform_providers_lock(
-    name = "providers_lock.update",
-    output = ".terraform.lock.hcl",
-    target = ":app",
+gazelle(
+    name = "gazelle",
+    gazelle = ":gazelle_bin",
 )
 </code></pre>
+<p><code>bazel run //:gazelle</code> writes a <code>terraform_module</code> per directory of
+configuration, <code>deps</code> between them following the local <code>module</code>
+blocks, and for a root (a directory with a <code>backend</code> or <code>cloud</code> block,
+or a <code># gazelle:tf_kind root</code> directive) a <code>terraform_binary</code> named
+<code>terraform</code> and a <code>terraform_providers_lock</code> named
+<code>providers_lock.update</code>.</p>
 </li>
 <li>
-<p><strong>Generate the lock</strong> and commit it:</p>
+<p><strong>Generate the lock</strong> and commit it. This runs the toolchain engine's
+<code>providers lock</code> for every platform in the default set and writes
+<code>.terraform.lock.hcl</code> next to the sources; it needs the network.</p>
 <pre><code class="language-bash">bazel run //path/to/app:providers_lock.update
 </code></pre>
-<p>Rerun it whenever a <code>required_providers</code> block changes. There is no
-step that runs <code>terraform</code> from your <code>PATH</code>.</p>
+<p>Rerun it whenever a <code>required_providers</code> block changes.</p>
 </li>
 <li>
-<p><strong>Declare the module's dependencies</strong> in <code>MODULE.bazel</code>, one <code>deps</code>
-tag per lock file:</p>
+<p><strong>Declare the <code>deps</code> tag</strong> in <code>MODULE.bazel</code>. Gazelle names the hub a
+root depends on <code>@tf_&lt;path&gt;</code> with <code>/</code> and <code>-</code> replaced by <code>_</code>, or
+whatever a <code># gazelle:tf_deps_hub</code> directive says; the tag must use
+that name.</p>
 <pre><code class="language-python">terraform = use_extension("@rules_terraform//terraform:extensions.bzl", "terraform")
 terraform.deps(
-    name = "app_deps",
+    name = "tf_path_to_app",
     lock = "//path/to/app:.terraform.lock.hcl",
-    roots = ["//path/to/app:main.tf"],   # only if main.tf names registry modules
+    roots = ["//path/to/app:main.tf"],   # only if its `module` blocks name registry or git modules
 )
-use_repo(terraform, "app_deps")
+use_repo(terraform, "tf_path_to_app")
 </code></pre>
 </li>
 <li>
-<p><strong>Wire the module up</strong> and add the workflow targets:</p>
-<pre><code class="language-python">load("@rules_terraform//terraform:defs.bzl", "terraform_binary", "terraform_providers_lock_test", "terraform_validate_test")
-
-terraform_module(
-    name = "app",
-    srcs = glob(["*.tf"]),
-    deps = ["@app_deps"],   # the providers, the lock, and the registry modules
-)
-
-terraform_binary(name = "terraform", root = ":app")       # bazel run //path/to/app:terraform -- plan
-terraform_validate_test(name = "validate", target = ":app")
-terraform_providers_lock_test(                            # fails when the lock drifts from the sources
-    name = "providers_lock",
-    lock = ".terraform.lock.hcl",
-    target = ":app",
-)
+<p><strong>Run Gazelle again.</strong> With the lock in place it adds the
+<code>terraform_providers_lock_test</code>, which fails when the lock drifts from
+the sources. Then:</p>
+<pre><code class="language-bash">bazel test //path/to/app/...                      # validate, fmt, lock drift
+bazel run //path/to/app:terraform -- plan         # the engine, offline for providers and modules
 </code></pre>
-</li>
-<li>
-<p><strong>Add what the module calls.</strong> A local child module is its own
-<code>terraform_module</code> listed in <code>deps</code>; a registry module comes through
-the directory being in a <code>deps</code> tag's <code>roots</code>, which the hub above
-already covers. Both are
-described under <a href="index.html#external-dependencies-and-lock-files">External dependencies and lock files</a>.</p>
 </li>
 </ol>
-<p>A repo with several root modules repeats steps 1 to 4 per root, or
-shares one lock file across roots as the <a href="https://github.com/periareon/rules_terraform/tree/main/examples/monorepo">monorepo example</a>
-does. Add <code>.terraform/</code> to <code>.gitignore</code>; the rules never write it into
-the source tree, but a stray native <code>init</code> would.</p>
-<p>To fetch providers and registry modules, declare a <code>deps</code> tag on the
-<code>terraform</code> extension (or <code>tofu</code>, for OpenTofu): the lock file for
-providers, the directories with <code>module</code> blocks for registry modules.</p>
-<pre><code class="language-python">terraform = use_extension("@rules_terraform//terraform:extensions.bzl", "terraform")
-terraform.deps(
-    name = "app",
-    lock = "//path/to:.terraform.lock.hcl",   # providers the lock pins
-    roots = ["//path/to:main.tf"],             # registry modules named here
-)
-use_repo(terraform, "app")
-</code></pre>
-<h2 id="running-the-engine-cli-directly-terraform--tofu"><a class="header" href="#running-the-engine-cli-directly-terraform--tofu">Running the engine CLI directly (<code>@terraform</code> / <code>@tofu</code>)</a></h2>
-<p>rules_terraform ships two hub repositories — <code>@terraform</code> and <code>@tofu</code>
-— that let a user invoke the toolchain-resolved engine binary from any
-subdirectory of their workspace:</p>
-<pre><code class="language-bash">cd path/to/my/tf/module
-bazel run @terraform -- plan             # ≈ terraform plan
-bazel run @terraform -- init             # ≈ terraform init
-bazel run @tofu -- state list        # ≈ tofu state list
-</code></pre>
-<p>The wrapper <code>chdir</code>s to <code>$BUILD_WORKING_DIRECTORY</code> (the shell cwd where
-<code>bazel run</code> was invoked) before exec-ing the engine, so relative paths
-and any <code>terraform.tfstate</code> land in the directory you're standing in —
-just like the native CLI. It is the same toolchain release as the rest
-of the ruleset, so you get one hermetic Terraform release across all
-invocations.</p>
-<p>It is also how a Terraform maintainer manages dependencies without
-touching Bazel: <code>bazel run @terraform -- init -upgrade</code> or
-<code>bazel run @terraform -- providers lock</code> in a module directory writes
-the lock the rules consume, and a module that depends on its providers
-hub as a whole (<code>deps = ["@my_deps"]</code>) picks the change up with no
-BUILD edit.</p>
-<p>To reformat sources, <code>bazel run @rules_terraform//terraform:format</code>
-(or <code>//tofu:format</code>) rewrites the <code>.tf</code> files of every module in the
-workspace with the toolchain engine's <code>fmt</code>; pass target patterns to
-narrow it. Modules tagged <code>no_format</code> or <code>no_terraform_format</code> are
-skipped, matching the fmt aspect.</p>
-<p><strong>This is NOT the Bazel-managed workflow.</strong> <code>@terraform</code> does no init
-aspect, no lock-file rewriting, no <code>.terraform</code> construction —
-<code>terraform init</code> still runs against your source tree, hits the network,
-and writes state. Reach for it when you want a one-off CLI invocation
-(state manipulation, ad-hoc plan against an unrelated module) without
-wiring up a <code>terraform_binary</code> target for the module.</p>
-<p>To use <code>@terraform</code> / <code>@tofu</code> from downstream, add them to your
-<code>MODULE.bazel</code>:</p>
-<pre><code class="language-python">terraform = use_extension("@rules_terraform//terraform:extensions.bzl", "terraform")
-use_repo(terraform, "terraform")
-
-tofu = use_extension("@rules_terraform//tofu:extensions.bzl", "tofu")
-use_repo(tofu, "tofu")
-</code></pre>
-<p>The extensions are already invoked by rules_terraform's own
-<code>MODULE.bazel</code>, which registers the toolchain hubs; the <code>use_repo</code> line only
-binds the repo name in your namespace so <code>@terraform</code> / <code>@tofu</code>
-resolve.</p>
-<h2 id="bazel-managed-terraform"><a class="header" href="#bazel-managed-terraform">Bazel-managed Terraform</a></h2>
-<p>When a <code>terraform_module</code> is built through Bazel, an init aspect
-assembles the whole <strong>module directory</strong> hermetically — the directory
-the engine will run in, <code>.tf</code> files and <code>.terraform/</code> alike — rather
-than letting <code>terraform init</code> build it. The result is a single Bazel
-tree artifact that <code>terraform_binary</code> and the validate rules copy and
-<code>cd</code> into. Every network fetch happens at repository-rule /
-bzlmod-extension time; build actions are offline. As a consequence:</p>
-<ul>
-<li><strong>Provider binaries</strong> are fetched at repository-rule time and copied
-into <code>.terraform/providers/…</code> during the aspect's action. The lock
-file's <code>h1:</code> hashes are rewritten to match the actually-installed
-binary layout.</li>
-<li><strong>External modules</strong> (from a Terraform registry) are resolved via a
-Bazel-owned lock file, downloaded at repository-rule time, and copied
-into <code>.terraform/modules/…</code> with a generated <code>modules.json</code> manifest.</li>
-<li><strong>Local child modules</strong> — other <code>terraform_module</code> targets in the
-monorepo — are placed at the relative <code>source</code> path the parent's
-<code>module</code> block names, so Terraform resolves them the way it resolves
-any local module. Packages nested under the parent land there
-automatically; anything else is matched to the <code>module</code> block whose
-<code>source</code> names it.</li>
-</ul>
-<p>A <code>terraform_module</code> is exactly one directory: every file in <code>srcs</code>
-must live directly in the target's own package, and <code>srcs</code> accepts only
-what the engine loads: <code>.tf</code> and <code>.tf.json</code> for <code>terraform_module</code>, plus
-<code>.tofu</code> and <code>.tofu.json</code> for <code>tofu_module</code>. Any other file is an analysis
-error rather than a file the engine would silently skip. Nested <code>.tf</code> files are
-a child module and belong in their own <code>terraform_module</code>. This is
-enforced at analysis time, and it is what lets the aspect know which
-directory it is building without guessing.</p>
-<p>The full mechanics — how the extensions resolve each dependency type,
-what each lock file looks like, and how to keep them fresh — are in
-<a href="index.html#external-dependencies-and-lock-files">External dependencies and lock files</a>
-below.</p>
-<h3 id="direct-terraform-cli-incompatibility"><a class="header" href="#direct-terraform-cli-incompatibility">Direct <code>terraform</code> CLI incompatibility</a></h3>
-<p>Once a <code>terraform_module</code> has Bazel-managed dependencies, running
-<code>terraform</code> (or <code>tofu</code>) directly outside Bazel is <strong>not expected to work</strong>
-against a bare checkout: the module directory is Bazel's construction,
-<code>h1:</code> hashes are rewritten for the installed platform binary, and
-<code>modules.json</code> reflects the Bazel target graph — not the source tree.
-<a href="index.html#initializing-in-place">Initializing in place</a> below is how a source
-directory gets that construction installed, for the times the native CLI
-is the tool you want.</p>
-<p>Use <code>bazel run</code> to invoke the engine:</p>
-<pre><code class="language-bash"># Instead of: terraform plan
-bazel run //path/to:terraform -- plan
-
-# Instead of: terraform apply
+<p>Without Gazelle the same targets are written by hand; the
+<a href="https://github.com/periareon/rules_terraform/tree/main/examples/monorepo">monorepo example</a>
+shows them for three environments sharing one lock. Add <code>.terraform/</code> to
+<code>.gitignore</code>: the rules read nothing from it, and
+<a href="index.html#initializing-in-place"><code>init</code></a> writes it.</p>
+<h2 id="running-the-engine"><a class="header" href="#running-the-engine">Running the engine</a></h2>
+<h3 id="terraform_binary"><a class="header" href="#terraform_binary"><code>terraform_binary</code></a></h3>
+<pre><code class="language-bash">bazel run //path/to:terraform -- plan
 bazel run //path/to:terraform -- apply
 </code></pre>
-<p>The <code>terraform_binary</code> rule creates an executable that copies the
-aspect-built module directory into a writable temp dir and runs the
-real <code>terraform</code> binary there.</p>
-<p>That temp dir is removed when the command finishes. A module with a
-<code>backend</code> or <code>cloud</code> block is unaffected: its state belongs to the backend.
-A module with neither keeps its state where the native CLI keeps it, the
-working directory, which here is the temp dir, so by default the state goes
-with the run: <code>disposable_state</code> on the <code>terraform_module</code> is <code>True</code>. A run
-that did write state is kept and its path printed, so the record of what an
-<code>apply</code> created never vanishes silently, but the next run starts from a
-fresh copy and does not see it. Any state sitting in the module's source
-directory is ignored.</p>
-<p>Where the state has to outlive the run and there is still no backend
-(bootstrapping the bucket that will hold real state, a sandbox applied and
-destroyed over days), set <code>disposable_state = False</code>. The runner then
-points the engine's local backend at <code>terraform.tfstate</code> (and
-<code>terraform.tfstate.d/</code> for workspaces) in a per-module directory under
-<code>bazel-out/rules_terraform/</code>, and names it after every state-writing
-command. That directory is private to the machine and <code>bazel clean</code>
-deletes it, state included; nothing is written to the source tree. Setting
-it on a module that declares a backend is an error. Relative file arguments
-(<code>-out=tfplan</code>, <code>-var-file=x.tfvars</code>) resolve against the temp dir, so pass
-absolute paths.</p>
-<p>Because the aspect already installed the providers and the module
-manifest, the only thing a run-time <code>terraform init</code> still contributes is
-backend setup — so it runs only for subcommands that need one. <code>version</code>,
-<code>fmt</code>, <code>validate</code>, <code>test</code> and <code>metadata</code> skip it and work offline against
-a module with a remote backend; <code>plan</code>, <code>apply</code> and the rest initialize
-the backend as before. The practical consequences: a <code>terraform_test</code> on
-a module with a remote backend needs no credentials, and a configuration
-error in one of those subcommands is reported as itself rather than as a
-backend failure.</p>
+<p>The binary copies the module directory the build assembled, <code>.tf</code> files,
+local child modules at their <code>source</code> paths, the lock and a populated
+<code>.terraform/</code>, into a temp dir and runs the engine there with the
+arguments given. The temp dir is removed when the command finishes.
+Relative file arguments (<code>-out=tfplan</code>, <code>-var-file=x.tfvars</code>) resolve
+against it, so pass absolute paths.</p>
+<p>Because the build already installed the providers and the module
+manifest, the only thing a run-time <code>init</code> still contributes is backend
+setup, so the binary runs one only before subcommands that need a backend.
+<code>version</code>, <code>fmt</code>, <code>validate</code>, <code>test</code> and <code>metadata</code> skip it and work
+offline against a module with a remote backend.</p>
+<p><strong>State.</strong> A module with a <code>backend</code> or <code>cloud</code> block is unaffected: its
+state belongs to the backend. A module with neither keeps state where the
+native CLI keeps it, the working directory, which here is the temp dir,
+so by default state goes with the run: <code>disposable_state</code> on the
+<code>terraform_module</code> is <code>True</code>. A run that did write state is kept and its
+path printed, so the record of an <code>apply</code> never vanishes silently, but
+the next run starts fresh. Where state must outlive the run with no
+backend (bootstrapping the bucket that will hold real state, a sandbox
+kept for days), set <code>disposable_state = False</code>: the local backend is
+pointed at a per-module directory under <code>bazel-out/rules_terraform/</code>,
+which <code>bazel clean</code> deletes and which is named after every state-writing
+command. Setting it on a module that declares a backend is an error.</p>
+<p><strong>Environment.</strong> <code>bazel run</code> keeps the operator's environment, which is
+where credential helpers and <code>TF_WORKSPACE</code> live. The tests and the
+validate aspect run the engine with the CLI configuration disabled
+(<code>TF_CLI_CONFIG_FILE</code> pointed at an empty file, <code>CHECKPOINT_DISABLE=1</code>,
+<code>TF_IN_AUTOMATION=1</code>), so a <code>~/.terraformrc</code> on one machine cannot change
+what a check reports.</p>
 <h3 id="initializing-in-place"><a class="header" href="#initializing-in-place">Initializing in place</a></h3>
 <p><code>bazel run //path/to:terraform -- init</code> is the one subcommand that does
-not run in the temp dir, where its work would be deleted with it. Under
-the binary it means the one thing it usefully can: install what the build
-constructed into the module's source directory, so the native CLI works
-there afterwards.</p>
+not run in the temp dir, where its work would be deleted with it. It
+installs what the build constructed into the module's source directory,
+so the native CLI works there afterwards.</p>
 <pre><code class="language-bash">bazel run //envs/prod/app:terraform -- init
 cd envs/prod/app
 terraform plan            # native CLI, providers and modules from the build
 </code></pre>
 <p>The directory is the root module's package under the checkout, wherever
 the command was run from; <code>BUILD_WORKSPACE_DIRECTORY</code> and the target
-decide it, not the shell's cwd (that is the <code>@terraform</code> hub's job). The
-runner:</p>
+decide it, not the shell's cwd (that is the <a href="index.html#the-terraform-and-tofu-hubs"><code>@terraform</code> hub's</a>
+job). The runner:</p>
 <ol>
 <li>copies the built <code>.terraform/providers/</code> and <code>.terraform/modules/</code> over
 whatever is there, keeping <code>.terraform/environment</code> and the saved
@@ -438,11 +317,11 @@ or the build's, which is refused with the Bazel path named:</p>
 <tr><td><code>-reconfigure</code></td><td>passes through</td><td>Re-reads the backend block, ignoring the saved configuration. The staged runs are implicitly always reconfigured, since a fresh copy has none saved; in place it matters.</td></tr>
 <tr><td><code>-migrate-state</code>, <code>-force-copy</code></td><td>pass through</td><td>Moves state from the previously saved backend configuration to the current one. It needs that saved configuration, which only a persisted directory has, so this is the only place under Bazel it can work.</td></tr>
 <tr><td><code>-input</code>, <code>-lock</code>, <code>-lock-timeout</code>, <code>-no-color</code>, <code>-json</code></td><td>pass through</td><td>Plain engine options.</td></tr>
+<tr><td><code>-lockfile=readonly</code></td><td>passes through</td><td>Forbids every lock write, step 3 included: a lock without the host's hash is then an error naming the updater rather than an edit.</td></tr>
 <tr><td><code>-upgrade</code></td><td>refused</td><td>Would re-resolve providers against the plugin dir and rewrite the lock. The versions are facts of the build: <code>bazel run //path/to:providers_lock.update</code> for providers, <code>RULES_TERRAFORM_UPGRADE=1 bazel fetch</code> for modules (see <a href="index.html#upgrading">Upgrading</a>).</td></tr>
 <tr><td><code>-get</code></td><td>refused</td><td>The build installs the modules; the manifest is theirs.</td></tr>
 <tr><td><code>-plugin-dir</code></td><td>refused</td><td>The build's providers are the plugin directory.</td></tr>
 <tr><td><code>-from-module</code></td><td>refused</td><td>A root module is a <code>terraform_module</code> target.</td></tr>
-<tr><td><code>-lockfile=readonly</code></td><td>passes through</td><td>Forbids every lock write, step 3 included: a lock without the host's hash is then an error naming the updater rather than an edit.</td></tr>
 <tr><td><code>-chdir</code> (global)</td><td>refused</td><td>The target names the module directory.</td></tr>
 <tr><td><code>-help</code></td><td>passes through</td><td>Answered by the engine, with nothing installed.</td></tr>
 </tbody></table>
@@ -450,191 +329,127 @@ or the build's, which is refused with the Bazel path named:</p>
 <p><code>.terraform/</code> is the engine's cache and belongs in <code>.gitignore</code>; Gazelle
 and the rules ignore it, and a Bazel run never reads it. This is the one
 <code>bazel run</code> that writes into the source tree, and only because it was
-asked to. The staged runs and the tests are unchanged by it: the next
-<code>bazel run //path/to:terraform -- plan</code> still starts from a fresh copy.</p>
-<p><strong>Workspaces.</strong> The rules add no workspace concept of their own; they use
-Terraform's. <code>TF_WORKSPACE</code> in the environment selects one for every
-project in a run, so <code>--action_env=TF_WORKSPACE=prod</code> validates every
-module in prod under the aspect and <code>--test_env=TF_WORKSPACE=prod</code> does
-the same for the test rules. A root whose configuration is keyed on
-<code>terraform.workspace</code> gets each of its workspaces checked by one test
-target per workspace, with the <code>workspace</code> attribute of
-<code>terraform_validate_test</code>, <code>terraform_test</code> or <code>terraform_plan_test</code> forcing
-it, and <code>no_validate</code> on the module where the default workspace is not a
-valid one. <code>bazel run</code> reads <code>TF_WORKSPACE</code> the same way. A <code>workspace select</code> inside a <code>bazel run</code> changes only the staged copy, which is gone
-when the command finishes, so it does not carry to the next run and the
-runner says so; <code>workspace new</code> still creates the workspace in the backend.
-Every run picks its workspace up front, from the environment, and nothing a
-previous run selected leaks into it.</p>
-<p><code>terraform_validate_test</code>, the validate aspect and <code>terraform_test</code> run
-the engine with the operator's CLI configuration disabled
-(<code>TF_CLI_CONFIG_FILE</code> pointed at an empty file, <code>CHECKPOINT_DISABLE=1</code>,
-<code>TF_IN_AUTOMATION=1</code>), so a <code>~/.terraformrc</code> on one machine cannot change
-what a check reports. <code>bazel run</code> keeps the full environment, since that
-is where credential helpers live.</p>
+asked to. The next <code>bazel run //path/to:terraform -- plan</code> still starts
+from a fresh copy.</p>
+<h3 id="workspaces"><a class="header" href="#workspaces">Workspaces</a></h3>
+<p>The rules add no workspace concept of their own; they use Terraform's.
+<code>TF_WORKSPACE</code> in the environment selects one for every project in a run:
+<code>--action_env=TF_WORKSPACE=prod</code> for the validate aspect,
+<code>--test_env=TF_WORKSPACE=prod</code> for the test rules, the shell for
+<code>bazel run</code>. A root whose configuration is keyed on <code>terraform.workspace</code>
+gets each of its workspaces checked by one test target per workspace,
+with the <code>workspace</code> attribute of <code>terraform_validate_test</code>,
+<code>terraform_test</code> or <code>terraform_plan_test</code> forcing it, and <code>no_validate</code>
+on the module where the default workspace is not a valid one. A
+<code>workspace select</code> inside a <code>bazel run</code> changes only the temp copy, so
+it does not carry to the next run and the runner says so; <code>workspace new</code>
+still creates the workspace in the backend.</p>
 <h3 id="tests-and-review-artefacts"><a class="header" href="#tests-and-review-artefacts">Tests and review artefacts</a></h3>
+<p><a href="./terraform/terraform_validate_test.html"><code>terraform_validate_test</code></a> and
+<a href="./terraform/terraform_fmt_test.html"><code>terraform_fmt_test</code></a> are <code>validate</code>
+and <code>fmt -check</code> as Bazel tests. The same checks exist as aspects, which
+the examples' <code>.bazelrc</code> attaches so <code>bazel build //...</code> runs them over
+every module without a target per module; <code>no_validate</code> and <code>no_format</code>
+tags opt a module out.</p>
 <p><a href="./terraform/terraform_test.html"><code>terraform_test</code></a> runs the engine's native
-test framework. Each <code>run</code> block is reported as a JUnit test case
-through <code>XML_OUTPUT_FILE</code>, so <code>bazel test</code> summaries and CI dashboards
-show which run failed rather than one opaque target. Terraform writes
-the report itself with <code>-junit-xml</code>; for OpenTofu, which has no such
-flag, the runner builds it from the <code>-json-into</code> event stream and keeps
-that stream too. The lock file and module manifest the test ran against
-land in the undeclared outputs directory
-(<code>bazel-testlogs/&lt;pkg&gt;/&lt;name&gt;/test.outputs/</code>).</p>
+test framework. Each <code>run</code> block is reported as a JUnit test case through
+<code>XML_OUTPUT_FILE</code>, so <code>bazel test</code> summaries show which run failed.
+Terraform writes the report itself with <code>-junit-xml</code>; for OpenTofu the
+runner builds it from the <code>-json-into</code> event stream and keeps that stream
+too.</p>
 <p><a href="./terraform/terraform_plan_test.html"><code>terraform_plan_test</code></a> runs a real
-<code>plan</code> and keeps <code>plan.tfplan</code>, <code>plan.json</code> and <code>plan.txt</code> as
-undeclared outputs, so a plan can be reviewed from CI artefacts. It
-passes when the plan succeeds, or with <code>expect_no_changes</code> only when
-the plan is empty. A plan reaches the backend and the provider APIs, so
-the macro tags the target <code>requires-network</code>; credentials go through
-<code>--test_env</code>. Providers that work offline (<code>null</code>, <code>local</code>, <code>random</code>)
-need neither. Plans and state hold sensitive values, so treat those
-artefacts as you would the state itself.</p>
-<p>For validation and formatting, use the corresponding test rules:</p>
-<pre><code class="language-python">terraform_validate_test(
-    name = "validate_test",
-    target = ":my_module",
-)
-
-terraform_fmt_test(
-    name = "fmt_test",
-    target = ":my_module",
-)
+<code>plan</code> and keeps <code>plan.tfplan</code>, <code>plan.json</code> and <code>plan.txt</code> as undeclared
+outputs under <code>bazel-testlogs/&lt;pkg&gt;/&lt;name&gt;/test.outputs/</code>, so a plan can
+be reviewed from CI artefacts. It passes when the plan succeeds, or with
+<code>expect_no_changes</code> only when the plan is empty. A plan reaches the
+backend and the provider APIs, so the target is tagged
+<code>requires-network</code> and credentials go through <code>--test_env</code>; providers
+that work offline (<code>null</code>, <code>local</code>, <code>random</code>) need neither. Plans hold
+sensitive values, so treat the artefacts as you would the state.</p>
+<p><a href="./terraform/terraform_providers_lock_test.html"><code>terraform_providers_lock_test</code></a>
+fails when <code>.terraform.lock.hcl</code> does not cover what the module tree
+requires: every provider a <code>required_providers</code> block declares or a
+<code>resource</code>, <code>data</code>, <code>ephemeral</code> or <code>provider</code> block implies, in the root
+and in every installed module. No network, no engine.</p>
+<h3 id="the-terraform-and-tofu-hubs"><a class="header" href="#the-terraform-and-tofu-hubs">The <code>@terraform</code> and <code>@tofu</code> hubs</a></h3>
+<p>Two repositories let you invoke the toolchain engine in whatever
+directory you are standing in, like the native CLI:</p>
+<pre><code class="language-bash">cd path/to/my/tf/module
+bazel run @terraform -- providers lock
+bazel run @tofu -- state list
 </code></pre>
-<h2 id="external-dependencies-and-lock-files"><a class="header" href="#external-dependencies-and-lock-files">External dependencies and lock files</a></h2>
-<p>rules_terraform partitions external Terraform state into three buckets,
-each with its own resolution path and (where applicable) lock file. Every
-network fetch happens at repository-rule / bzlmod-extension time — build
-actions never touch the network. What Terraform actually sees at run time
-is a fully-populated module directory.</p>
-<h3 id="at-a-glance"><a class="header" href="#at-a-glance">At a glance</a></h3>
-<div class="table-wrapper"><table><thead><tr><th>Dependency type</th><th>Fetched from</th><th>Lock file</th><th>Refresh via</th></tr></thead><tbody>
-<tr><td>Providers</td><td>Terraform Registry v1 API</td><td><code>.terraform.lock.hcl</code></td><td><code>bazel run //path:providers_lock.update</code> (a <a href="./terraform/terraform_providers_lock.html"><code>terraform_providers_lock</code></a> target) — see below</td></tr>
-<tr><td>Registry modules</td><td>Terraform Registry v1 API</td><td>none in Terraform; the version each constraint resolved to is a fact in <code>MODULE.bazel.lock</code></td><td>A changed <code>module</code> block resolves on the next <code>bazel fetch</code>. To move an unchanged constraint to a newer release: <code>RULES_TERRAFORM_UPGRADE=1 bazel fetch //...</code>, then commit the lockfile diff.</td></tr>
-<tr><td>Git modules</td><td>GitHub archives over https; the host's <code>git</code> for any other remote</td><td>none — the <code>?ref=</code> must be a tag or commit; what a tag names is recorded in <code>MODULE.bazel.lock</code></td><td>Change the <code>?ref=</code>. See "Git modules" below.</td></tr>
-<tr><td>Local / in-repo modules</td><td>Bazel target graph</td><td>none</td><td>Edit <code>deps</code> on the parent <code>terraform_module</code></td></tr>
+<p>The wrapper <code>chdir</code>s to <code>$BUILD_WORKING_DIRECTORY</code> before exec-ing the
+engine. It does no init aspect and no <code>.terraform/</code> construction: a
+<code>terraform init</code> there runs against the source tree and hits the network.
+Reach for it for one-off CLI invocations against a directory with no
+<code>terraform_binary</code>. Downstream, bind the names:</p>
+<pre><code class="language-python">terraform = use_extension("@rules_terraform//terraform:extensions.bzl", "terraform")
+use_repo(terraform, "terraform")
+</code></pre>
+<p><code>bazel run @rules_terraform//terraform:format</code> (or <code>//tofu:format</code>)
+rewrites the <code>.tf</code> files of every module in the workspace with the
+toolchain engine's <code>fmt</code>; pass target patterns to narrow it.</p>
+<h2 id="dependencies"><a class="header" href="#dependencies">Dependencies</a></h2>
+<p>Every network fetch happens when the extension evaluates or a repository
+is fetched; build actions are offline, and what the engine sees at run
+time is a complete module directory. A <code>terraform_module</code> is one
+directory: <code>srcs</code> are the files the engine loads (<code>.tf</code> and <code>.tf.json</code>,
+plus <code>.tofu</code> and <code>.tofu.json</code> for <code>tofu_module</code>), all directly in the
+target's package, and anything else is an analysis error rather than a
+file the engine would silently skip. A nested directory of <code>.tf</code> files is
+a child module with its own target.</p>
+<div class="table-wrapper"><table><thead><tr><th>Dependency</th><th>Fetched from</th><th>Pinned by</th><th>Refresh</th></tr></thead><tbody>
+<tr><td>Providers</td><td>Registry v1 download API</td><td><code>.terraform.lock.hcl</code></td><td><code>bazel run //path:providers_lock.update</code></td></tr>
+<tr><td>Registry modules</td><td>Registry v1 API, archives from GitHub</td><td>the version each constraint resolved to, a fact in <code>MODULE.bazel.lock</code></td><td>edit the block, or <code>RULES_TERRAFORM_UPGRADE=1 bazel fetch //...</code></td></tr>
+<tr><td>Git modules</td><td>GitHub archives over https; the host's <code>git</code> for any other remote</td><td>the <code>?ref=</code>; what a tag or branch named is a fact in <code>MODULE.bazel.lock</code></td><td>edit the <code>?ref=</code>, or <code>RULES_TERRAFORM_UPGRADE=1 bazel fetch //...</code> for a branch</td></tr>
+<tr><td>Local modules</td><td>the Bazel target graph</td><td>nothing</td><td>edit <code>deps</code> on the parent</td></tr>
 </tbody></table>
 </div>
 <h3 id="the-deps-tag"><a class="header" href="#the-deps-tag">The <code>deps</code> tag</a></h3>
-<p>Both halves of a root module's external dependencies are declared on one
-tag, because that is how the engine treats them: <code>terraform init</code> installs
-the providers the lock pins and the registry modules the <code>module</code> blocks
-name in one step. The hub it produces, <code>@&lt;name&gt;</code>, is a
-<code>terraform_dependency_group</code> carrying both, and a <code>terraform_module</code> that
-depends on it needs no <code>lock</code> attribute.</p>
+<p>One tag declares both halves of a root's external dependencies, because
+that is how the engine treats them: <code>init</code> installs the providers the lock
+pins and the modules the <code>module</code> blocks name in one step.</p>
 <pre><code class="language-python">terraform = use_extension("@rules_terraform//terraform:extensions.bzl", "terraform")
 terraform.deps(
     name = "my_deps",
     lock = "//path/to:.terraform.lock.hcl",       # optional: providers
-    roots = ["//path/to:main.tf"],                 # optional: registry modules
+    roots = ["//path/to:main.tf"],                 # optional: registry and git modules named in that directory
     # registry = "registry.opentofu.org",          # default follows the extension
 )
 use_repo(terraform, "my_deps")
 </code></pre>
-<p>Either half may be omitted: a shared library that names a registry module
-but no provider gets a tag with <code>roots</code> only. The parts are addressable
-too: <code>@my_deps//:providers</code>, <code>@my_deps//:modules</code>, and
-<code>@my_deps//&lt;namespace&gt;_&lt;name&gt;</code> for one provider.</p>
+<p><code>@my_deps</code> carries every provider in the lock, the lock itself, and every
+external module the roots name; a <code>terraform_module</code> that depends on it
+needs no <code>lock</code> attribute, and a maintainer who adds a provider edits
+<code>required_providers</code> and reruns the lock updater with no BUILD change.
+<code>@my_deps//:providers</code>, <code>@my_deps//:modules</code> and
+<code>@my_deps//&lt;namespace&gt;_&lt;name&gt;</code> are the parts. Archives are pooled across
+hubs, so two locks that agree on a version fetch it once, and only the
+platform a build resolves is fetched. The attributes are on the
+<a href="./terraform/extensions.html">extension page</a>.</p>
 <h3 id="providers"><a class="header" href="#providers">Providers</a></h3>
-<p>The lock file is Terraform's native <code>.terraform.lock.hcl</code>. Write it with
-the <a href="./terraform/terraform_providers_lock.html"><code>terraform_providers_lock</code></a>
-updater (see <a href="index.html#getting-started">Getting started</a>); it runs the toolchain
-engine, so no <code>terraform</code> install is involved.</p>
-<p><strong>At repo-rule time</strong> the extension:</p>
-<ol>
-<li>
-<p>Reads the lock file via <code>module_ctx.read</code>.</p>
-</li>
-<li>
-<p>For every <code>(provider, platform)</code> pair, calls
-<code>https://&lt;registry&gt;/v1/providers/&lt;namespace&gt;/&lt;name&gt;/&lt;version&gt;/download/&lt;os&gt;/&lt;arch&gt;</code>
-via <code>module_ctx.download(...)</code> and reads the returned JSON to obtain
-the archive <code>download_url</code> + <code>shasum</code>. The <code>shasum</code> must be one of the
-lock entry's <code>zh:</code> hashes — those are the archive checksums recorded
-when the lock was written — so the registry can tell Bazel <em>where</em> the
-archive is but not <em>what</em> it should contain.</p>
-<p>A platform is left out of the hub only when the registry's own
-<code>/v1/providers/&lt;namespace&gt;/&lt;name&gt;/versions</code> listing says the version
-was never published for it. Every other way a lookup can come up empty
-(the registry is unreachable, the lock names a version or host the
-registry does not know) fails the evaluation with the URL that was
-tried. Nothing is ever recorded about a lookup that failed, so a
-transient outage cannot leave a platform permanently missing from
-<code>MODULE.bazel.lock</code>. A provider published for none of the requested
-platforms is likewise an error, not a silently thinner hub.</p>
-<p>Answers are cached in <code>module_ctx.facts</code>: one entry per archive, plus
-the published-platform list for a provider that is missing a default
-platform. With <code>MODULE.bazel.lock</code> enabled a re-evaluation makes no
-provider requests at all.</p>
-</li>
-<li>
-<p>Declares an <code>http_archive</code> per distinct archive, in a <strong>pool shared by
-every <code>providers</code> hub</strong>. The repository is named from the archive's
-identity (<code>rt_prov_&lt;registry&gt;_&lt;namespace&gt;_&lt;name&gt;_&lt;version&gt;_&lt;platform&gt;</code>),
-so two lock files that agree on a provider version fetch and extract it
-once. Archives are lazy — Bazel only fetches the platform your build
-actually resolves.</p>
-</li>
-<li>
-<p>Emits the hub: <code>@my_deps</code> carries every provider in the lock plus the
-lock itself, and <code>@my_deps//&lt;namespace&gt;_&lt;name&gt;</code> is a per-provider alias
-that picks the right pool archive via <code>select()</code>. Depend on <code>@my_deps</code>
-and the module needs no <code>lock</code> attribute: a Terraform maintainer who
-adds a provider edits <code>required_providers</code> and regenerates the lock,
-and no BUILD file changes. Depend on individual aliases plus <code>lock</code> to
-install a subset.</p>
-</li>
-</ol>
-<p><strong>At build time</strong> <a href="./terraform/terraform_module.html"><code>terraform_init_aspect</code></a>
-extracts each provider's files into
-<code>.terraform/providers/&lt;registry&gt;/&lt;namespace&gt;/&lt;name&gt;/&lt;version&gt;/&lt;platform&gt;/</code>
-and recomputes the <code>h1:</code> hash in a copy of the lock file it writes inside
-<code>.terraform/</code>. That rewrite is what lets <code>terraform init -get=false</code>
-accept the Bazel-installed binaries.</p>
-<p><strong>Regenerating.</strong> Wire up a
-<a href="./terraform/terraform_providers_lock.html"><code>terraform_providers_lock</code></a> target
-(or <a href="./tofu/tofu_providers_lock.html"><code>tofu_providers_lock</code></a> for
-the OpenTofu variant):</p>
-<pre><code class="language-python">load(
-    "@rules_terraform//terraform:terraform_providers_lock.bzl",
-    "terraform_providers_lock",
-)
-
-terraform_providers_lock(
-    name = "providers_lock",
-    output = ".terraform.lock.hcl",
-    target = ":my_module",
-    # Optional; defaults to a 5-platform set (linux/darwin ×
-    # amd64/arm64 + windows_amd64).
-    # platforms = ["linux_amd64", "darwin_arm64"],
-)
-</code></pre>
-<p><code>bazel run //:providers_lock</code> seeds a temp directory with your <code>.tf</code>
-sources, runs <code>terraform providers lock -platform=&lt;all&gt;</code> under the
-toolchain-fetched engine binary, and writes the multi-platform result
-back into <code>$BUILD_WORKSPACE_DIRECTORY</code>. This is the only path that
-produces hashes for every platform at once — the engine's own <code>init</code>
-locks the platform it runs on only.</p>
-<p><strong>Drift check.</strong> <a href="./terraform/terraform_providers_lock_test.html"><code>terraform_providers_lock_test</code></a>
-fails if the lock file does not match what the module tree requires. It
-reads the directory the init aspect built, every module in it including
-installed registry and git modules, and counts both the providers a
-<code>required_providers { … }</code> block declares and the ones <code>resource</code>, <code>data</code>,
-<code>ephemeral</code> and <code>provider</code> blocks imply, the way the engine does. No
-network, no engine. The lock's own hashes are enforced elsewhere: the extension
-refuses an archive whose checksum is not among the lock's <code>zh:</code> entries,
-and the engine verifies each installed provider directory against the
-<code>h1:</code> the init aspect wrote.</p>
+<p>The lock is Terraform's own <code>.terraform.lock.hcl</code>. The
+<a href="./terraform/terraform_providers_lock.html"><code>terraform_providers_lock</code></a>
+updater writes it by running the toolchain engine's
+<code>providers lock -platform=&lt;all&gt;</code> over the sources, which is the one path
+that records <code>h1:</code> hashes for every platform at once; the engine's own
+<code>init</code> locks the platform it runs on only. The default set is
+<code>linux_amd64</code>, <code>linux_arm64</code>, <code>darwin_amd64</code>, <code>darwin_arm64</code> and
+<code>windows_amd64</code>.</p>
+<p>The extension asks the registry only where each archive lives; the
+archive's checksum must be one of the lock's <code>zh:</code> hashes, so the
+registry cannot change what is installed. A platform is left out of a hub
+only when the registry says the version was never published for it;
+every other failed lookup fails the evaluation, so an outage cannot leave
+a platform permanently missing from the lockfile. The build installs each
+provider under <code>.terraform/providers/&lt;registry&gt;/&lt;namespace&gt;/&lt;name&gt;/&lt;version&gt;/&lt;platform&gt;/</code>
+and rewrites the <code>h1:</code> hashes in the tree's copy of the lock to the
+installed files, which is what lets the engine accept them.</p>
 <h3 id="providers-built-in-the-repo"><a class="header" href="#providers-built-in-the-repo">Providers built in the repo</a></h3>
-<p>A provider that is not on any registry — one you build from source in the
-same workspace — is a <a href="./terraform/terraform_provider.html"><code>terraform_provider</code></a>
-whose <code>files</code> is the built binary. It is used exactly like a hub-provided
-provider:</p>
-<pre><code class="language-python">load("@rules_go//go:def.bzl", "go_binary")
-load("@rules_terraform//terraform:defs.bzl", "terraform_module", "terraform_provider")
-
-go_binary(
+<p>A provider that is not on any registry is a
+<a href="./terraform/terraform_provider.html"><code>terraform_provider</code></a> whose <code>files</code> is
+the built binary, used like a hub-provided one:</p>
+<pre><code class="language-python">go_binary(
     name = "terraform-provider-custom",   # the engine requires this prefix
     srcs = ["main.go"],
 )
@@ -654,130 +469,65 @@ terraform_module(
 )
 </code></pre>
 <p>Leave <code>platform</code> unset: it is read from the configuration the provider is
-built in, so the same target works on a Linux CI runner and an Apple
-Silicon laptop. The <code>.terraform.lock.hcl</code> still needs an entry for the
-provider — write one by hand with the <code>version</code> and a placeholder <code>h1:</code>
-hash; the init aspect replaces the <code>h1:</code> with the hash of the binary it
-actually installed. A module that depends on providers but has no <code>lock</code>
-is an analysis error, since the engine will not use a provider directory
-it cannot check against one.</p>
-<h3 id="external-registry-modules"><a class="header" href="#external-registry-modules">External registry modules</a></h3>
-<p>Terraform has no lock file for modules, so the extension keeps its own
-record: each <code>module</code> block's constraint is resolved against the Registry
-API once, and the version it chose is written as a fact to
-<code>MODULE.bazel.lock</code>. Every later evaluation declares that version until an
-upgrade is asked for. Terraform users load the extension from the terraform
-side:</p>
+built in. The lock still needs an entry for the provider, written by hand
+with the <code>version</code> and a placeholder <code>h1:</code>; the build replaces the hash
+with that of the binary it installed. A module that depends on providers
+but has no lock is an analysis error.</p>
+<h3 id="registry-modules"><a class="header" href="#registry-modules">Registry modules</a></h3>
+<p>A <code>module</code> block whose <code>source</code> is a registry address is resolved when the
+extension evaluates: the highest version satisfying the block's constraint
+is chosen once and recorded as a fact in <code>MODULE.bazel.lock</code>, and every
+later evaluation declares it until an upgrade is asked for. List the
+directory in a <code>deps</code> tag's <code>roots</code>; every <code>.tf</code> file in it is scanned,
+and modules composed of other registry or git modules are followed.</p>
 <pre><code class="language-python">terraform.deps(
     name = "shared",
     lock = "//:.terraform.lock.hcl",
-    # Every directory whose `module` blocks name a registry module, root
-    # modules and shared libraries alike, given as any .tf file inside it.
     roots = [
         "//envs/prod/app:main.tf",
-        "//modules/naming:main.tf",
+        "//modules/naming:main.tf",     # a library whose blocks name a registry module
     ],
 )
 </code></pre>
-<p>Then every <code>terraform_module</code> whose blocks name a registry module depends
-on <code>@shared</code> (or <code>@shared//:modules</code> for a library that should not install
-providers). Archives are pooled, and a module depending on the hub depends
-on a candidate pool from which only what its own <code>module</code> blocks name is
-installed, so a tag may list many directories. The
-<a href="https://github.com/periareon/rules_terraform/tree/main/examples/monorepo">monorepo example</a>
-does this across three environments and a shared library.</p>
-<p>OpenTofu users load the parallel extension — same tag class, but the
-registry defaults to <code>registry.opentofu.org</code>:</p>
-<pre><code class="language-python">tofu = use_extension("@rules_terraform//tofu:extensions.bzl", "tofu")
-tofu.deps(
-    name = "app",
-    lock = "//:.terraform.lock.hcl",
-    roots = ["//:main.tf"],
-)
-use_repo(tofu, "app")
-</code></pre>
-<p><strong>At extension eval time</strong> the impl reads every <code>*.tf</code> file in each
-directory listed in <code>roots</code> (matching Terraform's own "root module is a
-directory" model), parses <code>module { source = "…" }</code> blocks, and for
-every registry-shaped source:</p>
-<ol>
-<li>Hits <code>/v1/modules/&lt;ns&gt;/&lt;name&gt;/&lt;provider&gt;/versions</code> and picks the
-highest version satisfying the block's <code>version</code> constraint via a
-Starlark port of Terraform's semver logic.</li>
-<li>Hits <code>/v1/modules/&lt;ns&gt;/&lt;name&gt;/&lt;provider&gt;/&lt;version&gt;</code> for metadata —
-reads <code>source</code> (git URL) and <code>tag</code>, constructs a direct GitHub
-tarball URL (<code>&lt;source&gt;/archive/refs/tags/&lt;tag&gt;.tar.gz</code>) with the
-matching <code>strip_prefix</code>.</li>
-<li>Downloads the archive to compute the <code>sha256</code>.</li>
-<li>Once every <code>modules</code> tag has been resolved, registers one
-<code>http_archive</code> per distinct (registry, module address, version) in a
-<strong>pool shared by every hub</strong> (<code>rt_mod_&lt;registry&gt;_&lt;address&gt;_&lt;version&gt;</code>),
-extracted whole. Each <code>//subdir</code> any hub referenced is a target inside
-that one repository rather than a second download. The hub itself is a
-<code>terraform_module_group</code> over the pool targets it resolved to.</li>
-</ol>
-<p>Every downstream fetch goes direct to GitHub — no registry hop at build
-time. Only GitHub-backed modules are supported; non-GitHub git hosts
-fail with a clear error at eval time. A source written with its own
-hostname (<code>app.terraform.io/acme/vpc/aws</code>) is resolved against that
-host rather than the tag's <code>registry</code>.</p>
+<p>Archives come straight from GitHub, which is where the public registries
+host their modules; a registry module hosted elsewhere is an error with
+the address, and is supplied by hand as below. A source written with its
+own hostname (<code>app.terraform.io/acme/vpc/aws</code>) is resolved against that
+host. OpenTofu users use the <code>tofu</code> extension's <code>deps</code> tag, which defaults
+to <code>registry.opentofu.org</code>.</p>
 <h3 id="git-modules"><a class="header" href="#git-modules">Git modules</a></h3>
-<p>A <code>module</code> block whose source is a git address is resolved by the same
-<code>roots</code> scan, with no registry involved:</p>
+<p>A <code>module</code> block whose source is a git address goes through the same
+<code>roots</code> scan with no registry involved, in the three spellings Terraform
+accepts: <code>git::https://…</code> or <code>git::ssh://…</code>, the scp-like
+<code>git@host:org/repo.git</code>, and the <code>github.com/org/repo</code> shorthand, each with
+an optional <code>//subdir</code> and <code>?ref=</code>.</p>
 <pre><code class="language-hcl">module "vpc" {
   source = "git::ssh://git@git.example.com/acme/terraform-modules.git//vpc?ref=v1.4.0"
 }
 </code></pre>
-<p>The three spellings Terraform accepts are all recognised: a forced
-<code>git::https://…</code> or <code>git::ssh://…</code> address, the scp-like
-<code>git@host:org/repo.git</code>, and the <code>github.com/org/repo</code> shorthand. Each
-may carry <code>//subdir</code> and <code>?ref=</code>. A <code>version</code> on a git block is an
-error, as it is for Terraform; the ref is the pin.</p>
-<p><strong>What the ref pins.</strong> A commit id is exact by construction. A tag is
-looked up once and what it names is recorded in <code>MODULE.bazel.lock</code>, so
-every later evaluation declares the same thing even if the tag is moved
-afterwards. A branch name, or no <code>?ref=</code> at all meaning the remote's
-default branch, is resolved to the commit it points at the first time and
-recorded the same way: it is a choice rather than a property, like a
-version constraint, and only <code>RULES_TERRAFORM_UPGRADE</code> moves it. The
-native CLI follows such a source live on every <code>init</code>, so a tag or commit
-in the block is still what keeps the two workflows on one revision.</p>
-<p><strong>GitHub over <code>https</code></strong> needs no git at all. The extension fetches the
-archive GitHub serves for the ref (<code>archive/refs/tags/&lt;tag&gt;.tar.gz</code> or
-<code>archive/&lt;commit&gt;.tar.gz</code>), exactly as it does for a registry module:
-unpacked once on a facts miss to record its integrity and read the
-module's own external references, then declared as an <code>http_archive</code>
-pinned by that integrity, named <code>rt_git_&lt;host_path&gt;_&lt;ref&gt;</code>. The tag
-form of the URL is not found for a branch, so a branch is fetched by the
-commit it resolved to. A moved tag fails the next fresh fetch on
-integrity rather than being followed. The <code>github.com/org/repo</code>
-shorthand takes this path.</p>
-<p><strong>Every other remote</strong>, <code>ssh://</code> to GitHub included, goes through the
-host's <code>git</code>. On a facts miss the extension asks the remote what the
-ref is (<code>ls-remote</code>), resolves a branch or the default branch to a commit, checks the tag or
-commit out one commit deep, records the commit and the module's own
-references, and discards the checkout. The repository Bazel builds
-against is a <code>new_git_repository</code> of that exact commit, named
-<code>rt_git_&lt;host_path&gt;_&lt;commit&gt;</code> and shared by every spelling and every hub
-that reaches it. It is fetched with the host's git and its credentials,
-so a private remote works wherever <code>git clone</code> of it would. <code>git</code> has to
-be on <code>PATH</code> both when the extension evaluates and when the repository
-is fetched.</p>
-<p>Either way, references found inside a git module are followed like a
-registry module's: a git module that names a registry module, or
-another git module, brings it into the hub. For a ref the facts already
-hold nothing is fetched.</p>
-<p><strong>Not handled:</strong> <code>?sshkey=</code> (credentials come from the host's git
-configuration or, for GitHub archives, Bazel's downloader through
-<code>.netrc</code> or a credential helper), submodules, and non-git remote sources
-such as plain <code>https://</code> archives or <code>s3::</code>. Those are supplied by hand,
-below.</p>
-<p><strong>Modules the extension cannot fetch</strong> — a registry module hosted off
-GitHub, or a plain <code>https://</code> / <code>s3::</code> source — can still be supplied
-by hand. Fetch the archive with whatever repository rule fits, declare
-a <a href="./terraform/terraform_external_module.html"><code>terraform_external_module</code></a>
-in its build file with <code>source</code> copied verbatim from the <code>module</code>
-block, and put the target in <code>deps</code>:</p>
+<p><strong>What the ref pins.</strong> A commit id is exact. A tag is looked up once and
+what it names is recorded, so a moved tag is not followed. A branch, or no
+<code>?ref=</code> meaning the default branch, is resolved to a commit the first time
+and recorded the same way: a choice, like a version constraint, that only
+<code>RULES_TERRAFORM_UPGRADE</code> moves. The native CLI follows such a source live
+on every <code>init</code>, so a tag or commit in the block is what keeps the two
+workflows on one revision.</p>
+<p><strong>GitHub over <code>https</code></strong> needs no git: the extension fetches the archive
+GitHub serves for the ref, records its integrity, and declares an
+<code>http_archive</code> pinned by it. <strong>Every other remote</strong>, <code>ssh://</code> to GitHub
+included, goes through the host's <code>git</code>: the ref is resolved with
+<code>ls-remote</code>, checked out once to record the commit and read the module's
+own references, and built as a <code>new_git_repository</code> of that commit,
+fetched with the host's credentials. <code>git</code> has to be on <code>PATH</code> when the
+extension evaluates and when the repository is fetched.</p>
+<p>Not handled: <code>?sshkey=</code>, submodules, and non-git sources such as plain
+<code>https://</code> archives or <code>s3::</code>.</p>
+<h3 id="modules-the-extension-cannot-fetch"><a class="header" href="#modules-the-extension-cannot-fetch">Modules the extension cannot fetch</a></h3>
+<p>Fetch the archive with any repository rule, declare a
+<a href="./terraform/terraform_external_module.html"><code>terraform_external_module</code></a>
+in its build file with <code>source</code> copied verbatim from the <code>module</code> block,
+and put the target in <code>deps</code>; the build installs it under every block
+whose <code>source</code> matches.</p>
 <pre><code class="language-python"># MODULE.bazel
 http_archive = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 http_archive(
@@ -789,7 +539,6 @@ http_archive(
 load("@rules_terraform//terraform:defs.bzl", "terraform_external_module")
 terraform_external_module(
     name = "module",
-    # Verbatim from the `module` block. No `version`: that is for registry modules.
     source = "https://git.example.com/acme/terraform-vpc/-/archive/v1.4.0/terraform-vpc-v1.4.0.tar.gz",
     srcs = glob(["**/*.tf"]),
     visibility = ["//visibility:public"],
@@ -797,55 +546,10 @@ terraform_external_module(
 """,
 )
 </code></pre>
-<p>The init aspect installs it under every <code>module</code> block whose <code>source</code>
-matches, the same way it places a registry module.</p>
-<p><strong>At build time</strong> the init aspect copies each module's files into
-<code>.terraform/modules/&lt;key&gt;/</code> and adds a corresponding entry to
-Terraform's <code>modules.json</code> manifest.</p>
-<p><strong>Reproducibility and caching.</strong> The extension is <code>reproducible = True</code>:
-every answer it ever took from the network, a constraint's resolved
-version, a tag's commit, an archive's URL and integrity, is a fact in
-<code>MODULE.bazel.lock</code>, so the same inputs and facts declare the same
-repositories. Every <code>.tf</code> edit in a root directory still re-evaluates it
-(bzlmod tracks each <code>module_ctx.read()</code>), but a re-evaluation with warm
-facts makes no network calls. Facts persist only while the lockfile is
-enabled. To re-resolve on purpose, set <code>RULES_TERRAFORM_UPGRADE=1</code> in the
-environment of one <code>bazel fetch</code> (or pass
-<code>--repo_env=RULES_TERRAFORM_UPGRADE=1</code>); the extension sees the variable
-through <code>module_ctx.getenv</code>, so setting and clearing it each count as an
-input change. See <a href="index.html#reproducibility">Reproducibility</a> and the
-<code>Implementation detail: network calls per eval</code> note below.</p>
-<p><strong>Non-default registries.</strong> Pass <code>registry = "…"</code> on the tag if you're
-pointing at a private mirror or an alternate registry; it applies to the
-providers and the modules of that tag alike.</p>
-<details>
-<summary><strong>Implementation detail: network calls per eval</strong></summary>
-<p>For each <code>module { }</code> block, the extension issues up to three Registry
-API requests, cached across evals via <code>module_ctx.facts</code>:</p>
-<div class="table-wrapper"><table><thead><tr><th>Call</th><th>Purpose</th><th>Cost</th><th>Skipped when</th></tr></thead><tbody>
-<tr><td><code>GET /v1/modules/&lt;source&gt;/versions</code></td><td>Resolve <code>version</code> constraint to a concrete SemVer</td><td>Small JSON</td><td><code>version</code> is an exact pin, or facts hold <code>resolve:&lt;registry&gt;/&lt;source&gt;@&lt;constraint&gt;</code> and no upgrade was asked for</td></tr>
-<tr><td><code>GET /v1/modules/&lt;source&gt;/&lt;version&gt;</code></td><td>Read <code>source</code> (git URL) + <code>tag</code> to build the archive URL</td><td>Small JSON</td><td>Facts cache has an entry for <code>&lt;source&gt;@&lt;version&gt;</code></td></tr>
-<tr><td><code>GET &lt;archive URL&gt;</code></td><td>Stream the archive body to compute an sha256 integrity</td><td><strong>MB per module</strong></td><td>Facts cache has an entry for <code>&lt;source&gt;@&lt;version&gt;</code></td></tr>
-</tbody></table>
-</div>
-<p>Two kinds of fact are kept. <code>&lt;source&gt;@&lt;concrete_version&gt;</code> stores
-<code>{url, strip_prefix, integrity}</code> and the module's own external references:
-historical facts that don't change once a version is published.
-<code>resolve:&lt;registry&gt;/&lt;source&gt;@&lt;constraint&gt;</code> stores the version a constraint
-resolved to, which is a choice rather than a property, and is only
-revisited under <code>RULES_TERRAFORM_UPGRADE</code>. Only entries for
-currently-declared modules carry across evals; entries for removed modules
-prune naturally.</p>
-</details>
-<h3 id="local--in-repo-modules"><a class="header" href="#local--in-repo-modules">Local / in-repo modules</a></h3>
-<p>Modules living inside your monorepo don't need a lock file — Bazel's
-own target graph is the source of truth.</p>
-<p>Give the child its own <code>terraform_module</code> and list it in the parent's
-<code>deps</code>. The path lives in one place — the <code>module</code> block — and <code>deps</code>
-just says which target supplies it, the way a <code>py_library</code> dep supplies
-an <code>import</code>:</p>
-<pre><code class="language-hcl"># root/main.tf
-module "greeter" {
+<h3 id="local-modules"><a class="header" href="#local-modules">Local modules</a></h3>
+<p>A child module in the repository is its own <code>terraform_module</code>, listed in
+the parent's <code>deps</code>; the path lives in the <code>module</code> block alone.</p>
+<pre><code class="language-hcl">module "greeter" {
   source = "./modules/greeter"
 }
 </code></pre>
@@ -855,95 +559,41 @@ module "greeter" {
     deps = ["//root/modules/greeter"],
 )
 </code></pre>
-<p>When the child's package sits under the parent's — the usual case,
-<code>//root/modules/greeter</code> beneath <code>//root</code> — the aspect places it at
-<code>modules/greeter</code> inside the module directory, which is already what
-<code>source = "./modules/greeter"</code> names.</p>
-<p>When it doesn't, the source path is matched against the tail of each
-dep's package. A child at <code>//shared/greeter</code> satisfies <code>source = "./greeter"</code>; nothing changes in the BUILD file:</p>
-<pre><code class="language-python">terraform_module(
-    name = "root",
-    srcs = glob(["*.tf"]),
-    deps = ["//shared/greeter"],
-)
-</code></pre>
-<p>Two mistakes are build errors rather than a silently wrong module
-directory: a local <code>source</code> no dep supplies, and a <code>terraform_module</code>
-dep no <code>module</code> block references. If two deps could satisfy the same
-source, that's an error too — rename one directory or nest it under the
-parent's package.</p>
-<h3 id="update-workflow--one-page-summary"><a class="header" href="#update-workflow--one-page-summary">Update workflow — one-page summary</a></h3>
-<div class="table-wrapper"><table><thead><tr><th>Change</th><th>What to do</th></tr></thead><tbody>
-<tr><td>Bump / add a provider</td><td>Update <code>required_providers { }</code>; regenerate <code>.terraform.lock.hcl</code> with <code>bazel run</code> on the module's <code>terraform_providers_lock</code> target</td></tr>
-<tr><td>Bump / add a registry module</td><td>Edit the <code>module { source = "…" version = "…" }</code> block and make sure its directory is in a <code>deps</code> tag's <code>roots</code>. A changed block resolves on the next <code>bazel fetch</code>; to move an unchanged <code>~&gt;</code> constraint to a newer release, run <code>RULES_TERRAFORM_UPGRADE=1 bazel fetch //...</code>. Commit the <code>MODULE.bazel.lock</code> diff either way.</td></tr>
-<tr><td>Bump / add a git module</td><td>Edit the <code>?ref=</code> in the <code>module { source = "git::…" }</code> block to the new tag or commit id. Branch names are refused. A tag is looked up once and what it names is recorded in <code>MODULE.bazel.lock</code>.</td></tr>
-<tr><td>Add / rename a local module</td><td>Write the <code>module { source = "…" }</code> block and add the child to the parent's <code>deps</code>; no lock file involved</td></tr>
-<tr><td>Verify everything</td><td><code>bazel test //...</code> — runs validate, fmt, tftest, and every lock drift check in one shot</td></tr>
-</tbody></table>
-</div>
+<p>A child whose package sits under the parent's lands at the path its
+package implies. Any other child is matched to the <code>module</code> block whose
+<code>source</code> names it by the tail of its package, so <code>//shared/greeter</code>
+satisfies <code>source = "./greeter"</code>. A <code>source</code> no dep supplies, a dep no
+block references, and two deps that could satisfy one source are build
+errors.</p>
 <h2 id="reproducibility"><a class="header" href="#reproducibility">Reproducibility</a></h2>
-<p>Every bzlmod extension in rules_terraform is <code>reproducible = True</code>: given
-the same tags, the same files, and the same facts, it declares the same
-repositories.</p>
-<div class="table-wrapper"><table><thead><tr><th>Part</th><th>Where its answers come from</th></tr></thead><tbody>
-<tr><td><code>toolchain</code> tag</td><td>URL and integrity vendored in <code>//&lt;engine&gt;/private:versions.bzl</code>; a tagged release's checksums fetched once and kept as facts.</td></tr>
-<tr><td><code>deps</code> tag, <code>lock</code> half</td><td>The checked-in <code>.terraform.lock.hcl</code> pins versions and hashes; the registry is asked only where each archive lives, and that answer is a fact.</td></tr>
-<tr><td><code>deps</code> tag, <code>roots</code> half</td><td>A version constraint or git ref is resolved once; the version or commit it named is a fact, and so are the archive's URL and integrity.</td></tr>
-</tbody></table>
-</div>
-<h3 id="the-role-of-modulebazellock"><a class="header" href="#the-role-of-modulebazellock">The role of <code>MODULE.bazel.lock</code></a></h3>
-<p>Facts live in the lockfile. That is what turns "resolved once" into
-"resolved once per repository" rather than once per machine:</p>
-<ol>
-<li>
-<p><strong>Reproducibility.</strong> <code>~&gt; 5.0</code> resolves to <code>5.7.1</code> today and would
-resolve to <code>5.7.2</code> tomorrow. The first evaluation records <code>5.7.1</code> as a
-fact; every evaluation after that, on any machine, declares <code>5.7.1</code>
-until someone asks for an upgrade. The choice is in the lockfile, in
-the diff, and in review.</p>
-</li>
-<li>
-<p><strong>Performance.</strong> Every <code>.tf</code> edit under a <code>roots</code> directory
-re-evaluates the extension (bzlmod tracks each <code>module_ctx.read()</code>).
-With warm facts a re-evaluation makes no network calls; without the
-lockfile there are no facts, and every re-evaluation resolves and
-downloads from scratch.</p>
-</li>
-</ol>
-<p><strong>Recommended downstream setup</strong> — in your consuming repo's <code>.bazelrc</code>:</p>
+<p>The extensions are <code>reproducible = True</code>: given the same tags, files and
+facts they declare the same repositories. Every answer taken from the
+network is a fact in <code>MODULE.bazel.lock</code>: a tagged engine release's
+checksums, where a provider archive lives, the version a module
+constraint resolved to, the commit a git ref named, an archive's
+integrity. A <code>.tf</code> edit under a <code>roots</code> directory re-evaluates the
+extension, but with warm facts that makes no network calls.</p>
+<p>Facts persist only while the lockfile is enabled, so downstream:</p>
 <pre><code>common --lockfile_mode=update
-# or, once you're confident in the state:
+# or, once confident:
 common --lockfile_mode=strict
 </code></pre>
-<p>Commit <code>MODULE.bazel.lock</code>. This gives you deterministic module versions
-regardless of how loosely the <code>.tf</code> constraints are written, cheap
-re-evaluations, and a PR-visible diff whenever a resolution changes.</p>
-<p><code>--lockfile_mode=off</code> is the one way to opt out: with nothing to hold
-facts, every evaluation resolves live, exactly as <code>terraform init</code> does.</p>
-<p><strong>Exact pins are still worth writing.</strong> A block pinned to <code>5.7.1</code> skips
-even the first <code>/versions</code> call, and it is the only form the native
-<code>terraform init</code> also treats as fixed, so it is what keeps the Bazel and
-non-Bazel workflows on the same module code.</p>
+<p>and commit <code>MODULE.bazel.lock</code>. That gives deterministic module versions
+however loosely the constraints are written, and a PR-visible diff
+whenever a resolution changes. <code>--lockfile_mode=off</code> resolves live on
+every evaluation, exactly as <code>terraform init</code> does. An exact pin in a
+<code>module</code> block is still worth writing: it is the only form the native
+<code>init</code> also treats as fixed.</p>
 <h3 id="upgrading"><a class="header" href="#upgrading">Upgrading</a></h3>
-<p>A recorded resolution is kept on purpose, so a newer release of a module
-does not arrive by itself. To take it:</p>
-<ol>
-<li>Run <code>RULES_TERRAFORM_UPGRADE=1 bazel fetch //...</code> (or
-<code>--repo_env=RULES_TERRAFORM_UPGRADE=1</code>). Every version constraint and
-git ref is resolved again and the facts are rewritten. Facts that are
-properties of a published version, an archive's integrity, are kept.</li>
-<li>Review the <code>MODULE.bazel.lock</code> diff and commit it with any <code>.tf</code>
-change.</li>
-</ol>
-<p>Editing a <code>module</code> block's <code>source</code> or <code>version</code> is itself a new key, so a
+<p>A recorded resolution is kept on purpose. To move a constraint or a branch
+to what it resolves to today:</p>
+<pre><code class="language-bash">RULES_TERRAFORM_UPGRADE=1 bazel fetch //...   # or --repo_env=RULES_TERRAFORM_UPGRADE=1
+</code></pre>
+<p>Every constraint and git ref is resolved again and the facts rewritten;
+facts that are properties of a published version, such as an archive's
+integrity, are kept. Review the <code>MODULE.bazel.lock</code> diff and commit it.
+Editing a block's <code>source</code>, <code>version</code> or <code>?ref=</code> is itself a new key, so a
 changed block resolves on the next <code>bazel fetch</code> without the switch.</p>
-<h3 id="rules_terraforms-own-modulebazellock"><a class="header" href="#rules_terraforms-own-modulebazellock">rules_terraform's own <code>MODULE.bazel.lock</code></a></h3>
-<p>The ruleset commits its lockfile. Its own test fixtures use the extension,
-so the lockfile is what keeps <code>bazel test //...</code> here offline and
-repeatable, and a PR that bumps a fixture's module version shows the
-resolved archive in the diff. The examples under <code>examples/</code> run with
-<code>--lockfile_mode=off</code> on purpose: they stand in for a downstream user's
-first build, where no facts exist yet.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="terraform-rules"><a class="header" href="#terraform-rules">Terraform Rules</a></h1>
 <h2 id="public-rules"><a class="header" href="#public-rules">Public rules</a></h2>
 <ul>
@@ -969,22 +619,19 @@ first build, where no facts exist yet.</p>
 <li><a href="terraform/terraform_binary.html#terraform_binary">terraform_binary</a></li>
 </ul>
 <p><a id="terraform_binary"></a></p>
-<h2 id="terraform_binary"><a class="header" href="#terraform_binary">terraform_binary</a></h2>
+<h2 id="terraform_binary-1"><a class="header" href="#terraform_binary-1">terraform_binary</a></h2>
 <pre>
 load("@rules_terraform//terraform:terraform_binary.bzl", "terraform_binary")
 
 terraform_binary(<a href="terraform/terraform_binary.html#terraform_binary-name">name</a>, <a href="terraform/terraform_binary.html#terraform_binary-root">root</a>)
 </pre>
-<p>Wraps the terraform binary for a <code>terraform_module</code> root. Invoke via
-<code>bazel run</code> — any subcommand and args are passed straight through, so
-<code>bazel run //x:terraform -- plan</code>, <code>... -- apply</code>, <code>... -- state list</code>, etc.
-mirror the nominal CLI.</p>
-<p>The <code>.terraform</code> directory is assembled hermetically by
-<code>terraform_init_aspect</code>; providers and modules come from Bazel-managed
-dependencies rather than the network.</p>
-<p><code>init</code> is the one subcommand not passed through. It installs that
-<code>.terraform</code> directory into the module's source directory and initializes
-the backend there, so the native CLI works in that directory afterwards.</p>
+<p>Runs terraform on a <code>terraform_module</code> root. Arguments pass through:
+<code>bazel run //x:terraform -- plan</code>, <code>-- apply</code>, <code>-- state list</code>. The engine
+runs in a temp copy of the built module directory, providers and modules
+already installed, so nothing is fetched at run time.</p>
+<p><code>init</code> is the exception: it installs that directory into the module's
+source directory and initializes the backend there, so the native CLI
+works in that directory afterwards.</p>
 <p><strong>ATTRIBUTES</strong></p>
 <div class="table-wrapper"><table><thead><tr><th style="text-align: left">Name</th><th style="text-align: left">Description</th><th style="text-align: left">Type</th><th style="text-align: left">Mandatory</th><th style="text-align: left">Default</th></tr></thead><tbody>
 <tr><td style="text-align: left"><a id="terraform_binary-name"></a>name</td><td style="text-align: left">A unique name for this target.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels#target-names">Name</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
@@ -1004,19 +651,18 @@ load("@rules_terraform//terraform:terraform_external_module.bzl", "terraform_ext
 terraform_external_module(<a href="terraform/terraform_external_module.html#terraform_external_module-name">name</a>, <a href="terraform/terraform_external_module.html#terraform_external_module-srcs">srcs</a>, <a href="terraform/terraform_external_module.html#terraform_external_module-source">source</a>, <a href="terraform/terraform_external_module.html#terraform_external_module-subdir">subdir</a>, <a href="terraform/terraform_external_module.html#terraform_external_module-version">version</a>)
 </pre>
 <p>A module whose files come from outside the workspace.</p>
-<p>The <code>terraform.modules(...)</code> extension declares one of these per registry
-module it resolves. Declare one yourself, in the <code>build_file_content</code> of an
-<code>http_archive</code> or <code>git_repository</code>, to supply a module the extension cannot
-fetch: a module hosted somewhere other than a public registry, or a plain
-<code>git::</code> / <code>https://</code> source. Match <code>source</code> to the <code>module</code> block verbatim and
-list the target in the consuming <code>terraform_module</code>'s <code>deps</code>.</p>
+<p>The <code>deps</code> tag declares one per registry or git module it resolves. Declare
+one yourself, in the <code>build_file_content</code> of an <code>http_archive</code> or
+<code>git_repository</code>, for a module the extension cannot fetch. <code>source</code> must
+match the <code>module</code> block verbatim; list the target in the consuming
+<code>terraform_module</code>'s <code>deps</code>.</p>
 <p><strong>ATTRIBUTES</strong></p>
 <div class="table-wrapper"><table><thead><tr><th style="text-align: left">Name</th><th style="text-align: left">Description</th><th style="text-align: left">Type</th><th style="text-align: left">Mandatory</th><th style="text-align: left">Default</th></tr></thead><tbody>
 <tr><td style="text-align: left"><a id="terraform_external_module-name"></a>name</td><td style="text-align: left">A unique name for this target.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels#target-names">Name</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
 <tr><td style="text-align: left"><a id="terraform_external_module-srcs"></a>srcs</td><td style="text-align: left">Every file of the module's repository or archive, not only the module's own: templates and other data the configuration reads, and the siblings a <code>../</code> source inside it names.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">List of labels</a></td><td style="text-align: left">optional</td><td style="text-align: left"><code>[]</code></td></tr>
-<tr><td style="text-align: left"><a id="terraform_external_module-source"></a>source</td><td style="text-align: left">The <code>source</code> string exactly as <code>module</code> blocks write it: a registry address (<code>terraform-aws-modules/vpc/aws</code>, with any <code>//subdir</code>), or any other address Terraform accepts, such as <code>git::https://…?ref=v1.2.0</code>. The init aspect installs this module under every <code>module</code> block whose <code>source</code> matches.</td><td style="text-align: left">String</td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
-<tr><td style="text-align: left"><a id="terraform_external_module-subdir"></a>subdir</td><td style="text-align: left">The module's directory inside <code>srcs</code>: the <code>//subdir</code> of the source, empty for the archive root. The init aspect installs all of <code>srcs</code> under the module's key and points the engine at this directory within them, as <code>terraform init</code> lays out a <code>//subdir</code> source.</td><td style="text-align: left">String</td><td style="text-align: left">optional</td><td style="text-align: left"><code>""</code></td></tr>
-<tr><td style="text-align: left"><a id="terraform_external_module-version"></a>version</td><td style="text-align: left">The module's version, for a registry module. The init aspect records it in the module manifest and uses it to pick between two versions of one module. Leave it empty for a git or other non-registry source: Terraform rejects a manifest entry whose version is not a semantic version, and a commit id or tag name is not one.</td><td style="text-align: left">String</td><td style="text-align: left">optional</td><td style="text-align: left"><code>""</code></td></tr>
+<tr><td style="text-align: left"><a id="terraform_external_module-source"></a>source</td><td style="text-align: left">The <code>source</code> string exactly as the <code>module</code> blocks write it. The module is installed under every block whose <code>source</code> matches.</td><td style="text-align: left">String</td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
+<tr><td style="text-align: left"><a id="terraform_external_module-subdir"></a>subdir</td><td style="text-align: left">The module's directory inside <code>srcs</code>: the <code>//subdir</code> of the source, empty for the archive root.</td><td style="text-align: left">String</td><td style="text-align: left">optional</td><td style="text-align: left"><code>""</code></td></tr>
+<tr><td style="text-align: left"><a id="terraform_external_module-version"></a>version</td><td style="text-align: left">The module's version, for a registry module. Leave it empty for a git or other source: the manifest only accepts a semantic version.</td><td style="text-align: left">String</td><td style="text-align: left">optional</td><td style="text-align: left"><code>""</code></td></tr>
 </tbody></table>
 </div><div style="break-before: page; page-break-before: always;"></div><!-- Generated with Stardoc: http://skydoc.bazel.build -->
 <p>terraform_fmt_aspect</p>
@@ -1047,11 +693,11 @@ load("@rules_terraform//terraform:terraform_fmt_test.bzl", "terraform_fmt_test")
 
 terraform_fmt_test(<a href="terraform/terraform_fmt_test.html#terraform_fmt_test-name">name</a>, <a href="terraform/terraform_fmt_test.html#terraform_fmt_test-target">target</a>)
 </pre>
-<p>A rule for running <code>terraform fmt</code> on a Terraform target.</p>
+<p>Fails when <code>terraform fmt</code> would change a module's sources.</p>
 <p><strong>ATTRIBUTES</strong></p>
 <div class="table-wrapper"><table><thead><tr><th style="text-align: left">Name</th><th style="text-align: left">Description</th><th style="text-align: left">Type</th><th style="text-align: left">Mandatory</th><th style="text-align: left">Default</th></tr></thead><tbody>
 <tr><td style="text-align: left"><a id="terraform_fmt_test-name"></a>name</td><td style="text-align: left">A unique name for this target.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels#target-names">Name</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
-<tr><td style="text-align: left"><a id="terraform_fmt_test-target"></a>target</td><td style="text-align: left">-</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">Label</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
+<tr><td style="text-align: left"><a id="terraform_fmt_test-target"></a>target</td><td style="text-align: left">The module to check.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">Label</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
 </tbody></table>
 </div><div style="break-before: page; page-break-before: always;"></div><!-- Generated with Stardoc: http://skydoc.bazel.build -->
 <p>terraform_module</p>
@@ -1066,15 +712,15 @@ load("@rules_terraform//terraform:terraform_module.bzl", "terraform_module")
 
 terraform_module(<a href="terraform/terraform_module.html#terraform_module-name">name</a>, <a href="terraform/terraform_module.html#terraform_module-deps">deps</a>, <a href="terraform/terraform_module.html#terraform_module-srcs">srcs</a>, <a href="terraform/terraform_module.html#terraform_module-data">data</a>, <a href="terraform/terraform_module.html#terraform_module-disposable_state">disposable_state</a>, <a href="terraform/terraform_module.html#terraform_module-lock">lock</a>)
 </pre>
-<p>Defines a terraform module that can be used as a dependency in other Terraform targets.</p>
+<p>One directory of terraform configuration: a root module, or a child that another module's <code>module</code> block names.</p>
 <p><strong>ATTRIBUTES</strong></p>
 <div class="table-wrapper"><table><thead><tr><th style="text-align: left">Name</th><th style="text-align: left">Description</th><th style="text-align: left">Type</th><th style="text-align: left">Mandatory</th><th style="text-align: left">Default</th></tr></thead><tbody>
 <tr><td style="text-align: left"><a id="terraform_module-name"></a>name</td><td style="text-align: left">A unique name for this target.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels#target-names">Name</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
-<tr><td style="text-align: left"><a id="terraform_module-deps"></a>deps</td><td style="text-align: left">Other module targets, a dependency hub (<code>@&lt;name&gt;</code> from a <code>deps</code> tag, or its <code>//:providers</code> / <code>//:modules</code> halves), individual <code>@&lt;name&gt;//&lt;namespace&gt;_&lt;name&gt;</code> providers, <code>terraform_provider</code>, or <code>terraform_external_module</code> targets this module depends on.<br><br>A module dep is the Bazel half of a <code>module</code> block, the way a <code>py_library</code> dep is the Bazel half of an <code>import</code>: the <code>.tf</code> file names the path, <code>deps</code> says which target supplies it. A dep whose package already nests under this module's directory lands at that relative path; anything else is matched to a <code>module</code> block whose <code>source</code> ends with the dep's package name.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">List of labels</a></td><td style="text-align: left">optional</td><td style="text-align: left"><code>[]</code></td></tr>
-<tr><td style="text-align: left"><a id="terraform_module-srcs"></a>srcs</td><td style="text-align: left">The configuration files that make up this module: <code>.tf</code>, <code>.tf.json</code>. Any other file is an error, since terraform would not load it.<br><br>All of them must live directly in this target's package: a module is a single directory. Put nested configuration files in their own module target and reference it with a <code>module</code> block.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">List of labels</a></td><td style="text-align: left">optional</td><td style="text-align: left"><code>[]</code></td></tr>
+<tr><td style="text-align: left"><a id="terraform_module-deps"></a>deps</td><td style="text-align: left">What the configuration references: child <code>terraform_module</code>s for its local <code>module</code> blocks, a dependency hub (<code>@&lt;name&gt;</code> from a <code>deps</code> tag, or its <code>//:providers</code> / <code>//:modules</code> halves) or single <code>@&lt;name&gt;//&lt;namespace&gt;_&lt;name&gt;</code> providers, and <code>terraform_provider</code> or <code>terraform_external_module</code> targets. The <code>module</code> block names a child's path; <code>deps</code> says which target supplies it. A child in a package under this one lands at its relative path; any other is matched to the block whose <code>source</code> ends with its package name.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">List of labels</a></td><td style="text-align: left">optional</td><td style="text-align: left"><code>[]</code></td></tr>
+<tr><td style="text-align: left"><a id="terraform_module-srcs"></a>srcs</td><td style="text-align: left">The configuration files of this module: <code>.tf</code>, <code>.tf.json</code>, all directly in this target's package. A nested directory of configuration is its own module target, named by a <code>module</code> block.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">List of labels</a></td><td style="text-align: left">optional</td><td style="text-align: left"><code>[]</code></td></tr>
 <tr><td style="text-align: left"><a id="terraform_module-data"></a>data</td><td style="text-align: left">Additional files or targets that should be available at runtime.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">List of labels</a></td><td style="text-align: left">optional</td><td style="text-align: left"><code>[]</code></td></tr>
-<tr><td style="text-align: left"><a id="terraform_module-disposable_state"></a>disposable_state</td><td style="text-align: left">Whether this module's local state may go with the run, for a module with no <code>backend</code> or <code>cloud</code> block.<br><br><code>bazel run</code> executes the engine in a staged copy that is deleted when the command finishes. True, the default, leaves the engine to keep state where it natively would, its working directory, so the state goes with the copy: right for demos, sandboxes and anything <code>plan</code>-only. A run that did write state is kept and its path printed, so nothing vanishes silently. False points the engine's local backend at <code>terraform.tfstate</code> (and <code>terraform.tfstate.d/</code> for workspaces) in a per-module directory under <code>bazel-out/rules_terraform/</code>, where it outlives the run. That directory is private to the machine and <code>bazel clean</code> deletes it; state that must outlast that belongs in a backend. An error when the module declares a backend, whose state is the backend's.</td><td style="text-align: left">Boolean</td><td style="text-align: left">optional</td><td style="text-align: left"><code>True</code></td></tr>
-<tr><td style="text-align: left"><a id="terraform_module-lock"></a>lock</td><td style="text-align: left">An optional <code>.terraform.lock.hcl</code> file.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">Label</a></td><td style="text-align: left">optional</td><td style="text-align: left"><code>None</code></td></tr>
+<tr><td style="text-align: left"><a id="terraform_module-disposable_state"></a>disposable_state</td><td style="text-align: left">Whether local state may go with the run, for a module with no <code>backend</code> or <code>cloud</code> block. True, the default: the engine keeps state in the run's temp directory, which is deleted afterwards; a run that wrote state is kept and its path printed. False: state is kept under <code>bazel-out/rules_terraform/</code> across runs, until <code>bazel clean</code>. An error when the module declares a backend.</td><td style="text-align: left">Boolean</td><td style="text-align: left">optional</td><td style="text-align: left"><code>True</code></td></tr>
+<tr><td style="text-align: left"><a id="terraform_module-lock"></a>lock</td><td style="text-align: left">The module's <code>.terraform.lock.hcl</code>. Not needed when <code>deps</code> names a dependency hub, which carries its lock.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">Label</a></td><td style="text-align: left">optional</td><td style="text-align: left"><code>None</code></td></tr>
 </tbody></table>
 </div><div style="break-before: page; page-break-before: always;"></div><!-- Generated with Stardoc: http://skydoc.bazel.build -->
 <p>terraform_plan_test</p>
@@ -1089,14 +735,9 @@ load("@rules_terraform//terraform:terraform_plan_test.bzl", "terraform_plan_test
 
 terraform_plan_test(<a href="terraform/terraform_plan_test.html#terraform_plan_test-name">name</a>, <a href="terraform/terraform_plan_test.html#terraform_plan_test-tags">tags</a>, <a href="terraform/terraform_plan_test.html#terraform_plan_test-kwargs">**kwargs</a>)
 </pre>
-<p>Runs a real <code>terraform plan</code> as a test and keeps the plan for review.</p>
-<p>A thin wrapper over the rule of the same name that adds the
-<code>requires-network</code> tag: a plan reaches the state backend and, for most
-providers, the provider's API. Credentials come from the environment, so
-pass them with <code>--test_env</code>. Providers that work offline (<code>null</code>,
-<code>local</code>, <code>random</code>) need neither.</p>
-<p>See the rule's documentation for the attributes and the artefacts left in
-the undeclared test outputs directory.</p>
+<p>Runs <code>terraform plan</code> as a test and keeps the plan for review.</p>
+<p>The rule of the same name, tagged <code>requires-network</code>: a plan reaches the
+backend and the provider APIs, with credentials from <code>--test_env</code>.</p>
 <p><strong>PARAMETERS</strong></p>
 <div class="table-wrapper"><table><thead><tr><th style="text-align: left">Name</th><th style="text-align: left">Description</th><th style="text-align: left">Default Value</th></tr></thead><tbody>
 <tr><td style="text-align: left"><a id="terraform_plan_test-name"></a>name</td><td style="text-align: left">(str) Target name.</td><td style="text-align: left">none</td></tr>
@@ -1104,11 +745,7 @@ the undeclared test outputs directory.</p>
 <tr><td style="text-align: left"><a id="terraform_plan_test-kwargs"></a>kwargs</td><td style="text-align: left">Forwarded to the rule: <code>root</code>, <code>plan_args</code>, <code>expect_no_changes</code>, <code>lock</code>, and the usual test attributes.</td><td style="text-align: left">none</td></tr>
 </tbody></table>
 </div><div style="break-before: page; page-break-before: always;"></div><!-- Generated with Stardoc: http://skydoc.bazel.build -->
-<p>terraform_providers_lock — <code>bazel run</code> updater for <code>.terraform.lock.hcl</code>.</p>
-<p>Runs <code>terraform providers lock -platform=&lt;all&gt;</code> under the toolchain-fetched
-<code>terraform</code> binary and writes the multi-platform lock file back to source.
-No engine needs to be installed on the host. This is the one path that
-produces hashes for platforms Bazel didn't resolve for the current build.</p>
+<p>terraform_providers_lock</p>
 <h2 id="rules-4"><a class="header" href="#rules-4">Rules</a></h2>
 <ul>
 <li><a href="terraform/terraform_providers_lock.html#terraform_providers_lock">terraform_providers_lock</a></li>
@@ -1120,25 +757,18 @@ load("@rules_terraform//terraform:terraform_providers_lock.bzl", "terraform_prov
 
 terraform_providers_lock(<a href="terraform/terraform_providers_lock.html#terraform_providers_lock-name">name</a>, <a href="terraform/terraform_providers_lock.html#terraform_providers_lock-output">output</a>, <a href="terraform/terraform_providers_lock.html#terraform_providers_lock-platforms">platforms</a>, <a href="terraform/terraform_providers_lock.html#terraform_providers_lock-target">target</a>)
 </pre>
-<p>Regenerates <code>.terraform.lock.hcl</code> for a <code>terraform_module</code> by running
-real <code>terraform providers lock -platform=&lt;all&gt;</code> under the toolchain-fetched
-terraform binary. <code>bazel run</code> writes the multi-platform result back to
-source — the one path that produces hashes for platforms Bazel didn't
-resolve for the current build.</p>
+<p><code>bazel run</code> target that writes a module's <code>.terraform.lock.hcl</code> with the
+toolchain terraform, recording hashes for every platform in <code>platforms</code> at
+once, which the engine's own <code>init</code> does not do. Needs the network.</p>
 <p><strong>ATTRIBUTES</strong></p>
 <div class="table-wrapper"><table><thead><tr><th style="text-align: left">Name</th><th style="text-align: left">Description</th><th style="text-align: left">Type</th><th style="text-align: left">Mandatory</th><th style="text-align: left">Default</th></tr></thead><tbody>
 <tr><td style="text-align: left"><a id="terraform_providers_lock-name"></a>name</td><td style="text-align: left">A unique name for this target.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels#target-names">Name</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
-<tr><td style="text-align: left"><a id="terraform_providers_lock-output"></a>output</td><td style="text-align: left">Where to write the multi-platform <code>.terraform.lock.hcl</code>, relative to this BUILD file's package. Diff-test companions should point <code>golden = "&lt;same-path&gt;"</code>.</td><td style="text-align: left">String</td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
-<tr><td style="text-align: left"><a id="terraform_providers_lock-platforms"></a>platforms</td><td style="text-align: left">os_arch platforms to record hashes for. Defaults to the common set.</td><td style="text-align: left">List of strings</td><td style="text-align: left">optional</td><td style="text-align: left"><code>[]</code></td></tr>
-<tr><td style="text-align: left"><a id="terraform_providers_lock-target"></a>target</td><td style="text-align: left">The terraform_module whose .tf sources drive the lock resolution. Its local child modules come along, so <code>required_providers</code> blocks anywhere in the tree count.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">Label</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
+<tr><td style="text-align: left"><a id="terraform_providers_lock-output"></a>output</td><td style="text-align: left">Where to write the lock, relative to this package: <code>.terraform.lock.hcl</code>.</td><td style="text-align: left">String</td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
+<tr><td style="text-align: left"><a id="terraform_providers_lock-platforms"></a>platforms</td><td style="text-align: left">Platforms to record hashes for, as <code>linux_amd64</code>. Default: linux_amd64, linux_arm64, darwin_amd64, darwin_arm64, windows_amd64.</td><td style="text-align: left">List of strings</td><td style="text-align: left">optional</td><td style="text-align: left"><code>[]</code></td></tr>
+<tr><td style="text-align: left"><a id="terraform_providers_lock-target"></a>target</td><td style="text-align: left">The <code>terraform_module</code> the lock covers, its local child modules included.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">Label</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
 </tbody></table>
 </div><div style="break-before: page; page-break-before: always;"></div><!-- Generated with Stardoc: http://skydoc.bazel.build -->
-<p>terraform_providers_lock_test — drift check for <code>.terraform.lock.hcl</code>.</p>
-<p>Fails if the lock file doesn't cover every provider the module tree
-requires, declared in <code>required_providers</code> or implied by the resources it
-uses, local and installed external modules included, or locks one nothing
-requires. Reads the directory the init aspect built; no engine binary is
-invoked.</p>
+<p>terraform_providers_lock_test</p>
 <h2 id="rules-5"><a class="header" href="#rules-5">Rules</a></h2>
 <ul>
 <li><a href="terraform/terraform_providers_lock_test.html#terraform_providers_lock_test">terraform_providers_lock_test</a></li>
@@ -1175,14 +805,15 @@ load("@rules_terraform//terraform:terraform_provider.bzl", "terraform_provider")
 
 terraform_provider(<a href="terraform/terraform_provider.html#terraform_provider-name">name</a>, <a href="terraform/terraform_provider.html#terraform_provider-files">files</a>, <a href="terraform/terraform_provider.html#terraform_provider-platform">platform</a>, <a href="terraform/terraform_provider.html#terraform_provider-source">source</a>, <a href="terraform/terraform_provider.html#terraform_provider-version">version</a>)
 </pre>
-<p>Defines a Terraform provider that can be used as a dependency in terraform_module targets.</p>
+<p>A provider built in this repository, for a <code>terraform_module</code>'s
+<code>deps</code>. Registry providers come from a <code>deps</code> tag's hub instead.</p>
 <p><strong>ATTRIBUTES</strong></p>
 <div class="table-wrapper"><table><thead><tr><th style="text-align: left">Name</th><th style="text-align: left">Description</th><th style="text-align: left">Type</th><th style="text-align: left">Mandatory</th><th style="text-align: left">Default</th></tr></thead><tbody>
 <tr><td style="text-align: left"><a id="terraform_provider-name"></a>name</td><td style="text-align: left">A unique name for this target.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels#target-names">Name</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
-<tr><td style="text-align: left"><a id="terraform_provider-files"></a>files</td><td style="text-align: left">The provider binary files.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">List of labels</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
-<tr><td style="text-align: left"><a id="terraform_provider-platform"></a>platform</td><td style="text-align: left">Platform string (e.g., 'linux_amd64', 'darwin_arm64'). Set by the generated repositories for registry providers. Leave it empty for a provider built in this repo: it is then taken from the target platform of the configuration the provider is built in.</td><td style="text-align: left">String</td><td style="text-align: left">optional</td><td style="text-align: left"><code>""</code></td></tr>
-<tr><td style="text-align: left"><a id="terraform_provider-source"></a>source</td><td style="text-align: left">Provider source (e.g., 'hashicorp/null').</td><td style="text-align: left">String</td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
-<tr><td style="text-align: left"><a id="terraform_provider-version"></a>version</td><td style="text-align: left">Provider version (e.g., '3.2.4').</td><td style="text-align: left">String</td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
+<tr><td style="text-align: left"><a id="terraform_provider-files"></a>files</td><td style="text-align: left">The provider binary and any files shipped with it.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">List of labels</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
+<tr><td style="text-align: left"><a id="terraform_provider-platform"></a>platform</td><td style="text-align: left">The platform, as <code>linux_amd64</code>. Leave it empty for a provider built here: it is taken from the configuration the provider is built in.</td><td style="text-align: left">String</td><td style="text-align: left">optional</td><td style="text-align: left"><code>""</code></td></tr>
+<tr><td style="text-align: left"><a id="terraform_provider-source"></a>source</td><td style="text-align: left">The provider address as <code>required_providers</code> writes it, e.g. <code>hashicorp/null</code>.</td><td style="text-align: left">String</td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
+<tr><td style="text-align: left"><a id="terraform_provider-version"></a>version</td><td style="text-align: left">The provider version, e.g. <code>3.2.4</code>.</td><td style="text-align: left">String</td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
 </tbody></table>
 </div><div style="break-before: page; page-break-before: always;"></div><!-- Generated with Stardoc: http://skydoc.bazel.build -->
 <p>terraform_test</p>
@@ -1197,22 +828,15 @@ load("@rules_terraform//terraform:terraform_test.bzl", "terraform_test")
 
 terraform_test(<a href="terraform/terraform_test.html#terraform_test-name">name</a>, <a href="terraform/terraform_test.html#terraform_test-root">root</a>, <a href="terraform/terraform_test.html#terraform_test-workspace">workspace</a>)
 </pre>
-<p>Runs terraform's native HCL test framework (<code>terraform test</code>) on the root
-module as a Bazel test. Test cases live in <code>.tftest.hcl</code> files. Fully
-hermetic — the .terraform directory is assembled by the init aspect from
-Bazel-managed deps.</p>
-<p>Each <code>run</code> block is reported as a JUnit test case through Bazel's
-<code>XML_OUTPUT_FILE</code> (Terraform writes the report itself; for OpenTofu the
-runner builds it from the <code>-json-into</code> event stream, which is also kept).
-The lock file and module manifest the test ran against are saved as
-undeclared test outputs.</p>
-<p>Bazel <code>--test_arg</code> values are intentionally ignored so the surface stays
-predictable — every run executes the module's <code>.tftest.hcl</code> files.</p>
+<p>Runs <code>terraform test</code> on the root module's <code>.tftest.hcl</code> files as a Bazel
+test. Each <code>run</code> block is a JUnit test case in Bazel's XML report, and the
+lock and module manifest the test ran against are kept as undeclared test
+outputs. <code>--test_arg</code> is ignored.</p>
 <p><strong>ATTRIBUTES</strong></p>
 <div class="table-wrapper"><table><thead><tr><th style="text-align: left">Name</th><th style="text-align: left">Description</th><th style="text-align: left">Type</th><th style="text-align: left">Mandatory</th><th style="text-align: left">Default</th></tr></thead><tbody>
 <tr><td style="text-align: left"><a id="terraform_test-name"></a>name</td><td style="text-align: left">A unique name for this target.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels#target-names">Name</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
 <tr><td style="text-align: left"><a id="terraform_test-root"></a>root</td><td style="text-align: left">The terraform_module target that serves as the root module.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">Label</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
-<tr><td style="text-align: left"><a id="terraform_test-workspace"></a>workspace</td><td style="text-align: left">Run in this Terraform workspace: <code>TF_WORKSPACE</code> is set to it for the engine, over anything in the test environment. Unset, the workspace is whatever the environment selects (<code>--test_env</code>), else <code>default</code>. One test target per workspace is how a root whose configuration is keyed on <code>terraform.workspace</code> gets every workspace checked.</td><td style="text-align: left">String</td><td style="text-align: left">optional</td><td style="text-align: left"><code>""</code></td></tr>
+<tr><td style="text-align: left"><a id="terraform_test-workspace"></a>workspace</td><td style="text-align: left">Run in this Terraform workspace, over anything <code>--test_env</code> sets. Unset, the environment's <code>TF_WORKSPACE</code> applies, else <code>default</code>. One test per workspace is how a root keyed on <code>terraform.workspace</code> gets each one checked.</td><td style="text-align: left">String</td><td style="text-align: left">optional</td><td style="text-align: left"><code>""</code></td></tr>
 </tbody></table>
 </div><div style="break-before: page; page-break-before: always;"></div><!-- Generated with Stardoc: http://skydoc.bazel.build -->
 <p>terraform_validate_aspect</p>
@@ -1248,7 +872,7 @@ terraform_validate_test(<a href="terraform/terraform_validate_test.html#terrafor
 <div class="table-wrapper"><table><thead><tr><th style="text-align: left">Name</th><th style="text-align: left">Description</th><th style="text-align: left">Type</th><th style="text-align: left">Mandatory</th><th style="text-align: left">Default</th></tr></thead><tbody>
 <tr><td style="text-align: left"><a id="terraform_validate_test-name"></a>name</td><td style="text-align: left">A unique name for this target.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels#target-names">Name</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
 <tr><td style="text-align: left"><a id="terraform_validate_test-target"></a>target</td><td style="text-align: left">The target to validate.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">Label</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
-<tr><td style="text-align: left"><a id="terraform_validate_test-workspace"></a>workspace</td><td style="text-align: left">Run in this Terraform workspace: <code>TF_WORKSPACE</code> is set to it for the engine, over anything in the test environment. Unset, the workspace is whatever the environment selects (<code>--test_env</code>), else <code>default</code>. One test target per workspace is how a root whose configuration is keyed on <code>terraform.workspace</code> gets every workspace checked.</td><td style="text-align: left">String</td><td style="text-align: left">optional</td><td style="text-align: left"><code>""</code></td></tr>
+<tr><td style="text-align: left"><a id="terraform_validate_test-workspace"></a>workspace</td><td style="text-align: left">Run in this Terraform workspace, over anything <code>--test_env</code> sets. Unset, the environment's <code>TF_WORKSPACE</code> applies, else <code>default</code>. One test per workspace is how a root keyed on <code>terraform.workspace</code> gets each one checked.</td><td style="text-align: left">String</td><td style="text-align: left">optional</td><td style="text-align: left"><code>""</code></td></tr>
 </tbody></table>
 </div><div style="break-before: page; page-break-before: always;"></div><h1 id="terraform-extensions"><a class="header" href="#terraform-extensions">Terraform Extensions</a></h1>
 <p>One module extension lives in <code>//terraform:extensions.bzl</code>, <code>terraform</code>,
@@ -1359,16 +983,13 @@ load("@rules_terraform//tofu:tofu_binary.bzl", "tofu_binary")
 
 tofu_binary(<a href="tofu/tofu_binary.html#tofu_binary-name">name</a>, <a href="tofu/tofu_binary.html#tofu_binary-root">root</a>)
 </pre>
-<p>Wraps the tofu binary for a <code>terraform_module</code> root. Invoke via
-<code>bazel run</code> — any subcommand and args are passed straight through, so
-<code>bazel run //x:tofu -- plan</code>, <code>... -- apply</code>, <code>... -- state list</code>, etc.
-mirror the nominal CLI.</p>
-<p>The <code>.terraform</code> directory is assembled hermetically by
-<code>terraform_init_aspect</code>; providers and modules come from Bazel-managed
-dependencies rather than the network.</p>
-<p><code>init</code> is the one subcommand not passed through. It installs that
-<code>.terraform</code> directory into the module's source directory and initializes
-the backend there, so the native CLI works in that directory afterwards.</p>
+<p>Runs tofu on a <code>terraform_module</code> root. Arguments pass through:
+<code>bazel run //x:tofu -- plan</code>, <code>-- apply</code>, <code>-- state list</code>. The engine
+runs in a temp copy of the built module directory, providers and modules
+already installed, so nothing is fetched at run time.</p>
+<p><code>init</code> is the exception: it installs that directory into the module's
+source directory and initializes the backend there, so the native CLI
+works in that directory afterwards.</p>
 <p><strong>ATTRIBUTES</strong></p>
 <div class="table-wrapper"><table><thead><tr><th style="text-align: left">Name</th><th style="text-align: left">Description</th><th style="text-align: left">Type</th><th style="text-align: left">Mandatory</th><th style="text-align: left">Default</th></tr></thead><tbody>
 <tr><td style="text-align: left"><a id="tofu_binary-name"></a>name</td><td style="text-align: left">A unique name for this target.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels#target-names">Name</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
@@ -1391,19 +1012,18 @@ load("@rules_terraform//tofu:tofu_external_module.bzl", "tofu_external_module")
 tofu_external_module(<a href="tofu/tofu_external_module.html#tofu_external_module-name">name</a>, <a href="tofu/tofu_external_module.html#tofu_external_module-srcs">srcs</a>, <a href="tofu/tofu_external_module.html#tofu_external_module-source">source</a>, <a href="tofu/tofu_external_module.html#tofu_external_module-subdir">subdir</a>, <a href="tofu/tofu_external_module.html#tofu_external_module-version">version</a>)
 </pre>
 <p>A module whose files come from outside the workspace.</p>
-<p>The <code>terraform.modules(...)</code> extension declares one of these per registry
-module it resolves. Declare one yourself, in the <code>build_file_content</code> of an
-<code>http_archive</code> or <code>git_repository</code>, to supply a module the extension cannot
-fetch: a module hosted somewhere other than a public registry, or a plain
-<code>git::</code> / <code>https://</code> source. Match <code>source</code> to the <code>module</code> block verbatim and
-list the target in the consuming <code>terraform_module</code>'s <code>deps</code>.</p>
+<p>The <code>deps</code> tag declares one per registry or git module it resolves. Declare
+one yourself, in the <code>build_file_content</code> of an <code>http_archive</code> or
+<code>git_repository</code>, for a module the extension cannot fetch. <code>source</code> must
+match the <code>module</code> block verbatim; list the target in the consuming
+<code>terraform_module</code>'s <code>deps</code>.</p>
 <p><strong>ATTRIBUTES</strong></p>
 <div class="table-wrapper"><table><thead><tr><th style="text-align: left">Name</th><th style="text-align: left">Description</th><th style="text-align: left">Type</th><th style="text-align: left">Mandatory</th><th style="text-align: left">Default</th></tr></thead><tbody>
 <tr><td style="text-align: left"><a id="tofu_external_module-name"></a>name</td><td style="text-align: left">A unique name for this target.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels#target-names">Name</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
 <tr><td style="text-align: left"><a id="tofu_external_module-srcs"></a>srcs</td><td style="text-align: left">Every file of the module's repository or archive, not only the module's own: templates and other data the configuration reads, and the siblings a <code>../</code> source inside it names.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">List of labels</a></td><td style="text-align: left">optional</td><td style="text-align: left"><code>[]</code></td></tr>
-<tr><td style="text-align: left"><a id="tofu_external_module-source"></a>source</td><td style="text-align: left">The <code>source</code> string exactly as <code>module</code> blocks write it: a registry address (<code>terraform-aws-modules/vpc/aws</code>, with any <code>//subdir</code>), or any other address Terraform accepts, such as <code>git::https://…?ref=v1.2.0</code>. The init aspect installs this module under every <code>module</code> block whose <code>source</code> matches.</td><td style="text-align: left">String</td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
-<tr><td style="text-align: left"><a id="tofu_external_module-subdir"></a>subdir</td><td style="text-align: left">The module's directory inside <code>srcs</code>: the <code>//subdir</code> of the source, empty for the archive root. The init aspect installs all of <code>srcs</code> under the module's key and points the engine at this directory within them, as <code>terraform init</code> lays out a <code>//subdir</code> source.</td><td style="text-align: left">String</td><td style="text-align: left">optional</td><td style="text-align: left"><code>""</code></td></tr>
-<tr><td style="text-align: left"><a id="tofu_external_module-version"></a>version</td><td style="text-align: left">The module's version, for a registry module. The init aspect records it in the module manifest and uses it to pick between two versions of one module. Leave it empty for a git or other non-registry source: Terraform rejects a manifest entry whose version is not a semantic version, and a commit id or tag name is not one.</td><td style="text-align: left">String</td><td style="text-align: left">optional</td><td style="text-align: left"><code>""</code></td></tr>
+<tr><td style="text-align: left"><a id="tofu_external_module-source"></a>source</td><td style="text-align: left">The <code>source</code> string exactly as the <code>module</code> blocks write it. The module is installed under every block whose <code>source</code> matches.</td><td style="text-align: left">String</td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
+<tr><td style="text-align: left"><a id="tofu_external_module-subdir"></a>subdir</td><td style="text-align: left">The module's directory inside <code>srcs</code>: the <code>//subdir</code> of the source, empty for the archive root.</td><td style="text-align: left">String</td><td style="text-align: left">optional</td><td style="text-align: left"><code>""</code></td></tr>
+<tr><td style="text-align: left"><a id="tofu_external_module-version"></a>version</td><td style="text-align: left">The module's version, for a registry module. Leave it empty for a git or other source: the manifest only accepts a semantic version.</td><td style="text-align: left">String</td><td style="text-align: left">optional</td><td style="text-align: left"><code>""</code></td></tr>
 </tbody></table>
 </div><div style="break-before: page; page-break-before: always;"></div><!-- Generated with Stardoc: http://skydoc.bazel.build -->
 <p>tofu_fmt_test</p>
@@ -1422,11 +1042,11 @@ load("@rules_terraform//tofu:tofu_fmt_test.bzl", "tofu_fmt_test")
 
 tofu_fmt_test(<a href="tofu/tofu_fmt_test.html#tofu_fmt_test-name">name</a>, <a href="tofu/tofu_fmt_test.html#tofu_fmt_test-target">target</a>)
 </pre>
-<p>A rule for running <code>tofu fmt</code> on a Terraform target.</p>
+<p>Fails when <code>tofu fmt</code> would change a module's sources.</p>
 <p><strong>ATTRIBUTES</strong></p>
 <div class="table-wrapper"><table><thead><tr><th style="text-align: left">Name</th><th style="text-align: left">Description</th><th style="text-align: left">Type</th><th style="text-align: left">Mandatory</th><th style="text-align: left">Default</th></tr></thead><tbody>
 <tr><td style="text-align: left"><a id="tofu_fmt_test-name"></a>name</td><td style="text-align: left">A unique name for this target.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels#target-names">Name</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
-<tr><td style="text-align: left"><a id="tofu_fmt_test-target"></a>target</td><td style="text-align: left">-</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">Label</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
+<tr><td style="text-align: left"><a id="tofu_fmt_test-target"></a>target</td><td style="text-align: left">The module to check.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">Label</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
 </tbody></table>
 </div>
 <p><a id="tofu_fmt_aspect"></a></p>
@@ -1440,11 +1060,7 @@ tofu_fmt_aspect()
 <p><strong>ASPECT ATTRIBUTES</strong></p>
 <p><strong>ATTRIBUTES</strong></p>
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated with Stardoc: http://skydoc.bazel.build -->
-<p>tofu_providers_lock — <code>bazel run</code> updater for <code>.terraform.lock.hcl</code>.</p>
-<p>Runs real <code>tofu providers lock -platform=&lt;all&gt;</code> under the toolchain-fetched
-<code>tofu</code> binary and writes the multi-platform lock file back to source. The
-one path that produces hashes for platforms Bazel didn't resolve for the
-current build.</p>
+<p>tofu_providers_lock</p>
 <h2 id="rules-12"><a class="header" href="#rules-12">Rules</a></h2>
 <ul>
 <li><a href="tofu/tofu_providers_lock.html#tofu_providers_lock">tofu_providers_lock</a></li>
@@ -1456,23 +1072,18 @@ load("@rules_terraform//tofu:tofu_providers_lock.bzl", "tofu_providers_lock")
 
 tofu_providers_lock(<a href="tofu/tofu_providers_lock.html#tofu_providers_lock-name">name</a>, <a href="tofu/tofu_providers_lock.html#tofu_providers_lock-output">output</a>, <a href="tofu/tofu_providers_lock.html#tofu_providers_lock-platforms">platforms</a>, <a href="tofu/tofu_providers_lock.html#tofu_providers_lock-target">target</a>)
 </pre>
-<p>Regenerates <code>.terraform.lock.hcl</code> for a <code>terraform_module</code> by running
-real <code>tofu providers lock -platform=&lt;all&gt;</code> under the toolchain-fetched
-tofu binary. <code>bazel run</code> writes the multi-platform result back to
-source — the one path that produces hashes for platforms Bazel didn't
-resolve for the current build.</p>
+<p><code>bazel run</code> target that writes a module's <code>.terraform.lock.hcl</code> with the
+toolchain tofu, recording hashes for every platform in <code>platforms</code> at
+once, which the engine's own <code>init</code> does not do. Needs the network.</p>
 <p><strong>ATTRIBUTES</strong></p>
 <div class="table-wrapper"><table><thead><tr><th style="text-align: left">Name</th><th style="text-align: left">Description</th><th style="text-align: left">Type</th><th style="text-align: left">Mandatory</th><th style="text-align: left">Default</th></tr></thead><tbody>
 <tr><td style="text-align: left"><a id="tofu_providers_lock-name"></a>name</td><td style="text-align: left">A unique name for this target.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels#target-names">Name</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
-<tr><td style="text-align: left"><a id="tofu_providers_lock-output"></a>output</td><td style="text-align: left">Where to write the multi-platform <code>.terraform.lock.hcl</code>, relative to this BUILD file's package. Diff-test companions should point <code>golden = "&lt;same-path&gt;"</code>.</td><td style="text-align: left">String</td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
-<tr><td style="text-align: left"><a id="tofu_providers_lock-platforms"></a>platforms</td><td style="text-align: left">os_arch platforms to record hashes for. Defaults to the common set.</td><td style="text-align: left">List of strings</td><td style="text-align: left">optional</td><td style="text-align: left"><code>[]</code></td></tr>
-<tr><td style="text-align: left"><a id="tofu_providers_lock-target"></a>target</td><td style="text-align: left">The terraform_module whose .tf sources drive the lock resolution. Its local child modules come along, so <code>required_providers</code> blocks anywhere in the tree count.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">Label</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
+<tr><td style="text-align: left"><a id="tofu_providers_lock-output"></a>output</td><td style="text-align: left">Where to write the lock, relative to this package: <code>.terraform.lock.hcl</code>.</td><td style="text-align: left">String</td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
+<tr><td style="text-align: left"><a id="tofu_providers_lock-platforms"></a>platforms</td><td style="text-align: left">Platforms to record hashes for, as <code>linux_amd64</code>. Default: linux_amd64, linux_arm64, darwin_amd64, darwin_arm64, windows_amd64.</td><td style="text-align: left">List of strings</td><td style="text-align: left">optional</td><td style="text-align: left"><code>[]</code></td></tr>
+<tr><td style="text-align: left"><a id="tofu_providers_lock-target"></a>target</td><td style="text-align: left">The <code>terraform_module</code> the lock covers, its local child modules included.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">Label</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
 </tbody></table>
 </div><div style="break-before: page; page-break-before: always;"></div><!-- Generated with Stardoc: http://skydoc.bazel.build -->
-<p>tofu_providers_lock_test — alias for <code>terraform_providers_lock_test</code>.</p>
-<p>The rule reads only HCL text (the <code>.terraform.lock.hcl</code> and the module's
-<code>required_providers</code> blocks) and never invokes an engine binary, so the
-same implementation covers both Terraform and OpenTofu.</p>
+<p>tofu_providers_lock_test</p>
 <h2 id="rules-13"><a class="header" href="#rules-13">Rules</a></h2>
 <ul>
 <li><a href="tofu/tofu_providers_lock_test.html#tofu_providers_lock_test">tofu_providers_lock_test</a></li>
@@ -1511,15 +1122,15 @@ load("@rules_terraform//tofu:tofu_module.bzl", "tofu_module")
 
 tofu_module(<a href="tofu/tofu_module.html#tofu_module-name">name</a>, <a href="tofu/tofu_module.html#tofu_module-deps">deps</a>, <a href="tofu/tofu_module.html#tofu_module-srcs">srcs</a>, <a href="tofu/tofu_module.html#tofu_module-data">data</a>, <a href="tofu/tofu_module.html#tofu_module-disposable_state">disposable_state</a>, <a href="tofu/tofu_module.html#tofu_module-lock">lock</a>)
 </pre>
-<p>Defines a tofu module that can be used as a dependency in other Terraform targets.</p>
+<p>One directory of tofu configuration: a root module, or a child that another module's <code>module</code> block names.</p>
 <p><strong>ATTRIBUTES</strong></p>
 <div class="table-wrapper"><table><thead><tr><th style="text-align: left">Name</th><th style="text-align: left">Description</th><th style="text-align: left">Type</th><th style="text-align: left">Mandatory</th><th style="text-align: left">Default</th></tr></thead><tbody>
 <tr><td style="text-align: left"><a id="tofu_module-name"></a>name</td><td style="text-align: left">A unique name for this target.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels#target-names">Name</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
-<tr><td style="text-align: left"><a id="tofu_module-deps"></a>deps</td><td style="text-align: left">Other module targets, a dependency hub (<code>@&lt;name&gt;</code> from a <code>deps</code> tag, or its <code>//:providers</code> / <code>//:modules</code> halves), individual <code>@&lt;name&gt;//&lt;namespace&gt;_&lt;name&gt;</code> providers, <code>terraform_provider</code>, or <code>terraform_external_module</code> targets this module depends on.<br><br>A module dep is the Bazel half of a <code>module</code> block, the way a <code>py_library</code> dep is the Bazel half of an <code>import</code>: the <code>.tf</code> file names the path, <code>deps</code> says which target supplies it. A dep whose package already nests under this module's directory lands at that relative path; anything else is matched to a <code>module</code> block whose <code>source</code> ends with the dep's package name.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">List of labels</a></td><td style="text-align: left">optional</td><td style="text-align: left"><code>[]</code></td></tr>
-<tr><td style="text-align: left"><a id="tofu_module-srcs"></a>srcs</td><td style="text-align: left">The configuration files that make up this module: <code>.tf</code>, <code>.tf.json</code>, <code>.tofu</code>, <code>.tofu.json</code>. Any other file is an error, since tofu would not load it.<br><br>All of them must live directly in this target's package: a module is a single directory. Put nested configuration files in their own module target and reference it with a <code>module</code> block.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">List of labels</a></td><td style="text-align: left">optional</td><td style="text-align: left"><code>[]</code></td></tr>
+<tr><td style="text-align: left"><a id="tofu_module-deps"></a>deps</td><td style="text-align: left">What the configuration references: child <code>terraform_module</code>s for its local <code>module</code> blocks, a dependency hub (<code>@&lt;name&gt;</code> from a <code>deps</code> tag, or its <code>//:providers</code> / <code>//:modules</code> halves) or single <code>@&lt;name&gt;//&lt;namespace&gt;_&lt;name&gt;</code> providers, and <code>terraform_provider</code> or <code>terraform_external_module</code> targets. The <code>module</code> block names a child's path; <code>deps</code> says which target supplies it. A child in a package under this one lands at its relative path; any other is matched to the block whose <code>source</code> ends with its package name.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">List of labels</a></td><td style="text-align: left">optional</td><td style="text-align: left"><code>[]</code></td></tr>
+<tr><td style="text-align: left"><a id="tofu_module-srcs"></a>srcs</td><td style="text-align: left">The configuration files of this module: <code>.tf</code>, <code>.tf.json</code>, <code>.tofu</code>, <code>.tofu.json</code>, all directly in this target's package. A nested directory of configuration is its own module target, named by a <code>module</code> block.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">List of labels</a></td><td style="text-align: left">optional</td><td style="text-align: left"><code>[]</code></td></tr>
 <tr><td style="text-align: left"><a id="tofu_module-data"></a>data</td><td style="text-align: left">Additional files or targets that should be available at runtime.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">List of labels</a></td><td style="text-align: left">optional</td><td style="text-align: left"><code>[]</code></td></tr>
-<tr><td style="text-align: left"><a id="tofu_module-disposable_state"></a>disposable_state</td><td style="text-align: left">Whether this module's local state may go with the run, for a module with no <code>backend</code> or <code>cloud</code> block.<br><br><code>bazel run</code> executes the engine in a staged copy that is deleted when the command finishes. True, the default, leaves the engine to keep state where it natively would, its working directory, so the state goes with the copy: right for demos, sandboxes and anything <code>plan</code>-only. A run that did write state is kept and its path printed, so nothing vanishes silently. False points the engine's local backend at <code>terraform.tfstate</code> (and <code>terraform.tfstate.d/</code> for workspaces) in a per-module directory under <code>bazel-out/rules_terraform/</code>, where it outlives the run. That directory is private to the machine and <code>bazel clean</code> deletes it; state that must outlast that belongs in a backend. An error when the module declares a backend, whose state is the backend's.</td><td style="text-align: left">Boolean</td><td style="text-align: left">optional</td><td style="text-align: left"><code>True</code></td></tr>
-<tr><td style="text-align: left"><a id="tofu_module-lock"></a>lock</td><td style="text-align: left">An optional <code>.terraform.lock.hcl</code> file.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">Label</a></td><td style="text-align: left">optional</td><td style="text-align: left"><code>None</code></td></tr>
+<tr><td style="text-align: left"><a id="tofu_module-disposable_state"></a>disposable_state</td><td style="text-align: left">Whether local state may go with the run, for a module with no <code>backend</code> or <code>cloud</code> block. True, the default: the engine keeps state in the run's temp directory, which is deleted afterwards; a run that wrote state is kept and its path printed. False: state is kept under <code>bazel-out/rules_terraform/</code> across runs, until <code>bazel clean</code>. An error when the module declares a backend.</td><td style="text-align: left">Boolean</td><td style="text-align: left">optional</td><td style="text-align: left"><code>True</code></td></tr>
+<tr><td style="text-align: left"><a id="tofu_module-lock"></a>lock</td><td style="text-align: left">The module's <code>.terraform.lock.hcl</code>. Not needed when <code>deps</code> names a dependency hub, which carries its lock.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">Label</a></td><td style="text-align: left">optional</td><td style="text-align: left"><code>None</code></td></tr>
 </tbody></table>
 </div><div style="break-before: page; page-break-before: always;"></div><!-- Generated with Stardoc: http://skydoc.bazel.build -->
 <p>tofu_plan_test</p>
@@ -1534,14 +1145,9 @@ load("@rules_terraform//tofu:tofu_plan_test.bzl", "tofu_plan_test")
 
 tofu_plan_test(<a href="tofu/tofu_plan_test.html#tofu_plan_test-name">name</a>, <a href="tofu/tofu_plan_test.html#tofu_plan_test-tags">tags</a>, <a href="tofu/tofu_plan_test.html#tofu_plan_test-kwargs">**kwargs</a>)
 </pre>
-<p>Runs a real <code>tofu plan</code> as a test and keeps the plan for review.</p>
-<p>A thin wrapper over the rule of the same name that adds the
-<code>requires-network</code> tag: a plan reaches the state backend and, for most
-providers, the provider's API. Credentials come from the environment, so
-pass them with <code>--test_env</code>. Providers that work offline (<code>null</code>,
-<code>local</code>, <code>random</code>) need neither.</p>
-<p>See the rule's documentation for the attributes and the artefacts left in
-the undeclared test outputs directory.</p>
+<p>Runs <code>tofu plan</code> as a test and keeps the plan for review.</p>
+<p>The rule of the same name, tagged <code>requires-network</code>: a plan reaches the
+backend and the provider APIs, with credentials from <code>--test_env</code>.</p>
 <p><strong>PARAMETERS</strong></p>
 <div class="table-wrapper"><table><thead><tr><th style="text-align: left">Name</th><th style="text-align: left">Description</th><th style="text-align: left">Default Value</th></tr></thead><tbody>
 <tr><td style="text-align: left"><a id="tofu_plan_test-name"></a>name</td><td style="text-align: left">(str) Target name.</td><td style="text-align: left">none</td></tr>
@@ -1564,14 +1170,15 @@ load("@rules_terraform//tofu:tofu_provider.bzl", "tofu_provider")
 
 tofu_provider(<a href="tofu/tofu_provider.html#tofu_provider-name">name</a>, <a href="tofu/tofu_provider.html#tofu_provider-files">files</a>, <a href="tofu/tofu_provider.html#tofu_provider-platform">platform</a>, <a href="tofu/tofu_provider.html#tofu_provider-source">source</a>, <a href="tofu/tofu_provider.html#tofu_provider-version">version</a>)
 </pre>
-<p>Defines a Terraform provider that can be used as a dependency in terraform_module targets.</p>
+<p>A provider built in this repository, for a <code>terraform_module</code>'s
+<code>deps</code>. Registry providers come from a <code>deps</code> tag's hub instead.</p>
 <p><strong>ATTRIBUTES</strong></p>
 <div class="table-wrapper"><table><thead><tr><th style="text-align: left">Name</th><th style="text-align: left">Description</th><th style="text-align: left">Type</th><th style="text-align: left">Mandatory</th><th style="text-align: left">Default</th></tr></thead><tbody>
 <tr><td style="text-align: left"><a id="tofu_provider-name"></a>name</td><td style="text-align: left">A unique name for this target.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels#target-names">Name</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
-<tr><td style="text-align: left"><a id="tofu_provider-files"></a>files</td><td style="text-align: left">The provider binary files.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">List of labels</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
-<tr><td style="text-align: left"><a id="tofu_provider-platform"></a>platform</td><td style="text-align: left">Platform string (e.g., 'linux_amd64', 'darwin_arm64'). Set by the generated repositories for registry providers. Leave it empty for a provider built in this repo: it is then taken from the target platform of the configuration the provider is built in.</td><td style="text-align: left">String</td><td style="text-align: left">optional</td><td style="text-align: left"><code>""</code></td></tr>
-<tr><td style="text-align: left"><a id="tofu_provider-source"></a>source</td><td style="text-align: left">Provider source (e.g., 'hashicorp/null').</td><td style="text-align: left">String</td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
-<tr><td style="text-align: left"><a id="tofu_provider-version"></a>version</td><td style="text-align: left">Provider version (e.g., '3.2.4').</td><td style="text-align: left">String</td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
+<tr><td style="text-align: left"><a id="tofu_provider-files"></a>files</td><td style="text-align: left">The provider binary and any files shipped with it.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">List of labels</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
+<tr><td style="text-align: left"><a id="tofu_provider-platform"></a>platform</td><td style="text-align: left">The platform, as <code>linux_amd64</code>. Leave it empty for a provider built here: it is taken from the configuration the provider is built in.</td><td style="text-align: left">String</td><td style="text-align: left">optional</td><td style="text-align: left"><code>""</code></td></tr>
+<tr><td style="text-align: left"><a id="tofu_provider-source"></a>source</td><td style="text-align: left">The provider address as <code>required_providers</code> writes it, e.g. <code>hashicorp/null</code>.</td><td style="text-align: left">String</td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
+<tr><td style="text-align: left"><a id="tofu_provider-version"></a>version</td><td style="text-align: left">The provider version, e.g. <code>3.2.4</code>.</td><td style="text-align: left">String</td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
 </tbody></table>
 </div><div style="break-before: page; page-break-before: always;"></div><!-- Generated with Stardoc: http://skydoc.bazel.build -->
 <p>tofu_test</p>
@@ -1586,22 +1193,15 @@ load("@rules_terraform//tofu:tofu_test.bzl", "tofu_test")
 
 tofu_test(<a href="tofu/tofu_test.html#tofu_test-name">name</a>, <a href="tofu/tofu_test.html#tofu_test-root">root</a>, <a href="tofu/tofu_test.html#tofu_test-workspace">workspace</a>)
 </pre>
-<p>Runs tofu's native HCL test framework (<code>tofu test</code>) on the root
-module as a Bazel test. Test cases live in <code>.tftest.hcl</code> files. Fully
-hermetic — the .terraform directory is assembled by the init aspect from
-Bazel-managed deps.</p>
-<p>Each <code>run</code> block is reported as a JUnit test case through Bazel's
-<code>XML_OUTPUT_FILE</code> (Terraform writes the report itself; for OpenTofu the
-runner builds it from the <code>-json-into</code> event stream, which is also kept).
-The lock file and module manifest the test ran against are saved as
-undeclared test outputs.</p>
-<p>Bazel <code>--test_arg</code> values are intentionally ignored so the surface stays
-predictable — every run executes the module's <code>.tftest.hcl</code> files.</p>
+<p>Runs <code>tofu test</code> on the root module's <code>.tftest.hcl</code> files as a Bazel
+test. Each <code>run</code> block is a JUnit test case in Bazel's XML report, and the
+lock and module manifest the test ran against are kept as undeclared test
+outputs. <code>--test_arg</code> is ignored.</p>
 <p><strong>ATTRIBUTES</strong></p>
 <div class="table-wrapper"><table><thead><tr><th style="text-align: left">Name</th><th style="text-align: left">Description</th><th style="text-align: left">Type</th><th style="text-align: left">Mandatory</th><th style="text-align: left">Default</th></tr></thead><tbody>
 <tr><td style="text-align: left"><a id="tofu_test-name"></a>name</td><td style="text-align: left">A unique name for this target.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels#target-names">Name</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
 <tr><td style="text-align: left"><a id="tofu_test-root"></a>root</td><td style="text-align: left">The terraform_module target that serves as the root module.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">Label</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
-<tr><td style="text-align: left"><a id="tofu_test-workspace"></a>workspace</td><td style="text-align: left">Run in this Terraform workspace: <code>TF_WORKSPACE</code> is set to it for the engine, over anything in the test environment. Unset, the workspace is whatever the environment selects (<code>--test_env</code>), else <code>default</code>. One test target per workspace is how a root whose configuration is keyed on <code>terraform.workspace</code> gets every workspace checked.</td><td style="text-align: left">String</td><td style="text-align: left">optional</td><td style="text-align: left"><code>""</code></td></tr>
+<tr><td style="text-align: left"><a id="tofu_test-workspace"></a>workspace</td><td style="text-align: left">Run in this Terraform workspace, over anything <code>--test_env</code> sets. Unset, the environment's <code>TF_WORKSPACE</code> applies, else <code>default</code>. One test per workspace is how a root keyed on <code>terraform.workspace</code> gets each one checked.</td><td style="text-align: left">String</td><td style="text-align: left">optional</td><td style="text-align: left"><code>""</code></td></tr>
 </tbody></table>
 </div><div style="break-before: page; page-break-before: always;"></div><!-- Generated with Stardoc: http://skydoc.bazel.build -->
 <p>tofu_validate_test</p>
@@ -1625,7 +1225,7 @@ tofu_validate_test(<a href="tofu/tofu_validate_test.html#tofu_validate_test-name
 <div class="table-wrapper"><table><thead><tr><th style="text-align: left">Name</th><th style="text-align: left">Description</th><th style="text-align: left">Type</th><th style="text-align: left">Mandatory</th><th style="text-align: left">Default</th></tr></thead><tbody>
 <tr><td style="text-align: left"><a id="tofu_validate_test-name"></a>name</td><td style="text-align: left">A unique name for this target.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels#target-names">Name</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
 <tr><td style="text-align: left"><a id="tofu_validate_test-target"></a>target</td><td style="text-align: left">The target to validate.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">Label</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
-<tr><td style="text-align: left"><a id="tofu_validate_test-workspace"></a>workspace</td><td style="text-align: left">Run in this Terraform workspace: <code>TF_WORKSPACE</code> is set to it for the engine, over anything in the test environment. Unset, the workspace is whatever the environment selects (<code>--test_env</code>), else <code>default</code>. One test target per workspace is how a root whose configuration is keyed on <code>terraform.workspace</code> gets every workspace checked.</td><td style="text-align: left">String</td><td style="text-align: left">optional</td><td style="text-align: left"><code>""</code></td></tr>
+<tr><td style="text-align: left"><a id="tofu_validate_test-workspace"></a>workspace</td><td style="text-align: left">Run in this Terraform workspace, over anything <code>--test_env</code> sets. Unset, the environment's <code>TF_WORKSPACE</code> applies, else <code>default</code>. One test per workspace is how a root keyed on <code>terraform.workspace</code> gets each one checked.</td><td style="text-align: left">String</td><td style="text-align: left">optional</td><td style="text-align: left"><code>""</code></td></tr>
 </tbody></table>
 </div>
 <p><a id="tofu_validate_aspect"></a></p>

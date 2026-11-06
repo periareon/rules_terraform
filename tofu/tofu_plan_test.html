@@ -168,14 +168,9 @@ load("@rules_terraform//tofu:tofu_plan_test.bzl", "tofu_plan_test")
 
 tofu_plan_test(<a href="#tofu_plan_test-name">name</a>, <a href="#tofu_plan_test-tags">tags</a>, <a href="#tofu_plan_test-kwargs">**kwargs</a>)
 </pre>
-<p>Runs a real <code>tofu plan</code> as a test and keeps the plan for review.</p>
-<p>A thin wrapper over the rule of the same name that adds the
-<code>requires-network</code> tag: a plan reaches the state backend and, for most
-providers, the provider's API. Credentials come from the environment, so
-pass them with <code>--test_env</code>. Providers that work offline (<code>null</code>,
-<code>local</code>, <code>random</code>) need neither.</p>
-<p>See the rule's documentation for the attributes and the artefacts left in
-the undeclared test outputs directory.</p>
+<p>Runs <code>tofu plan</code> as a test and keeps the plan for review.</p>
+<p>The rule of the same name, tagged <code>requires-network</code>: a plan reaches the
+backend and the provider APIs, with credentials from <code>--test_env</code>.</p>
 <p><strong>PARAMETERS</strong></p>
 <div class="table-wrapper"><table><thead><tr><th style="text-align: left">Name</th><th style="text-align: left">Description</th><th style="text-align: left">Default Value</th></tr></thead><tbody>
 <tr><td style="text-align: left"><a id="tofu_plan_test-name"></a>name</td><td style="text-align: left">(str) Target name.</td><td style="text-align: left">none</td></tr>

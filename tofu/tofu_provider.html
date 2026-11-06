@@ -171,14 +171,15 @@ load("@rules_terraform//tofu:tofu_provider.bzl", "tofu_provider")
 
 tofu_provider(<a href="#tofu_provider-name">name</a>, <a href="#tofu_provider-files">files</a>, <a href="#tofu_provider-platform">platform</a>, <a href="#tofu_provider-source">source</a>, <a href="#tofu_provider-version">version</a>)
 </pre>
-<p>Defines a Terraform provider that can be used as a dependency in terraform_module targets.</p>
+<p>A provider built in this repository, for a <code>terraform_module</code>'s
+<code>deps</code>. Registry providers come from a <code>deps</code> tag's hub instead.</p>
 <p><strong>ATTRIBUTES</strong></p>
 <div class="table-wrapper"><table><thead><tr><th style="text-align: left">Name</th><th style="text-align: left">Description</th><th style="text-align: left">Type</th><th style="text-align: left">Mandatory</th><th style="text-align: left">Default</th></tr></thead><tbody>
 <tr><td style="text-align: left"><a id="tofu_provider-name"></a>name</td><td style="text-align: left">A unique name for this target.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels#target-names">Name</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
-<tr><td style="text-align: left"><a id="tofu_provider-files"></a>files</td><td style="text-align: left">The provider binary files.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">List of labels</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
-<tr><td style="text-align: left"><a id="tofu_provider-platform"></a>platform</td><td style="text-align: left">Platform string (e.g., 'linux_amd64', 'darwin_arm64'). Set by the generated repositories for registry providers. Leave it empty for a provider built in this repo: it is then taken from the target platform of the configuration the provider is built in.</td><td style="text-align: left">String</td><td style="text-align: left">optional</td><td style="text-align: left"><code>""</code></td></tr>
-<tr><td style="text-align: left"><a id="tofu_provider-source"></a>source</td><td style="text-align: left">Provider source (e.g., 'hashicorp/null').</td><td style="text-align: left">String</td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
-<tr><td style="text-align: left"><a id="tofu_provider-version"></a>version</td><td style="text-align: left">Provider version (e.g., '3.2.4').</td><td style="text-align: left">String</td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
+<tr><td style="text-align: left"><a id="tofu_provider-files"></a>files</td><td style="text-align: left">The provider binary and any files shipped with it.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">List of labels</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
+<tr><td style="text-align: left"><a id="tofu_provider-platform"></a>platform</td><td style="text-align: left">The platform, as <code>linux_amd64</code>. Leave it empty for a provider built here: it is taken from the configuration the provider is built in.</td><td style="text-align: left">String</td><td style="text-align: left">optional</td><td style="text-align: left"><code>""</code></td></tr>
+<tr><td style="text-align: left"><a id="tofu_provider-source"></a>source</td><td style="text-align: left">The provider address as <code>required_providers</code> writes it, e.g. <code>hashicorp/null</code>.</td><td style="text-align: left">String</td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
+<tr><td style="text-align: left"><a id="tofu_provider-version"></a>version</td><td style="text-align: left">The provider version, e.g. <code>3.2.4</code>.</td><td style="text-align: left">String</td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
 </tbody></table>
 </div>
                     </main>

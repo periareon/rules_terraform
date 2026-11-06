@@ -172,19 +172,18 @@ load("@rules_terraform//tofu:tofu_external_module.bzl", "tofu_external_module")
 tofu_external_module(<a href="#tofu_external_module-name">name</a>, <a href="#tofu_external_module-srcs">srcs</a>, <a href="#tofu_external_module-source">source</a>, <a href="#tofu_external_module-subdir">subdir</a>, <a href="#tofu_external_module-version">version</a>)
 </pre>
 <p>A module whose files come from outside the workspace.</p>
-<p>The <code>terraform.modules(...)</code> extension declares one of these per registry
-module it resolves. Declare one yourself, in the <code>build_file_content</code> of an
-<code>http_archive</code> or <code>git_repository</code>, to supply a module the extension cannot
-fetch: a module hosted somewhere other than a public registry, or a plain
-<code>git::</code> / <code>https://</code> source. Match <code>source</code> to the <code>module</code> block verbatim and
-list the target in the consuming <code>terraform_module</code>'s <code>deps</code>.</p>
+<p>The <code>deps</code> tag declares one per registry or git module it resolves. Declare
+one yourself, in the <code>build_file_content</code> of an <code>http_archive</code> or
+<code>git_repository</code>, for a module the extension cannot fetch. <code>source</code> must
+match the <code>module</code> block verbatim; list the target in the consuming
+<code>terraform_module</code>'s <code>deps</code>.</p>
 <p><strong>ATTRIBUTES</strong></p>
 <div class="table-wrapper"><table><thead><tr><th style="text-align: left">Name</th><th style="text-align: left">Description</th><th style="text-align: left">Type</th><th style="text-align: left">Mandatory</th><th style="text-align: left">Default</th></tr></thead><tbody>
 <tr><td style="text-align: left"><a id="tofu_external_module-name"></a>name</td><td style="text-align: left">A unique name for this target.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels#target-names">Name</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
 <tr><td style="text-align: left"><a id="tofu_external_module-srcs"></a>srcs</td><td style="text-align: left">Every file of the module's repository or archive, not only the module's own: templates and other data the configuration reads, and the siblings a <code>../</code> source inside it names.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels">List of labels</a></td><td style="text-align: left">optional</td><td style="text-align: left"><code>[]</code></td></tr>
-<tr><td style="text-align: left"><a id="tofu_external_module-source"></a>source</td><td style="text-align: left">The <code>source</code> string exactly as <code>module</code> blocks write it: a registry address (<code>terraform-aws-modules/vpc/aws</code>, with any <code>//subdir</code>), or any other address Terraform accepts, such as <code>git::https://…?ref=v1.2.0</code>. The init aspect installs this module under every <code>module</code> block whose <code>source</code> matches.</td><td style="text-align: left">String</td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
-<tr><td style="text-align: left"><a id="tofu_external_module-subdir"></a>subdir</td><td style="text-align: left">The module's directory inside <code>srcs</code>: the <code>//subdir</code> of the source, empty for the archive root. The init aspect installs all of <code>srcs</code> under the module's key and points the engine at this directory within them, as <code>terraform init</code> lays out a <code>//subdir</code> source.</td><td style="text-align: left">String</td><td style="text-align: left">optional</td><td style="text-align: left"><code>""</code></td></tr>
-<tr><td style="text-align: left"><a id="tofu_external_module-version"></a>version</td><td style="text-align: left">The module's version, for a registry module. The init aspect records it in the module manifest and uses it to pick between two versions of one module. Leave it empty for a git or other non-registry source: Terraform rejects a manifest entry whose version is not a semantic version, and a commit id or tag name is not one.</td><td style="text-align: left">String</td><td style="text-align: left">optional</td><td style="text-align: left"><code>""</code></td></tr>
+<tr><td style="text-align: left"><a id="tofu_external_module-source"></a>source</td><td style="text-align: left">The <code>source</code> string exactly as the <code>module</code> blocks write it. The module is installed under every block whose <code>source</code> matches.</td><td style="text-align: left">String</td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
+<tr><td style="text-align: left"><a id="tofu_external_module-subdir"></a>subdir</td><td style="text-align: left">The module's directory inside <code>srcs</code>: the <code>//subdir</code> of the source, empty for the archive root.</td><td style="text-align: left">String</td><td style="text-align: left">optional</td><td style="text-align: left"><code>""</code></td></tr>
+<tr><td style="text-align: left"><a id="tofu_external_module-version"></a>version</td><td style="text-align: left">The module's version, for a registry module. Leave it empty for a git or other source: the manifest only accepts a semantic version.</td><td style="text-align: left">String</td><td style="text-align: left">optional</td><td style="text-align: left"><code>""</code></td></tr>
 </tbody></table>
 </div>
                     </main>
