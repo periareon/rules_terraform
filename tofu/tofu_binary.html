@@ -175,6 +175,9 @@ mirror the nominal CLI.</p>
 <p>The <code>.terraform</code> directory is assembled hermetically by
 <code>terraform_init_aspect</code>; providers and modules come from Bazel-managed
 dependencies rather than the network.</p>
+<p><code>init</code> is the one subcommand not passed through. It installs that
+<code>.terraform</code> directory into the module's source directory and initializes
+the backend there, so the native CLI works in that directory afterwards.</p>
 <p><strong>ATTRIBUTES</strong></p>
 <div class="table-wrapper"><table><thead><tr><th style="text-align: left">Name</th><th style="text-align: left">Description</th><th style="text-align: left">Type</th><th style="text-align: left">Mandatory</th><th style="text-align: left">Default</th></tr></thead><tbody>
 <tr><td style="text-align: left"><a id="tofu_binary-name"></a>name</td><td style="text-align: left">A unique name for this target.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels#target-names">Name</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>

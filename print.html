@@ -354,10 +354,13 @@ what each lock file looks like, and how to keep them fresh — are in
 below.</p>
 <h3 id="direct-terraform-cli-incompatibility"><a class="header" href="#direct-terraform-cli-incompatibility">Direct <code>terraform</code> CLI incompatibility</a></h3>
 <p>Once a <code>terraform_module</code> has Bazel-managed dependencies, running
-<code>terraform</code> (or <code>tofu</code>) directly outside Bazel is <strong>not expected to work</strong>:
-the module directory is Bazel's construction, <code>h1:</code> hashes are rewritten
-for the installed platform binary, and <code>modules.json</code> reflects the Bazel
-target graph — not the source tree.</p>
+<code>terraform</code> (or <code>tofu</code>) directly outside Bazel is <strong>not expected to work</strong>
+against a bare checkout: the module directory is Bazel's construction,
+<code>h1:</code> hashes are rewritten for the installed platform binary, and
+<code>modules.json</code> reflects the Bazel target graph — not the source tree.
+<a href="index.html#initializing-in-place">Initializing in place</a> below is how a source
+directory gets that construction installed, for the times the native CLI
+is the tool you want.</p>
 <p>Use <code>bazel run</code> to invoke the engine:</p>
 <pre><code class="language-bash"># Instead of: terraform plan
 bazel run //path/to:terraform -- plan
@@ -397,6 +400,58 @@ the backend as before. The practical consequences: a <code>terraform_test</code>
 a module with a remote backend needs no credentials, and a configuration
 error in one of those subcommands is reported as itself rather than as a
 backend failure.</p>
+<h3 id="initializing-in-place"><a class="header" href="#initializing-in-place">Initializing in place</a></h3>
+<p><code>bazel run //path/to:terraform -- init</code> is the one subcommand that does
+not run in the temp dir, where its work would be deleted with it. Under
+the binary it means the one thing it usefully can: install what the build
+constructed into the module's source directory, so the native CLI works
+there afterwards.</p>
+<pre><code class="language-bash">bazel run //envs/prod/app:terraform -- init
+cd envs/prod/app
+terraform plan            # native CLI, providers and modules from the build
+</code></pre>
+<p>The directory is the root module's package under the checkout, wherever
+the command was run from; <code>BUILD_WORKSPACE_DIRECTORY</code> and the target
+decide it, not the shell's cwd (that is the <code>@terraform</code> hub's job). The
+runner:</p>
+<ol>
+<li>copies the built <code>.terraform/providers/</code> and <code>.terraform/modules/</code> over
+whatever is there, keeping <code>.terraform/environment</code> and the saved
+backend configuration, as a native re-<code>init</code> keeps them;</li>
+<li>writes <code>.terraform.lock.hcl</code> next to the sources only when the module
+has none of its own (it depends on a shared hub), and says so;</li>
+<li>adds the host platform's <code>h1:</code> hash to the lock for any installed
+provider the lock lacks it for, one line each, and says so. An unpacked
+package can only be verified by its <code>h1:</code>, so a lock made on another
+platform, or natively with fewer <code>-platform</code>s than the updater records,
+would make the engine refuse the package it is standing next to. It is
+the line <code>providers lock -platform=&lt;host&gt;</code> would add; commit it, or
+regenerate the lock for every platform with the updater;</li>
+<li>runs the engine's <code>init -get=false -plugin-dir=.terraform/providers</code>
+in that directory with the remaining arguments appended, which is
+where the backend gets configured.</li>
+</ol>
+<p>Each <code>init</code> flag is either the backend's business, which passes through,
+or the build's, which is refused with the Bazel path named:</p>
+<div class="table-wrapper"><table><thead><tr><th>Flag</th><th>Under the binary</th><th>Why</th></tr></thead><tbody>
+<tr><td><code>-backend-config=…</code>, <code>-backend=false</code></td><td>passes through</td><td>Backend configuration is the module's, not the build's.</td></tr>
+<tr><td><code>-reconfigure</code></td><td>passes through</td><td>Re-reads the backend block, ignoring the saved configuration. The staged runs are implicitly always reconfigured, since a fresh copy has none saved; in place it matters.</td></tr>
+<tr><td><code>-migrate-state</code>, <code>-force-copy</code></td><td>pass through</td><td>Moves state from the previously saved backend configuration to the current one. It needs that saved configuration, which only a persisted directory has, so this is the only place under Bazel it can work.</td></tr>
+<tr><td><code>-input</code>, <code>-lock</code>, <code>-lock-timeout</code>, <code>-no-color</code>, <code>-json</code></td><td>pass through</td><td>Plain engine options.</td></tr>
+<tr><td><code>-upgrade</code></td><td>refused</td><td>Would re-resolve providers against the plugin dir and rewrite the lock. The versions are facts of the build: <code>bazel run //path/to:providers_lock.update</code> for providers, <code>RULES_TERRAFORM_UPGRADE=1 bazel fetch</code> for modules (see <a href="index.html#upgrading">Upgrading</a>).</td></tr>
+<tr><td><code>-get</code></td><td>refused</td><td>The build installs the modules; the manifest is theirs.</td></tr>
+<tr><td><code>-plugin-dir</code></td><td>refused</td><td>The build's providers are the plugin directory.</td></tr>
+<tr><td><code>-from-module</code></td><td>refused</td><td>A root module is a <code>terraform_module</code> target.</td></tr>
+<tr><td><code>-lockfile=readonly</code></td><td>passes through</td><td>Forbids every lock write, step 3 included: a lock without the host's hash is then an error naming the updater rather than an edit.</td></tr>
+<tr><td><code>-chdir</code> (global)</td><td>refused</td><td>The target names the module directory.</td></tr>
+<tr><td><code>-help</code></td><td>passes through</td><td>Answered by the engine, with nothing installed.</td></tr>
+</tbody></table>
+</div>
+<p><code>.terraform/</code> is the engine's cache and belongs in <code>.gitignore</code>; Gazelle
+and the rules ignore it, and a Bazel run never reads it. This is the one
+<code>bazel run</code> that writes into the source tree, and only because it was
+asked to. The staged runs and the tests are unchanged by it: the next
+<code>bazel run //path/to:terraform -- plan</code> still starts from a fresh copy.</p>
 <p><strong>Workspaces.</strong> The rules add no workspace concept of their own; they use
 Terraform's. <code>TF_WORKSPACE</code> in the environment selects one for every
 project in a run, so <code>--action_env=TF_WORKSPACE=prod</code> validates every
@@ -927,6 +982,9 @@ mirror the nominal CLI.</p>
 <p>The <code>.terraform</code> directory is assembled hermetically by
 <code>terraform_init_aspect</code>; providers and modules come from Bazel-managed
 dependencies rather than the network.</p>
+<p><code>init</code> is the one subcommand not passed through. It installs that
+<code>.terraform</code> directory into the module's source directory and initializes
+the backend there, so the native CLI works in that directory afterwards.</p>
 <p><strong>ATTRIBUTES</strong></p>
 <div class="table-wrapper"><table><thead><tr><th style="text-align: left">Name</th><th style="text-align: left">Description</th><th style="text-align: left">Type</th><th style="text-align: left">Mandatory</th><th style="text-align: left">Default</th></tr></thead><tbody>
 <tr><td style="text-align: left"><a id="terraform_binary-name"></a>name</td><td style="text-align: left">A unique name for this target.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels#target-names">Name</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
@@ -1308,6 +1366,9 @@ mirror the nominal CLI.</p>
 <p>The <code>.terraform</code> directory is assembled hermetically by
 <code>terraform_init_aspect</code>; providers and modules come from Bazel-managed
 dependencies rather than the network.</p>
+<p><code>init</code> is the one subcommand not passed through. It installs that
+<code>.terraform</code> directory into the module's source directory and initializes
+the backend there, so the native CLI works in that directory afterwards.</p>
 <p><strong>ATTRIBUTES</strong></p>
 <div class="table-wrapper"><table><thead><tr><th style="text-align: left">Name</th><th style="text-align: left">Description</th><th style="text-align: left">Type</th><th style="text-align: left">Mandatory</th><th style="text-align: left">Default</th></tr></thead><tbody>
 <tr><td style="text-align: left"><a id="tofu_binary-name"></a>name</td><td style="text-align: left">A unique name for this target.</td><td style="text-align: left"><a href="https://bazel.build/concepts/labels#target-names">Name</a></td><td style="text-align: left">required</td><td style="text-align: left"></td></tr>
