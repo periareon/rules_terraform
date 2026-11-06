@@ -57,7 +57,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest, windows-latest]
-        bazel: ["7.x", "8.x", "9.x"]
+        bazel: ["8.x", "9.x"]
         example: [terraform, tofu, monorepo, git_modules]
         # The engine binary each example exposes. `bazel test //...` never
         # builds these — a `terraform_binary` / `tofu_binary` can break
