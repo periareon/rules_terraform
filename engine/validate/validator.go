@@ -21,10 +21,11 @@ type ArgsFile struct {
 	// runs inside — the layout was settled at analysis time.
 	ModuleDir   string `json:"module_dir"`
 	UseRunfiles bool   `json:"use_runfiles,omitempty"`
-	// Workspace is the test's `workspace` attribute: the Terraform workspace
-	// to validate in, set as TF_WORKSPACE over anything the environment
-	// carries. Empty leaves the environment's choice, else `default`.
-	Workspace string `json:"workspace,omitempty"`
+	// Env is what the test's `env` and `workspace` attributes set for the
+	// engine, over the hermetic environment; EnvInherit is its
+	// `env_inherit`, checked against what that environment scrubs.
+	Env        map[string]string `json:"env,omitempty"`
+	EnvInherit []string          `json:"env_inherit,omitempty"`
 }
 
 type args struct {
@@ -132,8 +133,10 @@ func run() int {
 		return 1
 	}
 	defer envCleanup()
-	if argsFile.Workspace != "" {
-		env = moduledir.SetEnv(env, "TF_WORKSPACE", argsFile.Workspace)
+	env, err = moduledir.ApplyEnv(env, argsFile.Env, argsFile.EnvInherit)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		return 1
 	}
 
 	// Buffer the engine's output so the "Success! The configuration is

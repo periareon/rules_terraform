@@ -11,11 +11,12 @@ config is the only knob.
 """
 
 load(":cli.bzl", "make_cli_rule")
+load(":env.bzl", "TEST_ENV_ATTRS")
 load(":format.bzl", "build_fmt_aspect_impl", "build_fmt_test_impl", "make_formatter")
 load(":init.bzl", "terraform_init_aspect")
 load(":lock.bzl", "PROVIDERS_LOCK_ATTRS", "build_providers_lock")
 load(":providers.bzl", "TerraformInfo")
-load(":terraform.bzl", "PLAN_TEST_ATTRS", "RUNNER_ATTRS", "TEST_ATTRS", "WORKSPACE_ATTR", "build_runner", "make_module_rule")
+load(":terraform.bzl", "PLAN_TEST_ATTRS", "RUNNER_ATTRS", "TEST_RUNNER_ATTRS", "build_runner", "make_module_rule")
 load(":toolchain.bzl", "make_current_toolchain_rule")
 load(":validate.bzl", "build_validate_aspect_impl", "build_validate_test_impl")
 
@@ -95,7 +96,7 @@ lock and module manifest the test ran against are kept as undeclared test
 outputs. `--test_arg` is ignored.
 """.format(engine = name),
         implementation = _test_impl,
-        attrs = TEST_ATTRS,
+        attrs = TEST_RUNNER_ATTRS,
         test = True,
         toolchains = [toolchain_type],
     )
@@ -133,7 +134,7 @@ it `requires-network`.
     validate_test = rule(
         implementation = _validate_test_impl,
         doc = "A rule for running `{} validate` on a Terraform target.".format(name),
-        attrs = dict(WORKSPACE_ATTR, **{
+        attrs = dict(TEST_ENV_ATTRS, **{
             "target": attr.label(
                 doc = "The target to validate.",
                 providers = [TerraformInfo],
