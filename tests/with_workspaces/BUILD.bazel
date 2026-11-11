@@ -16,6 +16,20 @@ terraform_binary(
     root = ":with_workspaces",
 )
 
+# One binary per workspace: `bazel run :terraform.prod -- plan` runs in
+# `prod` with no `workspace select` first.
+[
+    terraform_binary(
+        name = "terraform.{}".format(workspace),
+        root = ":with_workspaces",
+        workspace = workspace,
+    )
+    for workspace in [
+        "dev",
+        "prod",
+    ]
+]
+
 [
     terraform_validate_test(
         name = "validate_{}".format(workspace),
@@ -39,6 +53,19 @@ terraform_binary(
         "prod",
     ]
 ]
+
+# The same pin through `env`, which also carries `TF_VAR_*` and the like.
+terraform_validate_test(
+    name = "validate_dev_env",
+    env = {"TF_WORKSPACE": "dev"},
+    target = ":with_workspaces",
+)
+
+terraform_binary(
+    name = "terraform.dev_env",
+    env = {"TF_WORKSPACE": "dev"},
+    root = ":with_workspaces",
+)
 
 # No `workspace`: the environment decides. `--test_env=TF_WORKSPACE=dev`
 # passes it; without one it fails, which is the point of the fixture.

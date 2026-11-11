@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"rules_terraform/engine/internal/fsutil"
@@ -201,21 +202,13 @@ func HermeticEnv(environ []string) ([]string, func(), error) {
 	rc.Close()
 	cleanup := func() { os.Remove(rcPath) }
 
-	dropped := map[string]bool{
-		"TF_CLI_CONFIG_FILE":                             true,
-		"TERRAFORM_CONFIG":                               true,
-		"TF_PLUGIN_CACHE_DIR":                            true,
-		"TF_PLUGIN_CACHE_MAY_BREAK_DEPENDENCY_LOCK_FILE": true,
-		"CHECKPOINT_DISABLE":                             true,
-		"TF_IN_AUTOMATION":                               true,
-	}
 	out := make([]string, 0, len(environ)+3)
 	for _, kv := range environ {
 		key := kv
 		if i := strings.IndexByte(kv, '='); i >= 0 {
 			key = kv[:i]
 		}
-		if dropped[key] {
+		if scrubbed[key] {
 			continue
 		}
 		out = append(out, kv)
@@ -226,6 +219,40 @@ func HermeticEnv(environ []string) ([]string, func(), error) {
 		"TF_IN_AUTOMATION=1",
 	)
 	return out, cleanup, nil
+}
+
+// scrubbed are the variables HermeticEnv drops: operator CLI configuration
+// that would make a test's result depend on whose machine ran it.
+var scrubbed = map[string]bool{
+	"TF_CLI_CONFIG_FILE":                             true,
+	"TERRAFORM_CONFIG":                               true,
+	"TF_PLUGIN_CACHE_DIR":                            true,
+	"TF_PLUGIN_CACHE_MAY_BREAK_DEPENDENCY_LOCK_FILE": true,
+	"CHECKPOINT_DISABLE":                             true,
+	"TF_IN_AUTOMATION":                               true,
+}
+
+// ApplyEnv returns environ with a rule's `env` set over it, in key order so
+// the result is stable. inherit is a test's `env_inherit`, and environ came
+// from HermeticEnv (only the test rules have the attribute); naming a
+// variable HermeticEnv scrubs is an error rather than a silent drop, since
+// the test cannot have inherited it. An `env` entry for such a variable is
+// applied: the rule asked for it by name.
+func ApplyEnv(environ []string, env map[string]string, inherit []string) ([]string, error) {
+	for _, key := range inherit {
+		if scrubbed[key] {
+			return nil, fmt.Errorf("env_inherit names %s, which tests scrub for hermeticity; it cannot be inherited", key)
+		}
+	}
+	keys := make([]string, 0, len(env))
+	for key := range env {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		environ = SetEnv(environ, key, env[key])
+	}
+	return environ, nil
 }
 
 // SetEnv returns environ with key set to value, replacing any earlier value.

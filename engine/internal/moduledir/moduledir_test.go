@@ -82,3 +82,29 @@ func TestLocalStateFiles(t *testing.T) {
 		t.Errorf("LocalStateFiles = %v, want state file then workspace dir", got)
 	}
 }
+
+func TestApplyEnvSetsOverAndKeepsOrder(t *testing.T) {
+	in := []string{"PATH=/usr/bin", "TF_WORKSPACE=dev"}
+	env, err := ApplyEnv(in, map[string]string{"TF_WORKSPACE": "prod", "TF_VAR_size": "large"}, nil)
+	if err != nil {
+		t.Fatalf("ApplyEnv: %v", err)
+	}
+	if got, _ := envValue(env, "TF_WORKSPACE"); got != "prod" {
+		t.Errorf("TF_WORKSPACE = %q, want prod", got)
+	}
+	if got, _ := envValue(env, "TF_VAR_size"); got != "large" {
+		t.Errorf("TF_VAR_size = %q, want large", got)
+	}
+	if got, _ := envValue(env, "PATH"); got != "/usr/bin" {
+		t.Errorf("PATH = %q, want kept", got)
+	}
+}
+
+func TestApplyEnvRefusesInheritingScrubbedVariables(t *testing.T) {
+	if _, err := ApplyEnv(nil, nil, []string{"AWS_PROFILE", "TF_PLUGIN_CACHE_DIR"}); err == nil {
+		t.Fatal("expected an error for inheriting TF_PLUGIN_CACHE_DIR into a hermetic environment")
+	}
+	if _, err := ApplyEnv(nil, nil, []string{"AWS_PROFILE"}); err != nil {
+		t.Fatalf("AWS_PROFILE is not scrubbed: %v", err)
+	}
+}

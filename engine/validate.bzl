@@ -4,6 +4,7 @@ The `build_validate_*_impl` helpers are shared by every engine; file names,
 output-group names and ignore tags come from the `engine_config` passed in.
 """
 
+load(":env.bzl", "engine_env")
 load(":providers.bzl", "TerraformInfo")
 load(":util.bzl", "module_dir", "rlocationpath")
 
@@ -112,8 +113,11 @@ def build_validate_test_impl(ctx, toolchain_type, *, engine):
         "terraform": rlocationpath(toolchain.terraform, ctx.workspace_name),
         "use_runfiles": True,
     }
-    if ctx.attr.workspace:
-        args_data["workspace"] = ctx.attr.workspace
+    env = engine_env(ctx)
+    if env:
+        args_data["env"] = env
+    if ctx.attr.env_inherit:
+        args_data["env_inherit"] = ctx.attr.env_inherit
 
     args_file = ctx.actions.declare_file("{}.{}_validate_args.json".format(ctx.label.name, engine.name))
     ctx.actions.write(output = args_file, content = json.encode_indent(args_data))
@@ -139,6 +143,7 @@ def build_validate_test_impl(ctx, toolchain_type, *, engine):
             environment = {
                 "RULES_TERRAFORM_VALIDATE_ARGS_FILE": rlocationpath(args_file, ctx.workspace_name),
             },
+            inherited_environment = ctx.attr.env_inherit,
         ),
     ]
 

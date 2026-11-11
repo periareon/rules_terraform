@@ -42,11 +42,14 @@ type ArgsFile struct {
 	// to find the execroot, with no searching for a `bazel-out` directory.
 	ArgsFilePath string `json:"args_file_path"`
 
-	// Workspace is a test rule's `workspace` attribute: the Terraform
-	// workspace the test runs in, set as TF_WORKSPACE over anything the test
-	// environment carries. Never set for `bazel run`, which follows the
-	// operator's environment.
-	Workspace string `json:"workspace,omitempty"`
+	// Env is what the rule's `env` and `workspace` attributes set for the
+	// engine, over anything the environment carries.
+	Env map[string]string `json:"env,omitempty"`
+	// EnvInherit is a test rule's `env_inherit`: variables Bazel passed in
+	// from the client environment. Listed so the test can be told when it
+	// names one the hermetic environment scrubs. Never set for a binary,
+	// which has no such attribute.
+	EnvInherit []string `json:"env_inherit,omitempty"`
 
 	// ModulePackage is the root module's package: the directory under
 	// BUILD_WORKSPACE_DIRECTORY that `init` installs into. Nil for a root
@@ -154,9 +157,11 @@ func run() int {
 		}
 		defer envCleanup()
 		env = hermetic
-		if argsFile.Workspace != "" {
-			env = moduledir.SetEnv(env, "TF_WORKSPACE", argsFile.Workspace)
-		}
+	}
+	env, err = moduledir.ApplyEnv(env, argsFile.Env, argsFile.EnvInherit)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		return 1
 	}
 
 	e := engine{path: enginePath, workDir: workDir, env: env}
@@ -303,7 +308,7 @@ func runCommand(e engine, argsFile *ArgsFile, localDir string, userArgs []string
 		// The native CLI records the selection in `.terraform/environment`
 		// in the module directory. Here that is the staged copy, so the
 		// selection is gone with it; a run picks its workspace up front.
-		fmt.Fprintln(os.Stderr, "\nrules_terraform: the workspace selection does not outlive this run. Set TF_WORKSPACE in the environment to pick a workspace for a `bazel run`.")
+		fmt.Fprintln(os.Stderr, "\nrules_terraform: the workspace selection does not outlive this run. Set TF_WORKSPACE in the environment, or run a binary with `workspace` or `env` set, to pick a workspace for a `bazel run`.")
 	}
 
 	if code != 0 {

@@ -1,9 +1,10 @@
 """Bazel terraform rules.
 
-The `RUNNER_ATTRS` / `build_runner` helpers here are consumed by `//tofu`
+The `RUNNER_ATTRS` / `TEST_RUNNER_ATTRS` / `build_runner` helpers here are consumed by `//tofu`
 so the same rule bodies power both engines.
 """
 
+load(":env.bzl", "ENV_ATTRS", "TEST_ENV_ATTRS", "engine_env")
 load(":init.bzl", "terraform_init_aspect")
 load(":platforms.bzl", "PLATFORM_CONSTRAINT_LABELS", "detect_platform")
 load(
@@ -418,8 +419,11 @@ def build_runner(ctx, toolchain_type, *, mode):
         "module_dir_rlocationpath": rlocationpath(module_directory, ctx.workspace_name),
         "terraform_rlocationpath": rlocationpath(toolchain.terraform, ctx.workspace_name),
     }
-    if test_mode and ctx.attr.workspace:
-        args_data["workspace"] = ctx.attr.workspace
+    env = engine_env(ctx)
+    if env:
+        args_data["env"] = env
+    if test_mode and ctx.attr.env_inherit:
+        args_data["env_inherit"] = ctx.attr.env_inherit
     if not test_mode and not root_label.workspace_root:
         # `init` under the binary installs into the checkout, at the root
         # module's package under BUILD_WORKSPACE_DIRECTORY. A root in another
@@ -450,11 +454,11 @@ def build_runner(ctx, toolchain_type, *, mode):
         transitive_files = toolchain.all_files,
     )
 
-    env = {
+    runner_env = {
         "RULES_TERRAFORM_ARGS_FILE": rlocationpath(args_file, ctx.workspace_name),
     }
     if test_mode:
-        env["RULES_TERRAFORM_MODE"] = mode
+        runner_env["RULES_TERRAFORM_MODE"] = mode
 
     providers = [
         DefaultInfo(
@@ -463,12 +467,12 @@ def build_runner(ctx, toolchain_type, *, mode):
         ),
     ]
     if test_mode:
-        providers.append(testing.TestEnvironment(env))
+        providers.append(testing.TestEnvironment(runner_env, inherited_environment = ctx.attr.env_inherit))
     else:
-        providers.append(RunEnvironmentInfo(environment = env))
+        providers.append(RunEnvironmentInfo(environment = runner_env))
     return providers
 
-RUNNER_ATTRS = {
+RUNNER_ATTRS = dict(ENV_ATTRS, **{
     "root": attr.label(
         doc = "The terraform_module target that serves as the root module.",
         providers = [TerraformInfo],
@@ -480,20 +484,11 @@ RUNNER_ATTRS = {
         executable = True,
         default = Label("//engine/runner"),
     ),
-}
+})
 
-WORKSPACE_ATTR = {
-    "workspace": attr.string(
-        doc = """Run in this Terraform workspace, over anything `--test_env`
-        sets. Unset, the environment's `TF_WORKSPACE` applies, else
-        `default`. One test per workspace is how a root keyed on
-        `terraform.workspace` gets each one checked.""",
-    ),
-}
+TEST_RUNNER_ATTRS = dict(RUNNER_ATTRS, **TEST_ENV_ATTRS)
 
-TEST_ATTRS = dict(RUNNER_ATTRS, **WORKSPACE_ATTR)
-
-PLAN_TEST_ATTRS = dict(TEST_ATTRS, **{
+PLAN_TEST_ATTRS = dict(TEST_RUNNER_ATTRS, **{
     "expect_no_changes": attr.bool(
         default = False,
         doc = "Fail when the plan proposes any change.",
