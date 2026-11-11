@@ -2,7 +2,7 @@
 
 module(
     name = "rules_terraform",
-    version = "0.0.9",
+    version = "0.0.10",
     bazel_compatibility = [">=8.3.0"],
 )
 
