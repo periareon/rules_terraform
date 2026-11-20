@@ -1,0 +1,3 @@
+load(":provider_discovery_test.bzl", "provider_discovery_test")
+
+provider_discovery_test(name = "provider_discovery_test")

@@ -66,6 +66,7 @@ def run_extension(module_ctx, *, engine):
     for reserved in ["{}_toolchains".format(engine.name), engine.cli_hub]:
         claim_hub_name(claimed_names, reserved, "rules_terraform", "toolchain")
     provider_pool = {}
+    provider_services = {}
     module_pool = {}
     hubs = []
     for mod in module_ctx.modules:
@@ -83,6 +84,7 @@ def run_extension(module_ctx, *, engine):
                     lock_file_path = tag.lock,
                     pool = provider_pool,
                     registry = registry,
+                    services = provider_services,
                     existing_facts = existing_facts,
                     new_facts = new_facts,
                 )
