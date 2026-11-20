@@ -33,8 +33,7 @@ def _module_root_dir(label, srcs, data):
     Args:
         label: (Label) The `terraform_module` target, for error messages.
         srcs: (list[File]) The module's `.tf` sources.
-        data: (list[File]) The module's data files, which may sit in
-            subdirectories but not outside the module.
+        data: (list[File]) Declared data files staged at their workspace-relative paths.
 
     Returns:
         (str) The module's staged directory (see `util.bzl`'s `staged_path`).
@@ -71,19 +70,6 @@ def _module_root_dir(label, srcs, data):
                     staged_path(src),
                     owner.package,
                 ),
-            )
-
-    # Anything outside the module directory can't be named by a relative path
-    # from it, so it would silently never reach the built module — and a
-    # missing `.tftest.hcl` fixture makes `terraform test` pass having read
-    # nothing. Reject it here rather than let it vanish.
-    root_prefix = root_dir + "/" if root_dir else ""
-    for f in data:
-        if not staged_path(f).startswith(root_prefix):
-            fail(
-                ("terraform_module '{}' has data file '{}' outside its module " +
-                 "directory '{}'. Move it into the module, or expose it through a " +
-                 "child `terraform_module`.").format(label, staged_path(f), root_dir),
             )
 
     return root_dir

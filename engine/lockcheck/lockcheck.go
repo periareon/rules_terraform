@@ -190,7 +190,7 @@ func checkProviders(lockPath, treeRoot string) ([]string, error) {
 			e.RegistryHost != "registry.opentofu.org" {
 			src = e.RegistryHost + "/" + e.Source
 		}
-		lockedSources[src] = true
+		lockedSources[canonicalProviderSource(src)] = true
 	}
 
 	var problems []string
@@ -214,6 +214,7 @@ func checkProviders(lockPath, treeRoot string) ([]string, error) {
 // `registry.terraform.io/hashicorp/null` and
 // `registry.opentofu.org/hashicorp/null` compare equal. Other hosts stay.
 func canonicalProviderSource(src string) string {
+	src = strings.ToLower(src)
 	for _, defaultHost := range []string{"registry.terraform.io/", "registry.opentofu.org/"} {
 		if strings.HasPrefix(src, defaultHost) {
 			return src[len(defaultHost):]

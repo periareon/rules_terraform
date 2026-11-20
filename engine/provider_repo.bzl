@@ -71,6 +71,26 @@ def _fail_lookup(what, provider_source, version, registry, url, detail):
         ),
     )
 
+def _providers_base(module_ctx, registry):
+    """The registry's provider API base URL, from its service discovery document.
+
+    `registry.terraform.io` and `registry.opentofu.org` serve it at
+    `/v1/providers/`; a private registry may serve it elsewhere
+    (`registry.scalr.io` at `/`).
+    """
+    url = "https://{}/.well-known/terraform.json".format(registry)
+    output = "registry_{}_discovery.json".format(registry.replace(".", "_"))
+    module_ctx.download(url = url, output = output)
+    payload = json.decode(module_ctx.read(output), default = None)
+    base = payload.get("providers.v1") if type(payload) == "dict" else None
+    if type(base) != "string" or not base:
+        fail("{} names no providers.v1 service".format(url))
+    if base.startswith("https://"):
+        return base.rstrip("/")
+    if "://" in base or base.startswith("//"):
+        fail("{} returned an unsupported provider API URL: {}".format(url, base))
+    return "https://{}/{}".format(registry, base.strip("/")).rstrip("/")
+
 def _registry_platforms(module_ctx, registry, provider_source, version):
     """The platforms the registry publishes `version` of a provider for.
 
@@ -84,8 +104,8 @@ def _registry_platforms(module_ctx, registry, provider_source, version):
         (list[str]) Sorted `<os>_<arch>` strings.
     """
     namespace, name = provider_source.split("/", 1)
-    url = "https://{registry}/v1/providers/{namespace}/{name}/versions".format(
-        registry = registry,
+    url = "{base}/{namespace}/{name}/versions".format(
+        base = _providers_base(module_ctx, registry),
         namespace = namespace,
         name = name,
     )
@@ -132,8 +152,8 @@ def _registry_lookup(module_ctx, registry, provider_source, version, os_name, ar
         (tuple[str, str]) `(url, sha256_hex)`.
     """
     namespace, name = provider_source.split("/", 1)
-    url = "https://{registry}/v1/providers/{namespace}/{name}/{version}/download/{os}/{arch}".format(
-        registry = registry,
+    url = "{base}/{namespace}/{name}/{version}/download/{os}/{arch}".format(
+        base = _providers_base(module_ctx, registry),
         namespace = namespace,
         name = name,
         version = version,

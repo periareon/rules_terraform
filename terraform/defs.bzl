@@ -1,5 +1,7 @@
 """Terraform rules"""
 
+load("//engine:toolchain.bzl", _terraform_toolchain = "terraform_toolchain")
+
 load(
     ":terraform_binary.bzl",
     _terraform_binary = "terraform_binary",
@@ -61,3 +63,5 @@ terraform_fmt_aspect = _terraform_fmt_aspect
 terraform_fmt_test = _terraform_fmt_test
 terraform_validate_aspect = _terraform_validate_aspect
 terraform_validate_test = _terraform_validate_test
+
+terraform_toolchain = _terraform_toolchain

@@ -52,6 +52,7 @@ func providerHostsFromLock(lockPath string) (map[string]string, error) {
 // resolved absolute paths (Bazel path-maps the paths file, we substitute
 // placeholders in the template).
 type ArgsFile struct {
+	SharedFiles []FileEntry `json:"shared_files,omitempty"`
 	// OutputDir is the tree root — the common ancestor of the root module and
 	// its local module deps. It is the module directory only when Workdir is
 	// empty.
@@ -185,6 +186,11 @@ func main() {
 	// placed below, at whatever path their `module` blocks name.
 	if err := copyManifestAll(moduleDir, argsFile.ModuleFiles); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: failed to assemble module directory: %v\n", err)
+		os.Exit(1)
+	}
+
+	if err := copyManifestAll(argsFile.OutputDir, argsFile.SharedFiles); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: failed to assemble shared data: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -333,12 +339,12 @@ func resolveModuleDir(treeRoot, dir string, candidates []LocalModuleInfo, used [
 		staged := isDir(dst)
 		switch {
 		case i >= 0:
-			used[i] = true
-			if !staged {
+			if !used[i] {
 				if err := copyManifestAll(dst, candidates[i].Files); err != nil {
 					return fmt.Errorf("failed to install module %q from %s: %w", block.Key, candidates[i].Package, err)
 				}
 			}
+			used[i] = true
 		case !staged:
 			return fmt.Errorf(
 				"module %q in %s has source %q, but no dep supplies that directory.\n"+
@@ -367,7 +373,7 @@ func resolveModuleDir(treeRoot, dir string, candidates []LocalModuleInfo, used [
 // past that would install a module somewhere its own relative sources break.
 func matchCandidate(block tfparse.ModuleBlock, rel, target string, candidates []LocalModuleInfo) (int, error) {
 	for i, c := range candidates {
-		if c.Dir == target {
+		if path.Clean(c.Dir) == path.Clean(target) {
 			return i, nil
 		}
 	}
