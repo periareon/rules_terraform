@@ -51,6 +51,13 @@ def build_fmt_aspect_impl(target, ctx, toolchain_type, *, engine):
     terraform_info = target[TerraformInfo]
 
     srcs = [src for src in terraform_info.srcs.to_list() if src.is_source]
+
+    # The test and variable files beside the sources, which `fmt` formats too.
+    srcs += [
+        f
+        for f in terraform_info.data.to_list()
+        if f.is_source and f.owner.package == target.label.package and f.basename.endswith((".tftest.hcl", ".tfvars"))
+    ]
     if not srcs:
         return []
 
@@ -93,6 +100,7 @@ def build_fmt_test_impl(ctx, toolchain_type, *, engine):
     target_info = ctx.attr.target[TerraformInfo]
 
     srcs = [src for src in target_info.srcs.to_list() if src.is_source]
+    srcs += [f for f in target_info.data.to_list() if f.is_source and f.owner.package == ctx.attr.target.label.package and f.basename.endswith((".tftest.hcl", ".tfvars"))]
 
     workspace_name = ctx.workspace_name
 

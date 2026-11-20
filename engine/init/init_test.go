@@ -752,3 +752,17 @@ func keysOf(m map[string]moduleRecord) []string {
 	sort.Strings(out)
 	return out
 }
+
+func TestParentModuleWithSharedDataAlreadyStaged(t *testing.T) {
+	root := stagedTree(t, map[string]string{"child": moduleTF(block("parent", "./.."))})
+	candidate := candidate(t, "infra/shared", "", "output \"answer\" { value = 42 }\n")
+	if err := os.WriteFile(filepath.Join(root, "shared.json"), []byte("{}"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := resolveLocalModules(root, "child", []LocalModuleInfo{candidate}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "main.tf")); err != nil {
+		t.Fatalf("parent sources missing beside shared data: %v", err)
+	}
+}

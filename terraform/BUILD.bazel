@@ -39,6 +39,7 @@ bzl_library(
     srcs = ["defs.bzl"],
     deps = [
         ":extensions_bzl",
+        "//engine:bzl_lib",
         ":terraform_binary_bzl",
         ":terraform_external_module_bzl",
         ":terraform_fmt_aspect_bzl",

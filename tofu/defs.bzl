@@ -1,6 +1,8 @@
 """OpenTofu rules — parallel to `//terraform:defs.bzl` but bound to a
 distinct toolchain type so both engines can coexist in one repo."""
 
+load("//engine:toolchain.bzl", _terraform_toolchain = "terraform_toolchain")
+
 load(
     ":tofu_binary.bzl",
     _tofu_binary = "tofu_binary",
@@ -62,3 +64,5 @@ tofu_providers_lock_test = _tofu_providers_lock_test
 tofu_test = _tofu_test
 tofu_validate_aspect = _tofu_validate_aspect
 tofu_validate_test = _tofu_validate_test
+
+tofu_toolchain = _terraform_toolchain

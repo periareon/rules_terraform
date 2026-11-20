@@ -40,6 +40,7 @@ bzl_library(
     srcs = ["defs.bzl"],
     deps = [
         ":extensions_bzl",
+        "//engine:bzl_lib",
         ":tofu_binary_bzl",
         ":tofu_external_module_bzl",
         ":tofu_fmt_aspect_bzl",

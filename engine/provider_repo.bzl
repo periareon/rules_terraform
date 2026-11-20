@@ -71,7 +71,30 @@ def _fail_lookup(what, provider_source, version, registry, url, detail):
         ),
     )
 
-def _registry_platforms(module_ctx, registry, provider_source, version):
+def _providers_base(module_ctx, registry, services):
+    """The registry's provider API base URL, from its service discovery document.
+
+    `registry.terraform.io` and `registry.opentofu.org` serve it at
+    `/v1/providers/`; a private registry may serve it elsewhere
+    (`registry.scalr.io` at `/`).
+    """
+    if registry in services:
+        return services[registry]
+    url = "https://{}/.well-known/terraform.json".format(registry)
+    output = "registry_{}_discovery.json".format(registry.replace(".", "_"))
+    module_ctx.download(url = url, output = output)
+    payload = json.decode(module_ctx.read(output), default = None)
+    base = payload.get("providers.v1") if type(payload) == "dict" else None
+    if type(base) != "string" or not base:
+        fail("{} names no providers.v1 service".format(url))
+    if not base.startswith("https://"):
+        if "://" in base or base.startswith("//"):
+            fail("{} returned an unsupported provider API URL: {}".format(url, base))
+        base = "https://{}/{}".format(registry, base.strip("/"))
+    services[registry] = base.rstrip("/")
+    return services[registry]
+
+def _registry_platforms(module_ctx, registry, provider_source, version, services):
     """The platforms the registry publishes `version` of a provider for.
 
     Uses the Registry v1 `versions` endpoint, which both
@@ -84,8 +107,8 @@ def _registry_platforms(module_ctx, registry, provider_source, version):
         (list[str]) Sorted `<os>_<arch>` strings.
     """
     namespace, name = provider_source.split("/", 1)
-    url = "https://{registry}/v1/providers/{namespace}/{name}/versions".format(
-        registry = registry,
+    url = "{base}/{namespace}/{name}/versions".format(
+        base = _providers_base(module_ctx, registry, services),
         namespace = namespace,
         name = name,
     )
@@ -117,7 +140,7 @@ def _registry_platforms(module_ctx, registry, provider_source, version):
     _fail_lookup("published platforms", provider_source, version, registry, url, "the registry does not list this version")
     return None
 
-def _registry_lookup(module_ctx, registry, provider_source, version, os_name, arch):
+def _registry_lookup(module_ctx, registry, provider_source, version, os_name, arch, services):
     """Fetch the download URL and hex SHA256 for a provider archive.
 
     Uses the Terraform Registry v1 provider download endpoint, which is
@@ -132,8 +155,8 @@ def _registry_lookup(module_ctx, registry, provider_source, version, os_name, ar
         (tuple[str, str]) `(url, sha256_hex)`.
     """
     namespace, name = provider_source.split("/", 1)
-    url = "https://{registry}/v1/providers/{namespace}/{name}/{version}/download/{os}/{arch}".format(
-        registry = registry,
+    url = "{base}/{namespace}/{name}/{version}/download/{os}/{arch}".format(
+        base = _providers_base(module_ctx, registry, services),
         namespace = namespace,
         name = name,
         version = version,
@@ -215,7 +238,7 @@ def _cached_archive(registry, provider, platform, existing_facts, new_facts):
         return None
     return cached["url"], cached["sha256"]
 
-def _published_platforms(module_ctx, registry, provider, existing_facts, new_facts):
+def _published_platforms(module_ctx, registry, provider, existing_facts, new_facts, services):
     """`_registry_platforms`, memoized through `module_ctx.facts`.
 
     Which platforms a published provider version exists for does not change
@@ -228,11 +251,11 @@ def _published_platforms(module_ctx, registry, provider, existing_facts, new_fac
     cached = _recall(key, existing_facts, new_facts)
     if type(cached) == "dict" and type(cached.get("platforms")) == "list" and cached["platforms"]:
         return cached["platforms"]
-    platforms = _registry_platforms(module_ctx, registry, provider.source, provider.version)
+    platforms = _registry_platforms(module_ctx, registry, provider.source, provider.version, services)
     _remember(key, {"platforms": platforms}, new_facts)
     return platforms
 
-def _lookup_archive(module_ctx, registry, provider, os_name, arch, existing_facts, new_facts):
+def _lookup_archive(module_ctx, registry, provider, os_name, arch, existing_facts, new_facts, services):
     """`_registry_lookup`, memoized through `module_ctx.facts` when available.
 
     Where a published provider version's archive lives does not change after
@@ -254,6 +277,7 @@ def _lookup_archive(module_ctx, registry, provider, os_name, arch, existing_fact
         version = provider.version,
         os_name = os_name,
         arch = arch,
+        services = services,
     )
     key = _provider_fact_key(registry, provider.source, provider.version, platform)
     _remember(key, {"sha256": shasum, "url": url}, new_facts)
@@ -307,7 +331,8 @@ def resolve_providers_from_lock_file(
         registry = DEFAULT_REGISTRY,
         platforms = None,
         existing_facts = None,
-        new_facts = None):
+        new_facts = None,
+        services = None):
     """Resolve a lock file's providers into the shared pool.
 
     Nothing is declared here. Every hub is resolved first and the pool is
@@ -326,6 +351,7 @@ def resolve_providers_from_lock_file(
             tuples. Defaults to the common five.
         existing_facts: (Facts|None) The previous evaluation's
             `module_ctx.facts`, consulted before any registry call.
+        services: (dict|None) Provider API endpoints shared across hubs in this evaluation.
         new_facts: (dict|None) Where to record this evaluation's lookups
             for the next one. One entry per (registry, provider, version,
             platform) archive, plus one per (registry, provider, version)
@@ -336,6 +362,8 @@ def resolve_providers_from_lock_file(
         (dict[tuple[str, str], str]) Mapping (provider_source,
         platform_str) → pool repository name, for the hub to alias.
     """
+    if services == None:
+        services = {}
     providers = parse_lock_file(module_ctx.read(lock_file_path))
 
     if platforms == None:
@@ -371,6 +399,7 @@ def resolve_providers_from_lock_file(
                         provider,
                         existing_facts,
                         new_facts,
+                        services,
                     )
                 if platform_str not in published:
                     # The generated select() simply has no case for this
@@ -386,6 +415,7 @@ def resolve_providers_from_lock_file(
                 arch,
                 existing_facts,
                 new_facts,
+                services,
             )
 
             _check_against_lock(provider, platform_str, shasum, lock_file_path)

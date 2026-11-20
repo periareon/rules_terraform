@@ -20,7 +20,7 @@ Terraform and OpenTofu both consume.
 
 load(":args.bzl", "build_file_manifest", "write_json_args")
 load(":providers.bzl", "TerraformInfo")
-load(":util.bzl", "common_ancestor", "staged_path", "tree_relative")
+load(":util.bzl", "common_ancestor", "staged_dir", "staged_path", "tree_relative")
 
 visibility(["//engine/...", "//terraform/...", "//tofu/..."])
 
@@ -81,7 +81,8 @@ def _terraform_init_aspect_impl(target, ctx):
     # is the root module itself and `workdir` is empty — the layout is
     # unchanged for everything that worked before.
     local_deps = terraform_info.deps.to_list()
-    tree_root = common_ancestor([root_dir] + [dep_info.root_dir for dep_info in local_deps])
+    data_files = depset(transitive = [terraform_info.data] + [dep_info.data for dep_info in local_deps]).to_list()
+    tree_root = common_ancestor([root_dir] + [dep_info.root_dir for dep_info in local_deps] + [staged_dir(f) for f in data_files])
     workdir = tree_relative(root_dir, tree_root)
 
     # Every dep goes out as a candidate rather than being placed by path here.
@@ -95,14 +96,14 @@ def _terraform_init_aspect_impl(target, ctx):
         local_modules.append({
             "dir": tree_relative(dep_info.root_dir, tree_root),
             "files": _module_relative_manifest(
-                depset(transitive = [dep_info.srcs, dep_info.data]).to_list(),
+                dep_info.srcs.to_list(),
                 dep_info.root_dir,
                 "module dep {}".format(dep_info.root_dir),
             ),
             "package": dep_info.root_dir,
         })
     module_files = _module_relative_manifest(
-        depset(transitive = module_file_depsets).to_list(),
+        terraform_info.srcs.to_list(),
         root_dir,
         "module {}".format(target.label),
     )
@@ -113,6 +114,7 @@ def _terraform_init_aspect_impl(target, ctx):
     # See //engine:args.bzl for path-mapping design.
     args_data = {
         "module_files": module_files,
+        "shared_files": [{"src": f, "dst": tree_relative(staged_path(f), tree_root)} for f in data_files],
         "output_dir": module_dir.path,
     }
 

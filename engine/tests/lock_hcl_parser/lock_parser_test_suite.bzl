@@ -26,7 +26,7 @@ provider "registry.terraform.io/hashicorp/null" {
 
     provider = providers[0]
     asserts.equals(env, "hashicorp/null", provider.source, "Should parse provider source")
-    asserts.equals(env, "", provider.host, "A public-registry host is dropped")
+    asserts.equals(env, "registry.terraform.io", provider.host, "The lock selects the provider registry")
     asserts.equals(env, "3.2.4", provider.version, "Should parse version")
     asserts.equals(env, "~> 3.0", provider.constraints, "Should parse constraints")
     asserts.equals(env, 2, len(provider.hashes), "Should parse hashes")
@@ -163,8 +163,8 @@ provider "registry.opentofu.org/hashicorp/null" {
     asserts.equals(env, 2, len(providers), "Should parse two providers")
     asserts.equals(env, "acme/internal", providers[0].source, "Private host is split off the source")
     asserts.equals(env, "app.terraform.io", providers[0].host, "Private host is kept, it is where the provider lives")
-    asserts.equals(env, "hashicorp/null", providers[1].source, "OpenTofu's public host is stripped too")
-    asserts.equals(env, "", providers[1].host, "A public host is not recorded")
+    asserts.equals(env, "hashicorp/null", providers[1].source, "The provider source excludes its registry")
+    asserts.equals(env, "registry.opentofu.org", providers[1].host, "The OpenTofu registry is retained")
 
     return unittest.end(env)
 

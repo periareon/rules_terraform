@@ -8,8 +8,7 @@ def _tf_provider(*, source, host, version, constraints, hashes):
     Args:
         source: (str) The provider source as `namespace/name`.
         host: (str) The registry hostname the lock wrote in front of the
-            source, or `""` when it was one of the public defaults
-            (`registry.terraform.io`, `registry.opentofu.org`).
+            source, or `""` when it wrote none.
         version: (str) The version of the provider.
         constraints: (str) The constraint used to match the provider.
         hashes: (list[str]) A list of hashes.
@@ -63,8 +62,6 @@ def parse_lock_file(lock_content):
                 if len(parts_by_slash) == 3:
                     host = parts_by_slash[0]
                     source = "/".join(parts_by_slash[1:])
-                    if host in ("registry.terraform.io", "registry.opentofu.org"):
-                        host = ""
 
                 current_provider = {
                     "constraints": "",
